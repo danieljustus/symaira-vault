@@ -1,3 +1,6 @@
+#[path = "config_fix.rs"]
+pub(crate) mod fix;
+
 use std::{
     env, fs,
     io::{self, IsTerminal, Write},
@@ -12,6 +15,9 @@ pub enum ConfigFailure {
     /// A Go `ExitConfigError` that carries its cause in its text: the root
     /// handler prints `Error: …` twice and appends the doctor hint.
     GoConfigError(String),
+    /// The same, for a cause that is not valid UTF-8 (yaml.v3 cuts a value at
+    /// seven BYTES, which can split a character).
+    GoConfigBytes(Vec<u8>),
 }
 
 impl From<String> for ConfigFailure {
@@ -39,9 +45,79 @@ fn go_syntax_gate(bytes: &[u8]) -> Result<(), ConfigFailure> {
     }
 }
 
-pub fn list(path: &Path, quiet: bool) -> Result<(), String> {
-    let bytes = fs::read(crate::agent_list_commands::clean_path(path))
-        .map_err(|error| format!("cannot load config: {error}"))?;
+/// The `syscall.Errno` text Go prints for the failures of opening a file; other
+/// causes keep Rust's generic wording until they are probed against the oracle.
+pub(crate) fn go_errno_text(error: &io::Error) -> Option<&'static str> {
+    match error.kind() {
+        io::ErrorKind::NotFound => return Some("no such file or directory"),
+        io::ErrorKind::PermissionDenied => return Some("permission denied"),
+        io::ErrorKind::IsADirectory => return Some("is a directory"),
+        _ => {}
+    }
+    #[cfg(unix)]
+    match error.raw_os_error()? {
+        libc::ENOTDIR => Some("not a directory"),
+        libc::ELOOP => Some("too many levels of symbolic links"),
+        libc::ENAMETOOLONG => Some("file name too long"),
+        _ => None,
+    }
+    #[cfg(not(unix))]
+    None
+}
+
+/// Go's `*fs.PathError` text, `open <path>: <cause>`. `os.ReadFile` of a
+/// directory opens it fine and fails on the read, so `read` names that verb.
+pub(crate) fn go_path_error(path: &Path, error: &io::Error, read: bool) -> Option<String> {
+    let reason = go_errno_text(error)?;
+    let verb = if read && error.kind() == io::ErrorKind::IsADirectory {
+        "read"
+    } else {
+        "open"
+    };
+    Some(format!("{verb} {}: {reason}", path.display()))
+}
+
+/// `load config: <cause>` as Go's `config.Load` callers word it: a missing or
+/// unreadable file is the `open <path>: <errno text>` error of `os.ReadFile`,
+/// every other failure keeps the loader's own text.
+pub(crate) fn go_load_config_error(
+    path: &Path,
+    error: &symvault_core::config::ConfigError,
+) -> String {
+    if let symvault_core::config::ConfigError::Read(io_error) = error
+        && let Some(path_error) = go_path_error(
+            &crate::agent_list_commands::clean_path(path),
+            io_error,
+            true,
+        )
+    {
+        return format!("load config: {path_error}");
+    }
+    format!("load config: {error}")
+}
+
+/// Go's wording of a failed read of the config file: `os.ReadFile` fails with
+/// `open <path>: <cause>` (or `read <path>: is a directory`). `config get|set`
+/// wrap it in `cannot read config file: …`, `config list` does not; the root
+/// handler repeats the cause and prints the doctor hint (exit 6).
+fn read_config_file(path: &Path, wrapped: bool) -> Result<Vec<u8>, ConfigFailure> {
+    let clean = crate::agent_list_commands::clean_path(path);
+    fs::read(&clean).map_err(|error| {
+        let Some(path_error) = go_path_error(&clean, &error, true) else {
+            return ConfigFailure::Plain(format!("cannot load config: {error}"));
+        };
+        let prefix = if wrapped {
+            "cannot read config file: "
+        } else {
+            ""
+        };
+        let cause = format!("{prefix}{path_error}");
+        ConfigFailure::GoConfigError(format!("cannot load config: {cause}: {cause}"))
+    })
+}
+
+pub fn list(path: &Path, quiet: bool) -> Result<(), ConfigFailure> {
+    let bytes = read_config_file(path, false)?;
     if !quiet {
         let _ = io::stdout().write_all(&bytes);
     }
@@ -49,12 +125,18 @@ pub fn list(path: &Path, quiet: bool) -> Result<(), String> {
 }
 
 pub fn get(path: &Path, key: &str, output: &str, quiet: bool) -> Result<(), ConfigFailure> {
-    let bytes = fs::read(crate::agent_list_commands::clean_path(path))
-        .map_err(|error| format!("cannot load config: {error}"))?;
+    let bytes = read_config_file(path, true)?;
     go_syntax_gate(&bytes)?;
     let source = std::str::from_utf8(&bytes)
         .map_err(|error| format!("cannot load config: invalid UTF-8: {error}"))?;
-    let value = lookup_scalar(source, key)?;
+    let value = lookup_scalar(source, key).map_err(|error| {
+        if error.starts_with("key ") && error.ends_with(" not found") {
+            // Go wraps the lookup failure in a config error that repeats it.
+            ConfigFailure::GoConfigError(format!("key {key:?} not found: {error}"))
+        } else {
+            ConfigFailure::Plain(error)
+        }
+    })?;
     if quiet {
         return Ok(());
     }
@@ -74,8 +156,7 @@ pub fn get(path: &Path, key: &str, output: &str, quiet: bool) -> Result<(), Conf
 pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), ConfigFailure> {
     use yaml_edit::path::YamlPath;
 
-    let bytes = fs::read(crate::agent_list_commands::clean_path(path))
-        .map_err(|error| format!("cannot load config: {error}"))?;
+    let bytes = read_config_file(path, true)?;
     go_syntax_gate(&bytes)?;
     let source = std::str::from_utf8(&bytes)
         .map_err(|error| format!("cannot load config: invalid UTF-8: {error}"))?;
@@ -105,6 +186,8 @@ pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), Confi
     if !rendered.ends_with('\n') {
         rendered.push('\n');
     }
+    // Go re-encodes the whole document with a two-space indent.
+    let rendered = symvault_core::config_typed::tag_merge_keys(&reindent_two_spaces(&rendered));
     atomic_write(path, rendered.as_bytes())?;
     // Go rejects traversal on its post-write reload, even when Windows
     // resolves the raw rename destination through a parent component.
@@ -116,6 +199,15 @@ pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), Confi
             "config is invalid after update: config file path escapes expected directory".into(),
         );
     }
+    // Go reloads the file into the typed config; yaml.v3's type errors come
+    // before any validation of the decoded values.
+    if let Some(cause) = symvault_core::config_typed::unmarshal_errors(&rendered) {
+        let mut message = b"config is invalid after update: ".to_vec();
+        message.extend_from_slice(&cause);
+        message.extend_from_slice(b": ");
+        message.extend_from_slice(&cause);
+        return Err(ConfigFailure::GoConfigBytes(message));
+    }
     if let Err(error) = symvault_core::config::Config::load(path) {
         return Err(format!("config is invalid after update: {error}").into());
     }
@@ -123,6 +215,135 @@ pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), Confi
         println!("Set {key} = {value}");
     }
     Ok(())
+}
+
+#[derive(Clone, Copy)]
+struct IndentLevel {
+    column: usize,
+    depth: usize,
+    /// A sequence written at its parent key's column (`key:\n- item`).
+    compact_sequence: bool,
+}
+
+/// Re-indents block YAML to yaml.v3's two-space style: every mapping or
+/// sequence level is two columns deeper than its parent, a sequence under a
+/// mapping key is indented, and the content of `- key: v` lines lines up two
+/// columns after the dash. A document already in this style is unchanged.
+/// Block scalar content stays two columns inside its owner.
+fn reindent_two_spaces(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut stack: Vec<IndentLevel> = Vec::new();
+    let mut key_column: Option<usize> = None;
+    let mut comments: Vec<(&str, &str)> = Vec::new();
+    // (owner column in the input, owner column in the output, first content column)
+    let mut block: Option<(usize, usize, Option<usize>)> = None;
+    for line in text.split_inclusive('\n') {
+        let newline = if line.ends_with('\n') { "\n" } else { "" };
+        let body = line.trim_end_matches('\n');
+        let column = body.len() - body.trim_start_matches(' ').len();
+        let content = &body[column..];
+        if let Some((owner_old, owner_new, first)) = &mut block {
+            if content.is_empty() {
+                out.push_str(line);
+                continue;
+            }
+            if column > *owner_old {
+                let first_column = *first.get_or_insert(column);
+                out.push_str(&" ".repeat(*owner_new + 2 + column - first_column));
+                out.push_str(content);
+                out.push_str(newline);
+                continue;
+            }
+            block = None;
+        }
+        if content.is_empty() {
+            out.push_str(line);
+            continue;
+        }
+        if content.starts_with('#') {
+            // A head comment sits at the indent of the node that follows it.
+            comments.push((content, newline));
+            continue;
+        }
+        let dash = content == "-" || content.starts_with("- ");
+        while let Some(top) = stack.last() {
+            if top.column > column || (top.column == column && top.compact_sequence && !dash) {
+                stack.pop();
+            } else {
+                break;
+            }
+        }
+        let mut depth = match stack.last() {
+            Some(top) if top.column == column => top.depth,
+            Some(top) => {
+                let depth = top.depth + 1;
+                stack.push(IndentLevel {
+                    column,
+                    depth,
+                    compact_sequence: false,
+                });
+                depth
+            }
+            None => {
+                stack.push(IndentLevel {
+                    column,
+                    depth: 0,
+                    compact_sequence: false,
+                });
+                0
+            }
+        };
+        if dash && key_column == Some(column) {
+            // `key:\n- item`: the compact sequence is one level inside its key.
+            depth += 1;
+            stack.push(IndentLevel {
+                column,
+                depth,
+                compact_sequence: true,
+            });
+        }
+        for (comment, comment_newline) in comments.drain(..) {
+            out.push_str(&" ".repeat(depth * 2));
+            out.push_str(comment);
+            out.push_str(comment_newline);
+        }
+        out.push_str(&" ".repeat(depth * 2));
+        out.push_str(content);
+        out.push_str(newline);
+
+        let mut owner_column = column;
+        let mut tail = content;
+        if dash {
+            tail = content[1..].trim_start_matches(' ');
+            if !tail.is_empty() {
+                owner_column = column + (content.len() - tail.len());
+                stack.push(IndentLevel {
+                    column: owner_column,
+                    depth: depth + 1,
+                    compact_sequence: false,
+                });
+            }
+        }
+        key_column = tail.ends_with(':').then_some(owner_column);
+        let header = tail.rsplit(' ').next().unwrap_or("");
+        let is_block_header = matches!(header.as_bytes().first(), Some(b'|' | b'>'))
+            && header[1..]
+                .chars()
+                .all(|c| matches!(c, '-' | '+' | '0'..='9'));
+        if is_block_header {
+            let new_owner = if dash && owner_column != column {
+                depth * 2 + 2
+            } else {
+                depth * 2
+            };
+            block = Some((owner_column, new_owner, None));
+        }
+    }
+    for (comment, comment_newline) in comments {
+        out.push_str(comment);
+        out.push_str(comment_newline);
+    }
+    out
 }
 
 fn ensure_mapping_parents(document: &yaml_edit::Document, key: &str) -> Result<(), String> {
@@ -200,6 +421,17 @@ fn canonical_scalar_node(scalar: &yaml_edit::Scalar) -> Result<yaml_edit::YamlNo
         && value.ends_with('\n')
     {
         value.pop();
+    }
+    // yaml.v3 resolves a plain scalar like `010`, `017`, `0b11` or `1_000` to
+    // an int and writes its decimal value (8, 15, 3, 1000). `yaml_edit` reads
+    // `010` as decimal 10 and `0b11` as a string, which it then quotes. Only
+    // the int family follows the Go resolver (ADR 0034 item 4); `1e3`, `y`,
+    // timestamps and `<<` stay as the maintainer's items 3 and 5 decide.
+    if parsed.style() == yaml_edit::ScalarStyle::Plain
+        && let symvault_gojson::resolve::Resolved::Int(number) =
+            symvault_gojson::resolve::resolve(&value)
+    {
+        return scalar_node_from_value(yaml_edit::ScalarValue::from(number));
     }
     if parsed.scalar_type() == yaml_edit::ScalarType::String {
         if value.trim_matches('\n').is_empty() {
@@ -677,14 +909,19 @@ fn node_range(node: &yaml_edit::YamlNode) -> Option<yaml_edit::TextPosition> {
     }
 }
 
+/// The sink for the loader's deprecation warnings (Go's
+/// `config.SetWarnFunc(cliout.Warnf)`).
+pub(crate) fn warn_sink(message: &str) {
+    self::fix::warnf(message);
+}
+
 /// Implements `symvault config validate [path]`.
 ///
-/// Mirrors Go's `config validate` for its non-interactive path: load, then
-/// run [`symvault_core::config::Config::validate`], reporting every
-/// violation at once. Go's `--fix` interactive `$EDITOR`/auto-repair flow is
-/// intentionally not ported here (it requires a TTY-driven repair UI outside
-/// this bounded CLI slice); callers asking for that flag get "not supported"
-/// rather than a silent no-op.
+/// Mirrors Go's `config validate`: load, then run
+/// [`symvault_core::config::Config::validate`], reporting every violation at
+/// once. With `--fix` and an interactive stdin the interactive repair flow
+/// (see [`fix`]) runs instead of reporting the failure, exactly as Go's
+/// `configValidateCmd` does; a non-terminal stdin validates as usual.
 pub(crate) fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> String {
     #[cfg(windows)]
     if err.kind() == io::ErrorKind::PermissionDenied
@@ -732,72 +969,47 @@ pub(crate) fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> St
 }
 
 pub fn validate(path: &Path, fix: bool, output: &str, quiet: bool) -> Result<(), String> {
-    // Go only enters its repair flow when stdin is an interactive terminal.
-    // This Rust build does not yet implement that TTY editor/prompt flow, but
-    // `--fix` must remain a no-op for pipes and redirected invocations, where
-    // Go performs ordinary validation.
-    if fix && std::io::stdin().is_terminal() {
-        return Err("config validate --fix is not supported by this build".to_owned());
-    }
     let json = output == "json";
     // The header below prints the RAW argument, exactly like Go's
     // `cannot load config from %s` (cmd/admin/config.go), while config.Load
-    // rejects traversal before os.ReadFile(filepath.Clean(path)) — so the
-    // open attempt (and its error text) sees the cleaned path.
+    // rejects traversal before os.ReadFile(filepath.Clean(path)).
     let path_display = path.display().to_string();
-    let read_path = crate::agent_list_commands::clean_path(path);
 
-    let bytes = if path
-        .components()
-        .any(|component| component == std::path::Component::ParentDir)
-    {
-        Err("config file path escapes expected directory".to_owned())
+    let first = self::fix::load(path);
+    let loaded = if fix && std::io::stdin().is_terminal() {
+        self::fix::fix(path, first, quiet)?
     } else {
-        fs::read(&read_path).map_err(|error| format_go_path_error("open", &read_path, &error))
-    };
-    let bytes = match bytes {
-        Ok(bytes) => bytes,
-        Err(path_err) => {
-            if json {
-                print_json(
-                    &serde_json::json!({ "error": path_err, "valid": false }),
-                    quiet,
-                )?;
-                return Err(format!("config load failed: {path_err}"));
+        match first {
+            Ok(loaded) => loaded,
+            Err(load_error) => {
+                if json {
+                    print_json(
+                        &serde_json::json!({ "error": load_error, "valid": false }),
+                        quiet,
+                    )?;
+                    return Err(format!("config load failed: {load_error}"));
+                }
+                return Err(format!(
+                    "cannot load config from {path_display}: {load_error}: {load_error}"
+                ));
             }
-            return Err(format!(
-                "cannot load config from {path_display}: {path_err}: {path_err}"
-            ));
         }
     };
 
-    let config = match symvault_core::config::Config::load_from_bytes(&bytes) {
-        Ok(config) => config,
-        Err(error) => {
-            let err_msg = error.to_string();
-            if json {
-                print_json(
-                    &serde_json::json!({ "error": err_msg, "valid": false }),
-                    quiet,
-                )?;
-                return Err(format!("config load failed: {err_msg}"));
-            }
-            return Err(format!(
-                "cannot load config from {path_display}: {err_msg}: {err_msg}"
-            ));
-        }
-    };
-
-    let errors = config.validate();
+    let errors = self::fix::validate(&loaded);
     if !errors.is_empty() {
+        // Go splits the joined error text on '\n', so one validation error
+        // that itself spans lines (a policy name containing a newline) is
+        // reported as several entries.
+        let lines: Vec<&str> = errors.iter().flat_map(|error| error.split('\n')).collect();
         if json {
             print_json(
-                &serde_json::json!({ "errors": errors, "valid": false }),
+                &serde_json::json!({ "errors": lines, "valid": false }),
                 quiet,
             )?;
         } else if !quiet {
             println!("Configuration is invalid ({path_display}):");
-            for line in &errors {
+            for line in &lines {
                 println!("  ✗ {line}");
             }
         }
@@ -882,5 +1094,92 @@ mod tests {
             b"owned by another writer"
         );
         let _ = fs::remove_dir_all(root);
+    }
+}
+
+#[cfg(test)]
+mod int_scalar_tests {
+    use super::set;
+    use std::{fs, path::PathBuf};
+
+    fn stored(tag: &str, value: &str) -> String {
+        stored_at(tag, "mcp.port", "mcp:\n  port: 1\n", value)
+    }
+
+    fn stored_at(tag: &str, key: &str, initial: &str, value: &str) -> String {
+        let root: PathBuf =
+            std::env::temp_dir().join(format!("symvault-config-int-{}-{tag}", std::process::id()));
+        fs::create_dir_all(&root).expect("create test directory");
+        let path = root.join("config.yaml");
+        fs::write(&path, initial).expect("write config");
+        set(&path, key, value, true).unwrap_or_else(|_| panic!("set {value}"));
+        let text = fs::read_to_string(&path).expect("read config");
+        let _ = fs::remove_dir_all(root);
+        text
+    }
+
+    /// ADR 0034 item 4: yaml.v3 resolves these plain scalars to ints and
+    /// writes the decimal value; the Go-recorded `config-set-int-*` cases in
+    /// `output-modes.json` pin the same bytes against the oracle.
+    #[test]
+    fn plain_octal_binary_and_underscore_ints_are_written_as_decimals() {
+        for (tag, input, written) in [
+            ("oct8", "010", "8"),
+            ("oct15", "017", "15"),
+            ("bin3", "0b11", "3"),
+            ("bin5", "0b101", "5"),
+            ("sep", "1_000", "1000"),
+        ] {
+            assert_eq!(
+                stored(tag, input),
+                format!("mcp:\n  port: {written}\n"),
+                "{input}"
+            );
+        }
+    }
+
+    /// Negative control: a quoted form is a string for yaml.v3 and stays quoted.
+    #[test]
+    fn quoted_forms_stay_strings() {
+        assert_eq!(
+            stored_at("quoted", "vaultDir", "vaultDir: x\n", "\"010\""),
+            "vaultDir: \"010\"\n"
+        );
+    }
+}
+
+#[cfg(test)]
+mod reindent_tests {
+    use super::reindent_two_spaces;
+
+    #[test]
+    fn four_space_documents_become_two_space() {
+        let input = "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\nvault:\n    authMethod: passphrase\n";
+        assert_eq!(
+            reindent_two_spaces(input),
+            "agents:\n  cli:\n    allowedPaths:\n      - '*'\n    canWrite: true\nvault:\n  authMethod: passphrase\n"
+        );
+    }
+
+    #[test]
+    fn two_space_documents_are_unchanged() {
+        let input = "a:\n  b:\n    - x\n    - y: 1\n      z: 2\n  c: |\n    text\n    more\nd: 1\n";
+        assert_eq!(reindent_two_spaces(input), input);
+    }
+
+    #[test]
+    fn compact_sequences_and_dash_maps_are_indented() {
+        assert_eq!(
+            reindent_two_spaces("a:\n- x\n- y\nb: 1\n"),
+            "a:\n  - x\n  - y\nb: 1\n"
+        );
+        assert_eq!(
+            reindent_two_spaces("a:\n        - k: 1\n          m: 2\nb: 1\n"),
+            "a:\n  - k: 1\n    m: 2\nb: 1\n"
+        );
+        assert_eq!(
+            reindent_two_spaces("a:\n    # note\n    b: 1\n"),
+            "a:\n  # note\n  b: 1\n"
+        );
     }
 }

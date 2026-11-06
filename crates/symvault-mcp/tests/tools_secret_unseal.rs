@@ -70,7 +70,11 @@ fn write_vault() -> (TempDir, Identity) {
     .expect("synthetic identity marker");
     fs::create_dir(root.path().join("entries")).expect("entries directory");
     let identity = generate_identity();
-    let store = Store::open(root.path(), &identity).expect("open synthetic store");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(root.path()),
+        &identity,
+    )
+    .expect("open synthetic store");
     for (path, password, number) in [
         (
             "allowed/secret",

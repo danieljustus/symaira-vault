@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture/recheck real Go CLI artifacts; verify the standalone Rust surface."""
+"""Verify the standalone Rust CLI surface against the recorded Go CLI artifacts (replay only)."""
 import argparse
 import hashlib
 import json
@@ -11,13 +11,12 @@ import shutil
 import shlex
 import subprocess
 import tempfile
-import urllib.request
 
-from build_timeout import oracle_build_timeout, remove_worktree
+import go_observations_common as observations
 
 ROOT = Path(__file__).resolve().parents[2]
 # CLI manuals intentionally correct Markdown interpretation of dynamic paths.
-# The earlier oracle remains frozen in manual_path_probe.py and Git history.
+# The earlier oracle's diagnostic (manual_path_probe.py) lives at tag legacy/go-oracle.
 PIN = "5cf3da06f1750afad974f2b722734af52ce87362"
 ARTIFACT = ROOT / "testdata/port/cli/artifacts.json"
 PROBE = ROOT / "scripts/rust-port/cli_artifacts_probe.go.txt"
@@ -196,70 +195,6 @@ def validate_observations(observations, commands):
     return [c for c in observations if c['state'] == 'absent']
 
 
-def capture(tree, base, env):
-    binary = base / ("go.exe" if os.name == "nt" else "go")
-    execute(["go", "build", "-trimpath", "-buildvcs=false", "-o", binary, "."], tree, env,
-            timeout=oracle_build_timeout())
-    helper = tree / "scripts/rust-port/cmd/cli004probe"
-    helper.mkdir()
-    (helper / "main.go").write_bytes(PROBE.read_bytes())
-    # Compile the probe under the build budget, then run the binary under the
-    # ordinary per-run timeout: `go run` would give the probe's execution the
-    # compile budget too.
-    probe = base / ("cli004probe.exe" if os.name == "nt" else "cli004probe")
-    execute(["go", "build", "-trimpath", "-buildvcs=false", "-o", probe, "./scripts/rust-port/cmd/cli004probe"],
-            tree, env, timeout=oracle_build_timeout())
-    metadata = json.loads(execute([probe, "tree"], tree, env).stdout)
-    commands = metadata['commands']
-    help_pages = {}
-    paths = [c["path"] for c in commands]
-    for path in sorted(set(paths)):
-        result = execute([binary, *path.split()[1:], "--help"], base, env)
-        assert not result.stderr, path
-        help_pages[path] = result.stdout.decode().replace(metadata['config_path'],'__CONFIG_PATH__')
-    completions = {}
-    for shell in ["bash", "zsh", "fish", "powershell"]:
-        for plain in [False, True]:
-            args = [binary, "completion", shell]
-            if plain:
-                args.append("--no-descriptions")
-            result = execute(args, base, env)
-            assert not result.stderr
-            completions[f"{shell}/{'plain' if plain else 'descriptions'}"] = result.stdout.decode()
-    man_dir = base / "man"
-    result = execute([binary, "generate", "manpages", man_dir], base, env)
-    assert not result.stderr
-    manpages = {p.name: normalized_man(p,metadata['config_path']) for p in sorted(man_dir.glob("*.1"))}
-    declared = requests(commands)
-    historical = declared[:-len(PARSER_REQUESTS)]
-    seeded = execute([probe], tree, env, json.dumps(historical).encode())
-    assert not seeded.stderr, 'seeded Go probe emitted uncaptured diagnostics'
-    observations = json.loads(seeded.stdout)
-    assert len(observations) == len(historical), 'missing historical Go observations'
-    # Cobra CompErrorln writes os.Stderr rather than Command.SetErr. Capture
-    # new parser controls through the actual executable, not that buffer-only
-    # seeded helper, so completion errors retain every stderr byte and exit.
-    for request in declared[len(historical):]:
-        assert request['state'] == 'absent'
-        result = execute([binary, '--vault', 'absent-vault', '__complete', *request['args']], base, env)
-        assert result.returncode == 0, ('Go protocol exit', request['name'], result.returncode)
-        observations.append(dict(request, stdout=result.stdout.decode(), stderr=result.stderr.decode()))
-    assert not (base / 'absent-vault').exists(), 'Go completion initialized a vault'
-    validate_observations(observations, commands)
-    assert "alpha/account\n" in observations[0]["stdout"], "dynamic Go completion must execute real session/store reads"
-    for c in observations:
-        assert "public-fixture" not in c["stdout"]
-    sources = subprocess.check_output(["git", "ls-tree", "-r", "--name-only", PIN], cwd=tree, text=True).splitlines()
-    sources = sorted(p for p in sources if p in {"go.mod", "go.sum"} or (p.endswith(".go") and not p.endswith("_test.go")))
-    digest = hashlib.sha256()
-    for path in sources:
-        digest.update(path.encode() + b"\0" + (tree / path).read_bytes() + b"\0")
-    return {"schema_version": 1, "oracle_commit": PIN, "oracle_source_files": sources,
-            "oracle_source_digest": digest.hexdigest(), "probe_sha256": hashlib.sha256(PROBE.read_bytes()).hexdigest(),
-            "commands": commands, "config_keys": metadata['config_keys'], "help": help_pages, "completions": completions,
-            "manpages": manpages, "entry_completions": observations}, binary
-
-
 def verify_rust(binary, artifact, base, env):
     counts = {}
     config_path = str(Path(env['XDG_CONFIG_HOME'])/'symaira-vault/config.yaml')
@@ -357,108 +292,100 @@ def terminal_completion(shell, setup, base, env):
             os.close(master)
 
 
-def verify_shells(go, rust, artifact, base, env, require_native_shells):
-    # Execute the same generated script against each actual binary. Disposable
-    # PATH directories make the script resolve exactly the selected candidate.
+BASH_COMPLETION_DIR = Path(__file__).resolve().parent / 'fixtures' / 'bash-completion'
+
+
+def vendored_bash_completion(name, sha256):
+    """A bash-completion file of the pinned upstream commit; any other bytes are a failure."""
+    data = (BASH_COMPLETION_DIR / name).read_bytes()
+    assert hashlib.sha256(data).hexdigest() == sha256, f'{name} is not the bash-completion {BASH_COMPLETION_COMMIT[:8]} file'
+    return data
+
+
+def shell_fixtures(artifact, base):
+    """Completion scripts and the pinned bash-completion library every shell side sources."""
     scripts = base / 'shell-scripts'
     scripts.mkdir()
-    script = scripts / 'symvault.bash'
-    write_utf8(script,artifact['completions']['bash/descriptions'])
+    write_utf8(scripts / 'symvault.bash', artifact['completions']['bash/descriptions'])
     bash = os.environ.get('CLI_ARTIFACTS_BASH') or shutil.which('bash')
     assert bash, 'actual Bash completion execution is required on every runner'
-    # Cobra's compatibility fallback calls the real bash-completion library.
-    # Download only a test prerequisite; it is not embedded in the executable.
+    # Cobra's compatibility fallback calls the real bash-completion library: the sha-pinned copy under
+    # fixtures/bash-completion (README there), a test prerequisite that is not embedded in the executable.
+    # Nothing is downloaded: replay and capture are offline.
     library = scripts / 'bash_completion'
-    url = f'https://raw.githubusercontent.com/scop/bash-completion/{BASH_COMPLETION_COMMIT}/bash_completion'
-    with urllib.request.urlopen(url, timeout=30) as response:
-        data = response.read()
-    assert hashlib.sha256(data).hexdigest() == BASH_COMPLETION_SHA256
-    library.write_bytes(data)
+    library.write_bytes(vendored_bash_completion('bash_completion', BASH_COMPLETION_SHA256))
     compat = scripts / 'bash_completion.d'
     compat.mkdir()
-    url = f'https://raw.githubusercontent.com/scop/bash-completion/{BASH_COMPLETION_COMMIT}/bash_completion.d/000_bash_completion_compat.bash'
-    with urllib.request.urlopen(url, timeout=30) as response:
-        data = response.read()
-    assert hashlib.sha256(data).hexdigest() == BASH_COMPAT_SHA256
-    (compat / '000_bash_completion_compat.bash').write_bytes(data)
+    (compat / '000_bash_completion_compat.bash').write_bytes(
+        vendored_bash_completion('000_bash_completion_compat.bash', BASH_COMPAT_SHA256))
+    for shell in ['zsh', 'fish']:
+        write_utf8(scripts / f'symvault.{shell}', artifact['completions'][shell + '/descriptions'])
+    return scripts, bash, library, compat
+
+
+def run_shell_side(name, binary, artifact, base, env, fixtures, require_native_shells):
+    """Everything one implementation returns from the actual native shells (Unix only)."""
+    assert os.name != 'nt' and platform.system() != 'Windows', 'native Windows shells are out of scope for the local port'
+    scripts, bash, library, compat = fixtures
+    directory = base / f'{name}-shell-bin'
+    directory.mkdir()
+    shutil.copy2(binary, directory / 'symvault')
     command = 'source "$1"; source "$2"; COMP_WORDS=(symvault g); COMP_CWORD=1; COMP_LINE="symvault g"; COMP_POINT=${#COMP_LINE}; __start_symvault; printf "%s\\n" "${COMPREPLY[@]}"'
-    results = []
-    for name, binary in [('go',go),('rust',rust)]:
-        directory = base / f'{name}-shell-bin'
-        directory.mkdir()
-        executable = directory / ('symvault.exe' if os.name == 'nt' else 'symvault')
-        shutil.copy2(binary, executable)
-        shell_env = dict(env, PATH=str(directory)+os.pathsep+env['PATH'],
-                         BASH_COMPLETION_COMPAT_DIR=str(compat), BASH_COMPLETION_USER_FILE='/dev/null')
-        result = execute([bash,'--noprofile','--norc','-c',command,'contract',library,script],base,shell_env)
-        results.append(result.stdout)
-    assert results[0] == results[1] and b'get' in results[0] and b'generate' in results[0], ('actual sourced Bash scripts must return the same candidates', results)
-    proof = {'bash': {'go':results[0].decode(),'rust':results[1].decode(),
-                     'library_commit':BASH_COMPLETION_COMMIT,
-                     'library_sha256':BASH_COMPLETION_SHA256,
-                     'compat_sha256':BASH_COMPAT_SHA256}}
-    if os.name != 'nt':
-        for shell in ['bash', 'zsh']:
-            executable = bash if shell == 'bash' else shutil.which(shell)
-            assert executable, f'actual {shell} is required on Unix native runners'
-            script = scripts / f'symvault.{shell}'
-            write_utf8(script,artifact['completions'][shell+'/descriptions'])
-            # Fix readline's display layout in this disposable shell. Native
-            # macOS Bash otherwise puts all bare names on one horizontal row.
-            setup = (f'PS1="contract> "; bind "set completion-display-width 1"; source {shlex.quote(str(library))}' if shell == 'bash'
-                     else 'PROMPT="contract> "; RPROMPT=""; autoload -Uz compinit; compinit -i -D')
-            setup += '; source ' + shlex.quote(str(script))
-            results = []
-            for name in ['go','rust']:
-                shell_env = dict(env, PATH=str(base/f'{name}-shell-bin')+os.pathsep+env['PATH'],
-                                 BASH_COMPLETION_COMPAT_DIR=str(compat), BASH_COMPLETION_USER_FILE='/dev/null')
-                results.append(terminal_completion(executable, setup, base, shell_env))
-            candidates = results[0]['candidates']
-            assert candidates == results[1]['candidates'] and any(c == 'get' or c.startswith('get ') for c in candidates) and any(c == 'generate' or c.startswith('generate ') for c in candidates), (shell, results)
-            proof.setdefault(shell, {})['terminal'] = {'go':results[0],'rust':results[1]}
-        fish = shutil.which('fish')
-        assert fish or not require_native_shells, 'actual Fish is required for native Unix acceptance'
-        if fish:
-            script = scripts / 'symvault.fish'
-            write_utf8(script,artifact['completions']['fish/descriptions'])
-            results = []
-            for name in ['go','rust']:
-                shell_env = dict(env, PATH=str(base/f'{name}-shell-bin')+os.pathsep+env['PATH'])
-                command = f'source {shlex.quote(str(script))}; complete --do-complete "symvault g"'
-                results.append(execute([fish,'--no-config','-c',command],base,shell_env).stdout)
-            assert results[0] == results[1] and b'get' in results[0] and b'generate' in results[0], ('fish',results)
-            proof['fish'] = {'go':results[0].decode(),'rust':results[1].decode()}
-    if platform.system() == 'Windows':
-        pwsh = shutil.which('pwsh')
-        assert pwsh, 'native PowerShell completion is required on Windows'
-        ps = scripts / 'symvault.ps1'
-        write_utf8(ps,artifact['completions']['powershell/descriptions'])
-        # Register and exercise the native argument completer through the real
-        # PowerShell completion API; no script-format heuristic substitutes.
-        probe = scripts / 'probe.ps1'
-        write_utf8(probe,'param([string]$Script)\n. $Script\n(TabExpansion2 -inputScript "symvault g" -cursorColumn 10).CompletionMatches | ForEach-Object { $_.CompletionText }\n')
-        results = []
-        for name in ['go','rust']:
-            shell_env = dict(env, PATH=str(base/f'{name}-shell-bin')+os.pathsep+env['PATH'])
-            results.append(execute([pwsh,'-NoProfile','-NonInteractive','-File',probe,str(ps)],base,shell_env).stdout)
-        assert results[0] == results[1] and b'get' in results[0] and b'generate' in results[0]
-        proof['powershell'] = {'go':results[0].decode(),'rust':results[1].decode()}
+    shell_env = dict(env, PATH=str(directory) + os.pathsep + env['PATH'],
+                     BASH_COMPLETION_COMPAT_DIR=str(compat), BASH_COMPLETION_USER_FILE='/dev/null')
+    side = {'bash': execute([bash, '--noprofile', '--norc', '-c', command, 'contract', library, scripts / 'symvault.bash'],
+                            base, shell_env).stdout.decode(), 'terminal': {}, 'fish': None}
+    assert 'get' in side['bash'] and 'generate' in side['bash'], (name, side['bash'])
+    for shell in ['bash', 'zsh']:
+        executable = bash if shell == 'bash' else shutil.which(shell)
+        assert executable, f'actual {shell} is required on Unix native runners'
+        # Fix readline's display layout in this disposable shell. Native
+        # macOS Bash otherwise puts all bare names on one horizontal row.
+        setup = (f'PS1="contract> "; bind "set completion-display-width 1"; source {shlex.quote(str(library))}' if shell == 'bash'
+                 else 'PROMPT="contract> "; RPROMPT=""; autoload -Uz compinit; compinit -i -D')
+        setup += '; source ' + shlex.quote(str(scripts / f'symvault.{shell}'))
+        result = terminal_completion(executable, setup, base, shell_env)
+        candidates = result['candidates']
+        assert any(c == 'get' or c.startswith('get ') for c in candidates) and any(c == 'generate' or c.startswith('generate ') for c in candidates), (name, shell, result)
+        side['terminal'][shell] = result
+    fish = shutil.which('fish')
+    assert fish or not require_native_shells, 'actual Fish is required for native Unix acceptance'
+    if fish:
+        fish_env = dict(env, PATH=str(directory) + os.pathsep + env['PATH'])
+        command = f'source {shlex.quote(str(scripts / "symvault.fish"))}; complete --do-complete "symvault g"'
+        side['fish'] = execute([fish, '--no-config', '-c', command], base, fish_env).stdout.decode()
+        assert 'get' in side['fish'] and 'generate' in side['fish'], (name, side['fish'])
+    return side
+
+
+def verify_shells(go_record, rust, artifact, base, env, require_native_shells):
+    """Rust's native-shell completions against the recorded Go ones."""
+    fixtures = shell_fixtures(artifact, base)
+    side = run_shell_side('rust', rust, artifact, base, env, fixtures, require_native_shells)
+    assert side['bash'] == go_record['bash'], ('actual sourced Bash scripts must return the same candidates', side['bash'], go_record['bash'])
+    proof = {'bash': {'go': go_record['bash'], 'rust': side['bash'], 'library_commit': BASH_COMPLETION_COMMIT,
+                      'library_sha256': BASH_COMPLETION_SHA256, 'compat_sha256': BASH_COMPAT_SHA256}}
+    assert set(go_record['terminal']) == set(side['terminal']) == {'bash', 'zsh'}
+    for shell, result in side['terminal'].items():
+        assert result['candidates'] == go_record['terminal'][shell]['candidates'], (shell, result, go_record['terminal'][shell])
+        proof.setdefault(shell, {})['terminal'] = {'go': go_record['terminal'][shell], 'rust': result}
+    if go_record['fish'] is not None or side['fish'] is not None:
+        assert side['fish'] == go_record['fish'], ('fish', side['fish'], go_record['fish'])
+        proof['fish'] = {'go': go_record['fish'], 'rust': side['fish']}
     return proof
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--capture", action="store_true")
-    parser.add_argument("--rust", type=Path)
+    parser.add_argument("--rust", type=Path, required=True)
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--captured-output", type=Path)
     parser.add_argument("--allow-dirty-for-development", action="store_true")
     parser.add_argument("--require-native-shells", action="store_true")
     args = parser.parse_args()
     clean = not subprocess.check_output(['git','status','--porcelain=v1','--untracked-files=normal'],cwd=ROOT).strip()
-    if args.rust:
-        assert args.receipt, 'a source/binary receipt is required for native acceptance'
-        assert clean or args.allow_dirty_for_development, 'commit the candidate before recording acceptance'
+    assert args.receipt, 'a source/binary receipt is required for native acceptance'
+    assert clean or args.allow_dirty_for_development, 'commit the candidate before recording acceptance'
     with tempfile.TemporaryDirectory(prefix="symvault-cli-artifacts-") as raw:
         base = Path(raw)
         home = base / "home"
@@ -471,62 +398,35 @@ def main():
             directory = ROOT / 'target/cli-artifacts-captures'
             directory.mkdir(parents=True, exist_ok=True)
             env['CLI_ARTIFACTS_EXECUTION_DIR'] = tempfile.mkdtemp(prefix='capture-', dir=directory)
-        tree = base / "oracle"
-        execute(["git", "worktree", "add", "--detach", tree, PIN], ROOT, os.environ.copy())
-        try:
-            artifact, go = capture(tree, base, env)
-            if args.captured_output:
-                write_utf8(args.captured_output,json.dumps(artifact,ensure_ascii=False,indent=2)+'\n')
-            if args.capture:
-                write_utf8(ARTIFACT,json.dumps(artifact, ensure_ascii=False, indent=2) + "\n")
-            else:
-                expected_bytes = ARTIFACT.read_bytes()
-                expected = json.loads(expected_bytes)
-                generated_bytes = (json.dumps(artifact, ensure_ascii=False, indent=2) + '\n').encode('utf-8')
-                if artifact != expected or generated_bytes != expected_bytes:
-                    changed = [key for key in artifact if artifact[key] != expected.get(key)]
-                    print('Changed artifact sections:', changed)
-                    for key in changed:
-                        left, right = expected.get(key), artifact[key]
-                        if isinstance(right, dict):
-                            differences = [k for k in right if left.get(k) != right[k]]
-                            print(key, differences[:12])
-                            for name in differences[:3]:
-                                before, after = left.get(name,''), right[name]
-                                if isinstance(before,str) and isinstance(after,str):
-                                    offset = next((i for i,(a,b) in enumerate(zip(before,after)) if a!=b),min(len(before),len(after)))
-                                    print(name,'first differing byte',offset,repr(before[max(0,offset-100):offset+200]),repr(after[max(0,offset-100):offset+200]))
-                        elif isinstance(right, list):
-                            print(key, [(i,str(a)[:220],str(b)[:220]) for i,(a,b) in enumerate(zip(left,right)) if a!=b][:8])
-                        else: print(key, str(left)[:220],str(right)[:220])
-                    raise AssertionError('actual immutable Go CLI artifact bytes changed')
-            if args.rust:
-                from manual_path_contract import verify_manual_paths
-                rust = args.rust.resolve()
-                counts = verify_rust(rust, artifact, base, env)
-                manual_paths = verify_manual_paths(go,rust,base/'manual-path-controls',env,artifact)
-                shells = verify_shells(go,rust,artifact,base,env,args.require_native_shells)
-                candidate_files = subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard'],cwd=ROOT,text=True).splitlines()
-                candidate_files = sorted(p for p in candidate_files if (p.startswith(('crates/','third_party/','testdata/')) and p.endswith(('.rs','.toml','.lock','.json','.txt'))) or p.startswith(('internal/manpages/','scripts/rust-port/cmd/cligap/','scripts/rust-port/manual_path_')) or p in {'Cargo.toml','Cargo.lock','cmd/manpages.go','cmd/mcp/serve.go','scripts/rust-port/cli_artifacts_contract.py','scripts/rust-port/test_cli_artifacts_contract.py','scripts/rust-port/cli_artifacts_probe.go.txt','.github/workflows/rust-cli-artifacts.yml','docs/adr/0011-cli-artifacts-and-completion-protocol.md'})
-                digest = hashlib.sha256()
-                for path in candidate_files:
-                    digest.update(path.encode()+b'\0'+(ROOT/path).read_bytes()+b'\0')
-                receipt = {'passed': True, 'candidate_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
-                    'candidate_worktree_clean':clean,'candidate_source_files':candidate_files,'candidate_source_digest':digest.hexdigest(),
-                    'oracle_commit':PIN,'oracle_source_files':artifact['oracle_source_files'],'oracle_source_digest':artifact['oracle_source_digest'],
-                    'probe_sha256':artifact['probe_sha256'],'driver_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                    'go_binary_sha256':hashlib.sha256(go.read_bytes()).hexdigest(),'rust_binary_sha256':hashlib.sha256(rust.read_bytes()).hexdigest(),
-                    'native_os':platform.system(),'architecture':platform.machine(),'keyring':'memory','actual_counts':counts,
-                    'go_protocol_observations':artifact['entry_completions'],'actual_shells':shells,
-                    'manual_path_controls':manual_paths,
-                    'execution_capture_directory':env['CLI_ARTIFACTS_EXECUTION_DIR']}
-                write_utf8(args.receipt,json.dumps(receipt,indent=2)+'\n')
-                print(f'PASS actual Go/Rust CLI artifacts: {counts}')
-            else:
-                print(f"PASS actual Go capture: {len(artifact['help'])} help pages, {len(artifact['completions'])} scripts, {len(artifact['manpages'])} manuals, {len(artifact['entry_completions'])} protocol queries")
-        finally:
-            remove_worktree(lambda: execute(["git", "worktree", "remove", "--force", tree], ROOT, os.environ.copy()),
-                            "oracle worktree")
+        from manual_path_contract import verify_manual_paths
+        recorded = observations.load('cli-artifacts-contract', oracle_commit=PIN)['observations']
+        artifact_bytes = ARTIFACT.read_bytes()
+        assert hashlib.sha256(artifact_bytes).hexdigest() == recorded['artifact_sha256'], 'testdata/port/cli/artifacts.json no longer has the bytes the Go oracle produced'
+        subprocess.run(['git', 'cat-file', '-e', PIN + '^{commit}'], cwd=ROOT, check=True)
+        artifact = json.loads(artifact_bytes)
+        if args.captured_output:
+            write_utf8(args.captured_output, artifact_bytes.decode('utf-8'))
+        rust = args.rust.resolve()
+        counts = verify_rust(rust, artifact, base, env)
+        manual_paths = verify_manual_paths(rust, base/'manual-path-controls', env, artifact, recorded['manual_paths'])
+        shells = verify_shells(recorded['shells'], rust, artifact, base, env, args.require_native_shells)
+        candidate_files = subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard'],cwd=ROOT,text=True).splitlines()
+        candidate_files = sorted(p for p in candidate_files if (p.startswith(('crates/','third_party/','testdata/')) and p.endswith(('.rs','.toml','.lock','.json','.txt'))) or p.startswith(('scripts/rust-port/cligap','scripts/rust-port/manual_path_')) or p in {'Cargo.toml','Cargo.lock','scripts/rust-port/cli_artifacts_contract.py','scripts/rust-port/test_cli_artifacts_contract.py','scripts/rust-port/cli_artifacts_probe.go.txt','.github/workflows/rust-cli-artifacts.yml','docs/adr/0011-cli-artifacts-and-completion-protocol.md'})
+        digest = hashlib.sha256()
+        for path in candidate_files:
+            digest.update(path.encode()+b'\0'+(ROOT/path).read_bytes()+b'\0')
+        receipt = {'passed': True, 'candidate_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
+            'candidate_worktree_clean':clean,'candidate_source_files':candidate_files,'candidate_source_digest':digest.hexdigest(),
+            'oracle_commit':PIN,'oracle_source_files':recorded['oracle_source_files'],'oracle_source_digest':recorded['oracle_source_digest'],
+            'probe_sha256':recorded['probe_sha256'],'driver_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            'go_binary_sha256':recorded['go_binary_sha256'],'rust_binary_sha256':hashlib.sha256(rust.read_bytes()).hexdigest(),
+            'native_os':platform.system(),'architecture':platform.machine(),'keyring':'memory','actual_counts':counts,
+            'go_protocol_observations':artifact['entry_completions'],'actual_shells':shells,
+            'manual_path_controls':manual_paths,
+            'go_observation':'replayed from scripts/rust-port/fixtures/go-observations/cli-artifacts-contract.%s.json' % observations.host_goos(),
+            'execution_capture_directory':env['CLI_ARTIFACTS_EXECUTION_DIR']}
+        write_utf8(args.receipt,json.dumps(receipt,indent=2)+'\n')
+        print(f'PASS recorded Go / live Rust CLI artifacts: {counts}')
 
 
 if __name__ == "__main__":

@@ -1,0 +1,804 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "690647c5068a818a4b237738882bb20c865a134a",
+    "commit_sha": "690647c5068a818a4b237738882bb20c865a134a",
+    "release": "unreleased",
+    "source_files": [
+      "internal/config/config.go",
+      "internal/config/config_load.go",
+      "internal/config/config_merge.go",
+      "internal/config/config_save.go",
+      "internal/config/config_validate.go",
+      "internal/config/schema.go",
+      "internal/config/warn.go"
+    ],
+    "source_digest": "6c40944b1540d8f5387bbded29e54b6d6af74d7e02756f1bfc96b89cc3178e36",
+    "generator_digest": "d8a44a98a9ba5745b213f316d0f5c9378a5da4efbee4d79e046b44f2c349c51a"
+  },
+  "declared_differences": [
+    "paymentPolicies",
+    "security"
+  ],
+  "declared_line_differences": [
+    {
+      "side": "rust_adds",
+      "keys": [
+        "oauth"
+      ],
+      "block": true,
+      "reason": "Go's SaveTo drops mcp.oauth (the OAuth server TTLs silently fall back to their defaults); Rust keeps it (upstream-go-bugs.md)"
+    },
+    {
+      "side": "rust_adds",
+      "cases": [
+        "git_false_flags"
+      ],
+      "keys": [
+        "auto_push",
+        "auto_pull"
+      ],
+      "values": [
+        "false"
+      ],
+      "reason": "Go's omitempty drops git.auto_push/auto_pull false and the loader default is true, so an opt-out turns into an opt-in; Rust writes the false"
+    },
+    {
+      "side": "rust_adds",
+      "cases": [
+        "clipboard_false_flag"
+      ],
+      "keys": [
+        "copyByDefault"
+      ],
+      "values": [
+        "false"
+      ],
+      "reason": "Go's omitempty drops clipboard.copyByDefault false and the loader default is true; Rust writes the false"
+    },
+    {
+      "side": "rust_adds",
+      "cases": [
+        "mcp_false_and_zero_values"
+      ],
+      "keys": [
+        "port",
+        "read_timeout",
+        "rate_limit",
+        "metrics_auth_required"
+      ],
+      "values": [
+        "0",
+        "0s",
+        "false"
+      ],
+      "reason": "Go's omitempty drops a zero port/timeout/rate limit and a false metrics_auth_required, and the loader defaults (8080, 10s, 60, true) replace them; Rust writes the operator's value"
+    },
+    {
+      "side": "rust_adds",
+      "cases": [
+        "tier_explicit_empty_read_only",
+        "tier_explicit_empty_standard",
+        "tier_explicit_empty_admin"
+      ],
+      "keys": [
+        "allowedExecutables"
+      ],
+      "values": [
+        "[]"
+      ],
+      "reason": "Go's omitempty drops an explicit empty allowedExecutables and the next load re-applies the tier preset (standard grants curl, git, terraform, npm, node, python, python3, docker, kubectl): a rewrite widens the profile's permissions; Rust keeps the empty list (upstream-go-bugs.md 11)"
+    },
+    {
+      "side": "rust_adds",
+      "cases": [
+        "tier_explicit_empty_read_only",
+        "tier_explicit_empty_standard",
+        "tier_explicit_empty_admin"
+      ],
+      "keys": [
+        "approvalMode"
+      ],
+      "values": [
+        "null"
+      ],
+      "reason": "Go drops an explicit approvalMode: null of a tiered profile and the next load re-applies the preset's mode (or derives one from requireApproval); Rust keeps the null so the effective profile does not change (upstream-go-bugs.md 11)"
+    },
+    {
+      "side": "rust_adds",
+      "cases": [
+        "custom_without_can_write"
+      ],
+      "agents": [
+        "x"
+      ],
+      "keys": [
+        "canWrite"
+      ],
+      "values": [
+        "false"
+      ],
+      "reason": "Go holds canWrite as *bool and writes nothing for a profile that never set it; Rust holds bool and always writes canWrite, which reloads to the same false"
+    },
+    {
+      "side": "rust_adds",
+      "cases": [
+        "mcp_dropped_by_go",
+        "all_fields_non_zero",
+        "git_identity",
+        "clipboard_print_by_default"
+      ],
+      "keys": [
+        "approval_required",
+        "author",
+        "email",
+        "printByDefault"
+      ],
+      "reason": "Go's SaveTo drops mcp.approval_required, git.author, git.email and clipboard.printByDefault; Rust keeps them (upstream-go-bugs.md 10)"
+    },
+    {
+      "side": "rust_adds",
+      "cases": [
+        "mcp_dropped_by_go",
+        "all_fields_non_zero"
+      ],
+      "keys": [
+        "perplexity"
+      ],
+      "block": true,
+      "reason": "Go's SaveTo drops mcp.perplexity, which turns a configured Perplexity client off; Rust keeps it (upstream-go-bugs.md 10)"
+    },
+    {
+      "side": "go_only",
+      "cases": [
+        "custom_explicit_false_capabilities"
+      ],
+      "agents": [
+        "x"
+      ],
+      "keys": [
+        "canRunCommands",
+        "canManageConfig",
+        "canUseClipboard",
+        "canUseAutotype",
+        "canReadValues",
+        "autoUnseal",
+        "exposePaymentValues"
+      ],
+      "values": [
+        "false"
+      ],
+      "reason": "Go holds *bool: an explicit false on a custom profile is a set pointer and is written back; Rust holds bool and omits it, which reloads to the same false (a missing capability is false)"
+    }
+  ],
+  "fields": [
+    "agents",
+    "agents.*.allowedEnvVars",
+    "agents.*.allowedExecutables",
+    "agents.*.allowedPaths",
+    "agents.*.allowed_tools",
+    "agents.*.approvalMode",
+    "agents.*.approvalTimeout",
+    "agents.*.autoUnseal",
+    "agents.*.canManageConfig",
+    "agents.*.canReadValues",
+    "agents.*.canRunCommands",
+    "agents.*.canUseAutotype",
+    "agents.*.canUseClipboard",
+    "agents.*.canWrite",
+    "agents.*.dynamicProviders",
+    "agents.*.exposePaymentValues",
+    "agents.*.exposeValueTools",
+    "agents.*.max_reads_per_day",
+    "agents.*.max_reads_per_hour",
+    "agents.*.max_secrets_in_session",
+    "agents.*.paymentPolicy",
+    "agents.*.perToolRedactFields",
+    "agents.*.post_call_hooks",
+    "agents.*.pre_call_hooks",
+    "agents.*.promptInjectionMode",
+    "agents.*.redactFields",
+    "agents.*.requireApproval",
+    "agents.*.skillPath",
+    "agents.*.skillVersion",
+    "agents.*.tier",
+    "audit",
+    "audit.maxAgeDays",
+    "audit.maxBackups",
+    "audit.maxSizeMb",
+    "authMethod",
+    "clipboard",
+    "clipboard.auto_clear_duration",
+    "clipboard.copyByDefault",
+    "clipboard.printByDefault",
+    "defaultAgent",
+    "defaultProfile",
+    "envAllowlist",
+    "envWhitelist",
+    "git",
+    "git.author",
+    "git.auto_pull",
+    "git.auto_pull_interval",
+    "git.auto_push",
+    "git.commit_template",
+    "git.email",
+    "logging",
+    "logging.format",
+    "logging.level",
+    "mcp",
+    "mcp.allow_insecure_bind",
+    "mcp.approval_required",
+    "mcp.approval_timeout",
+    "mcp.approval_tls_cert_file",
+    "mcp.approval_tls_key_file",
+    "mcp.bind",
+    "mcp.httpTokenFile",
+    "mcp.metrics_auth_required",
+    "mcp.mtls_enabled",
+    "mcp.oauth",
+    "mcp.oauth.access_token_ttl",
+    "mcp.oauth.refresh_token_ttl",
+    "mcp.otlp_endpoint",
+    "mcp.perplexity",
+    "mcp.perplexity.allow_private",
+    "mcp.perplexity.api_key",
+    "mcp.perplexity.base_url",
+    "mcp.perplexity.rate_limit_per_min",
+    "mcp.port",
+    "mcp.rate_limit",
+    "mcp.read_header_timeout",
+    "mcp.read_timeout",
+    "mcp.shutdown_timeout",
+    "mcp.stdio",
+    "mcp.tls_cert_file",
+    "mcp.tls_client_ca_file",
+    "mcp.tls_key_file",
+    "mcp.trusted_proxy_ips",
+    "mcp.write_timeout",
+    "paymentPolicies",
+    "paymentPolicies.*.allowed_merchants",
+    "paymentPolicies.*.currency",
+    "paymentPolicies.*.instrument",
+    "paymentPolicies.*.max_amount",
+    "paymentPolicies.*.max_amount.per_day",
+    "paymentPolicies.*.max_amount.per_transaction",
+    "profiles",
+    "profiles.*.vault",
+    "scan_patterns",
+    "scan_patterns[].description",
+    "scan_patterns[].name",
+    "scan_patterns[].pattern",
+    "scan_patterns[].severity",
+    "security",
+    "security.allow_env_passphrase",
+    "security.disable_env_passphrase",
+    "sessionMaxLifetime",
+    "sessionTimeout",
+    "update",
+    "update.cache_ttl",
+    "useTouchID",
+    "vault",
+    "vault.argon2id_memory",
+    "vault.argon2id_threads",
+    "vault.argon2id_time",
+    "vault.authMethod",
+    "vault.auto_heal_zero_key",
+    "vault.auto_migrate_kdf",
+    "vault.config_cache_entries",
+    "vault.confirm_remove",
+    "vault.default_recipients",
+    "vault.format_version",
+    "vault.last_rotated",
+    "vault.legacy_mode",
+    "vault.listing_cache_ttl",
+    "vault.manifest_generation",
+    "vault.path",
+    "vault.pseudonymize_paths",
+    "vault.scrypt_work_factor",
+    "vault.search_index",
+    "vault.search_index_cache",
+    "vault.search_workers",
+    "vault.sync",
+    "vault.sync.method",
+    "vault.useTouchID",
+    "vaultDir"
+  ],
+  "dropped_by_save_to": [
+    "agents.*.post_call_hooks",
+    "agents.*.pre_call_hooks",
+    "clipboard.printByDefault",
+    "envAllowlist",
+    "envWhitelist",
+    "git.author",
+    "git.email",
+    "mcp.approval_required",
+    "mcp.oauth",
+    "mcp.oauth.access_token_ttl",
+    "mcp.oauth.refresh_token_ttl",
+    "mcp.perplexity",
+    "mcp.perplexity.allow_private",
+    "mcp.perplexity.api_key",
+    "mcp.perplexity.base_url",
+    "mcp.perplexity.rate_limit_per_min",
+    "paymentPolicies",
+    "paymentPolicies.*.allowed_merchants",
+    "paymentPolicies.*.currency",
+    "paymentPolicies.*.instrument",
+    "paymentPolicies.*.max_amount",
+    "paymentPolicies.*.max_amount.per_day",
+    "paymentPolicies.*.max_amount.per_transaction",
+    "security",
+    "security.allow_env_passphrase",
+    "security.disable_env_passphrase",
+    "vault.listing_cache_ttl",
+    "vault.manifest_generation",
+    "vault.sync",
+    "vault.sync.method"
+  ],
+  "cases": [
+    {
+      "name": "payment_policy_agent",
+      "description": "an agent bound to a payment policy keeps paymentPolicy, skillVersion and exposePaymentValues in Go's order",
+      "input": "vaultDir: /fixture/vault\nagents:\n  bot:\n    approvalMode: prompt\n    canWrite: true\n    skillPath: /s/p\n    skillVersion: \"1.2.3\"\n    exposePaymentValues: true\n    paymentPolicy: card\n  other:\n    canWrite: false\npaymentPolicies:\n  card:\n    instrument: cards/visa\n    allowed_merchants: [acme, Beta]\n    max_amount:\n      per_transaction: \"10.00\"\n      per_day: \"50\"\n    currency: EUR\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    bot:\n        approvalMode: prompt\n        canWrite: true\n        exposeValueTools: true\n        skillPath: /s/p\n        skillVersion: 1.2.3\n        exposePaymentValues: true\n        paymentPolicy: card\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\n    other:\n        canWrite: false\n        exposeValueTools: true\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "payment_policy_agent_remove_agent_other",
+      "description": "an agent bound to a payment policy keeps paymentPolicy, skillVersion and exposePaymentValues in Go's order",
+      "input": "vaultDir: /fixture/vault\nagents:\n  bot:\n    approvalMode: prompt\n    canWrite: true\n    skillPath: /s/p\n    skillVersion: \"1.2.3\"\n    exposePaymentValues: true\n    paymentPolicy: card\n  other:\n    canWrite: false\npaymentPolicies:\n  card:\n    instrument: cards/visa\n    allowed_merchants: [acme, Beta]\n    max_amount:\n      per_transaction: \"10.00\"\n      per_day: \"50\"\n    currency: EUR\n",
+      "mutation": "remove_agent:other",
+      "saved_yaml": "agents:\n    bot:\n        approvalMode: prompt\n        canWrite: true\n        exposeValueTools: true\n        skillPath: /s/p\n        skillVersion: 1.2.3\n        exposePaymentValues: true\n        paymentPolicy: card\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "all_sections",
+      "description": "audit, logging, security and scan_patterns around a payment-bound agent",
+      "input": "vaultDir: /fixture/vault\nagents:\n  bot:\n    canWrite: true\n    paymentPolicy: card\npaymentPolicies:\n  card:\n    instrument: cards/visa\n    currency: EUR\naudit:\n  maxSizeMb: 50\n  maxBackups: 3\n  maxAgeDays: 7\nlogging:\n  level: debug\n  format: json\nsecurity:\n  disable_env_passphrase: true\n  allow_env_passphrase: true\nscan_patterns:\n  - name: aws\n    pattern: '^AKIA[A-Z0-9]{16}$'\n    description: 'AWS key: id'\n    severity: high\n  - name: empty\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    bot:\n        canWrite: true\n        exposeValueTools: true\n        paymentPolicy: card\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\naudit:\n    maxSizeMb: 50\n    maxBackups: 3\n    maxAgeDays: 7\nlogging:\n    level: debug\n    format: json\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nscan_patterns:\n    - name: aws\n      pattern: ^AKIA[A-Z0-9]{16}$\n      description: 'AWS key: id'\n      severity: high\n    - name: empty\n      pattern: \"\"\n      description: \"\"\n      severity: \"\"\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "audit_empty_mapping",
+      "description": "an empty audit mapping is the default section",
+      "input": "vaultDir: /fixture/vault\naudit: {}\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\naudit:\n    maxSizeMb: 100\n    maxBackups: 5\n    maxAgeDays: 30\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "audit_zero_size",
+      "description": "maxSizeMb 0 is written back as no size",
+      "input": "vaultDir: /fixture/vault\naudit:\n  maxSizeMb: 0\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\naudit:\n    maxBackups: 5\n    maxAgeDays: 30\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "audit_zero_counts",
+      "description": "zero backups and age are written, not omitted",
+      "input": "vaultDir: /fixture/vault\naudit:\n  maxSizeMb: 1\n  maxBackups: 0\n  maxAgeDays: 0\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\naudit:\n    maxSizeMb: 1\n    maxBackups: 0\n    maxAgeDays: 0\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "audit_partial",
+      "description": "unwritten audit fields keep their defaults",
+      "input": "vaultDir: /fixture/vault\naudit:\n  maxBackups: 9\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\naudit:\n    maxSizeMb: 100\n    maxBackups: 9\n    maxAgeDays: 30\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "audit_negative_size",
+      "description": "a negative size is written as its (negative) megabyte count",
+      "input": "vaultDir: /fixture/vault\naudit:\n  maxSizeMb: -3\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\naudit:\n    maxSizeMb: -3\n    maxBackups: 5\n    maxAgeDays: 30\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "logging_level_only",
+      "description": "an unwritten logging field keeps its default",
+      "input": "vaultDir: /fixture/vault\nlogging:\n  level: error\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nlogging:\n    level: error\n    format: text\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "logging_blank_values",
+      "description": "blank level and format collapse to an empty mapping",
+      "input": "vaultDir: /fixture/vault\nlogging:\n  level: ''\n  format: ''\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nlogging: {}\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "logging_empty_mapping",
+      "description": "an empty logging mapping is the default section",
+      "input": "vaultDir: /fixture/vault\nlogging: {}\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nlogging:\n    level: warn\n    format: text\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "security_flags",
+      "description": "security is a declared difference: Go drops it",
+      "input": "vaultDir: /fixture/vault\nsecurity:\n  disable_env_passphrase: true\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "security_empty",
+      "description": "an empty security mapping is a declared difference",
+      "input": "vaultDir: /fixture/vault\nsecurity: {}\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "scan_patterns_quoting",
+      "description": "scan_patterns scalars that need quoting",
+      "input": "vaultDir: /fixture/vault\nscan_patterns:\n  - name: 'yes'\n    pattern: 123\n    description: \"a # b\"\n    severity: ''\n  - {name: n2, pattern: '[a-z]+', description: d, severity: low}\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nscan_patterns:\n    - name: \"yes\"\n      pattern: \"123\"\n      description: 'a # b'\n      severity: \"\"\n    - name: n2\n      pattern: '[a-z]+'\n      description: d\n      severity: low\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "scan_patterns_empty_list",
+      "description": "an empty list is not written",
+      "input": "vaultDir: /fixture/vault\nscan_patterns: []\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "payment_policies_only",
+      "description": "paymentPolicies alone is a declared difference",
+      "input": "vaultDir: /fixture/vault\npaymentPolicies:\n  b:\n    instrument: cards/b\n  a:\n    instrument: cards/a\n    allowed_merchants: [x]\n    currency: USD\n    max_amount:\n      per_day: '5'\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "agent_all_fields",
+      "description": "every agent field Go can write, set explicitly",
+      "input": "vaultDir: /fixture/vault\nagents:\n  full:\n    tier: standard\n    approvalMode: prompt\n    allowedPaths: [a/*, b/c]\n    redactFields: [password]\n    perToolRedactFields:\n      get: [token]\n    canWrite: true\n    canRunCommands: true\n    canManageConfig: false\n    canUseClipboard: true\n    canUseAutotype: false\n    canReadValues: true\n    exposeValueTools: true\n    autoUnseal: true\n    requireApproval: true\n    approvalTimeout: 45s\n    allowed_tools: [vault_get, vault_list]\n    max_reads_per_hour: 11\n    max_reads_per_day: 22\n    max_secrets_in_session: 3\n    dynamicProviders:\n      aws: [a, b]\n    allowedEnvVars: [HOME]\n    allowedExecutables: [/bin/ls]\n    promptInjectionMode: wrap\n    pre_call_hooks: [/bin/pre]\n    post_call_hooks: [/bin/post]\n    skillPath: /skills/full\n    skillVersion: v9\n    exposePaymentValues: true\n    paymentPolicy: card\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    full:\n        tier: standard\n        approvalMode: prompt\n        allowedPaths:\n            - a/*\n            - b/c\n        redactFields:\n            - password\n        perToolRedactFields:\n            get:\n                - token\n        canWrite: true\n        canRunCommands: true\n        canManageConfig: false\n        canUseClipboard: true\n        canUseAutotype: false\n        canReadValues: true\n        exposeValueTools: true\n        autoUnseal: true\n        requireApproval: true\n        approvalTimeout: 45s\n        allowed_tools:\n            - vault_get\n            - vault_list\n        max_reads_per_hour: 11\n        max_reads_per_day: 22\n        max_secrets_in_session: 3\n        dynamicProviders:\n            aws:\n                - a\n                - b\n        allowedEnvVars:\n            - HOME\n        allowedExecutables:\n            - /bin/ls\n        promptInjectionMode: wrap\n        skillPath: /skills/full\n        skillVersion: v9\n        exposePaymentValues: true\n        paymentPolicy: card\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "agent_explicit_false_bools",
+      "description": "explicit false booleans on a custom agent are written back",
+      "input": "vaultDir: /fixture/vault\nagents:\n  zero:\n    canWrite: false\n    exposeValueTools: false\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\n    zero:\n        canWrite: false\n        exposeValueTools: false\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "agent_remove_other",
+      "description": "agent uninstall keeps every other agent's fields and the unrelated sections",
+      "input": "vaultDir: /fixture/vault\ndefaultAgent: bot\nagents:\n  bot:\n    canWrite: true\n    skillVersion: '2'\n    paymentPolicy: card\n  other:\n    canWrite: true\npaymentPolicies:\n  card:\n    instrument: cards/visa\naudit:\n  maxSizeMb: 10\nlogging:\n  level: info\nscan_patterns:\n  - name: n\n    pattern: p\n",
+      "mutation": "remove_agent:other",
+      "saved_yaml": "agents:\n    bot:\n        canWrite: true\n        exposeValueTools: true\n        skillVersion: \"2\"\n        paymentPolicy: card\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\naudit:\n    maxSizeMb: 10\n    maxBackups: 5\n    maxAgeDays: 30\nlogging:\n    level: info\n    format: text\nvaultDir: /fixture/vault\ndefaultAgent: bot\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nscan_patterns:\n    - name: \"n\"\n      pattern: p\n      description: \"\"\n      severity: \"\"\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "top_level_fields",
+      "description": "the top-level scalars, profiles and defaultProfile keep Go's order",
+      "input": "vaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 20m\nsessionMaxLifetime: 4h\nauthMethod: passphrase\nprofiles:\n  work:\n    vault: /fixture/work\ndefaultProfile: work\nenvAllowlist: [A, B]\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 20m0s\nsessionMaxLifetime: 4h0m0s\nauthMethod: passphrase\nuseTouchID: false\nprofiles:\n    work:\n        vault: /fixture/work\ndefaultProfile: work\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "multiline_scan_description_remove_agent_other",
+      "description": "a literal-block description survives agent uninstall as a literal block Go and Rust reload",
+      "input": "vaultDir: /fixture/vault\nagents:\n  bot:\n    canWrite: true\n  other:\n    canWrite: false\nscan_patterns:\n  - name: aws\n    pattern: '^AKIA'\n    description: |\n      Matches AWS keys.\n      Second line.\n    severity: high\n",
+      "mutation": "remove_agent:other",
+      "saved_yaml": "agents:\n    bot:\n        canWrite: true\n        exposeValueTools: true\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nscan_patterns:\n    - name: aws\n      pattern: ^AKIA\n      description: |\n        Matches AWS keys.\n        Second line.\n      severity: high\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "multiline_everywhere",
+      "description": "multi-line strings in every string position the writer emits (map values, list items, map keys)",
+      "input": "vaultDir: \"/fixture/va\\nult\"\ndefaultAgent: bot\ndefaultProfile: work\nprofiles:\n  work:\n    vault: \"/fixture/w\\nork\"\nvault:\n  path: \"p1\\np2\"\n  default_recipients: [\"r1\\nr2\", plain]\ngit:\n  commit_template: \"msg\\n\\nbody\\n\"\nagents:\n  bot:\n    canWrite: true\n    allowedPaths: [\"a\\nb\", \"tail: x\", \"keep\\n\"]\n    redactFields: [\"x\\ny\\n\\n\"]\n    perToolRedactFields:\n      get: [\"l1\\nl2\"]\n      \"k\\nj\": [a]\n    dynamicProviders:\n      aws: [\"h1\\nh2\", \" lead\"]\n    allowedEnvVars: [\"E\\nV\"]\n    allowedExecutables: [\"/bin/a\\nb\"]\n    allowed_tools: [\"t\\nu\"]\n    skillPath: \"/s/p\\nq\"\n    skillVersion: \"v\\n1\"\n    paymentPolicy: card\n  \"two\\nlines\":\n    canWrite: false\npaymentPolicies:\n  card:\n    instrument: \"cards\\nvisa\"\n    allowed_merchants: [\"m1\\nm2\"]\n    currency: \"E\\nUR\"\nscan_patterns:\n  - name: \"n\\n1\"\n    pattern: \"p\\n1\"\n    description: \"d\\n\\n\"\n    severity: high\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    bot:\n        allowedPaths:\n            - |-\n              a\n              b\n            - 'tail: x'\n            - |\n              keep\n        redactFields:\n            - |+\n              x\n              y\n\n        perToolRedactFields:\n            get:\n                - |-\n                  l1\n                  l2\n            ? |-\n                k\n                j\n            :   - a\n        canWrite: true\n        exposeValueTools: true\n        allowed_tools:\n            - |-\n              t\n              u\n        dynamicProviders:\n            aws:\n                - |-\n                  h1\n                  h2\n                - ' lead'\n        allowedEnvVars:\n            - |-\n              E\n              V\n        allowedExecutables:\n            - |-\n              /bin/a\n              b\n        skillPath: |-\n            /s/p\n            q\n        skillVersion: |-\n            v\n            1\n        paymentPolicy: card\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\n    ? |-\n        two\n        lines\n    :   canWrite: false\n        exposeValueTools: true\nvault:\n    path: |-\n        p1\n        p2\n    default_recipients:\n        - |-\n          r1\n          r2\n        - plain\n    authMethod: passphrase\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: |\n        msg\n\n        body\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: |-\n    /fixture/va\n    ult\ndefaultAgent: bot\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nprofiles:\n    work:\n        vault: |-\n            /fixture/w\n            ork\ndefaultProfile: work\nscan_patterns:\n    - name: |-\n        n\n        1\n      pattern: |-\n        p\n        1\n      description: |+\n        d\n\n      severity: high\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "all_fields_non_zero",
+      "description": "the field-coverage case: every yaml field of Go's Config set to a non-zero value",
+      "input": "vaultDir: /fixture/vault\ndefaultAgent: bot\nsessionTimeout: 20m\nsessionMaxLifetime: 4h\nauthMethod: touchid\nuseTouchID: true\nprofiles:\n  work:\n    vault: /fixture/work\ndefaultProfile: work\nenvAllowlist: [A]\nenvWhitelist: [B]\nagents:\n  bot:\n    tier: standard\n    approvalMode: prompt\n    allowedPaths: [a/*]\n    redactFields: [password]\n    perToolRedactFields:\n      get: [token]\n    canWrite: true\n    canRunCommands: true\n    canManageConfig: true\n    canUseClipboard: true\n    canUseAutotype: true\n    canReadValues: true\n    exposeValueTools: true\n    autoUnseal: true\n    requireApproval: true\n    approvalTimeout: 45s\n    allowed_tools: [vault_get]\n    max_reads_per_hour: 11\n    max_reads_per_day: 22\n    max_secrets_in_session: 3\n    dynamicProviders:\n      aws: [a]\n    allowedEnvVars: [HOME]\n    allowedExecutables: [/bin/ls]\n    promptInjectionMode: wrap\n    pre_call_hooks: [/bin/pre]\n    post_call_hooks: [/bin/post]\n    skillPath: /skills/bot\n    skillVersion: v9\n    exposePaymentValues: true\n    paymentPolicy: card\nvault:\n  path: /fixture/v\n  default_recipients: [age1abc]\n  confirm_remove: true\n  authMethod: touchid\n  useTouchID: true\n  legacy_mode: true\n  search_index: true\n  search_workers: 4\n  search_index_cache: true\n  config_cache_entries: 100\n  pseudonymize_paths: true\n  scrypt_work_factor: 17\n  auto_migrate_kdf: true\n  auto_heal_zero_key: true\n  last_rotated: 2026-01-02T03:04:05Z\n  format_version: 2\n  argon2id_time: 3\n  argon2id_memory: 65536\n  argon2id_threads: 4\n  listing_cache_ttl: 5m\n  manifest_generation: 3\n  sync:\n    method: icloud-drive\ngit:\n  commit_template: tmpl\n  author: Ann\n  email: ann@example.test\n  auto_push: true\n  auto_pull: true\n  auto_pull_interval: 30s\nmcp:\n  port: 9095\n  bind: 127.0.0.1\n  httpTokenFile: /tmp/t\n  otlp_endpoint: localhost:4317\n  stdio: true\n  approval_required: true\n  read_header_timeout: 6s\n  read_timeout: 7s\n  write_timeout: 8s\n  shutdown_timeout: 9s\n  approval_timeout: 10s\n  rate_limit: 11\n  trusted_proxy_ips: [10.0.0.1]\n  metrics_auth_required: true\n  tls_cert_file: /c\n  tls_key_file: /k\n  tls_client_ca_file: /ca\n  approval_tls_cert_file: /ac\n  approval_tls_key_file: /ak\n  mtls_enabled: true\n  allow_insecure_bind: true\n  oauth:\n    access_token_ttl: 2h\n    refresh_token_ttl: 3h\n  perplexity:\n    api_key: k\n    base_url: https://p.example.test\n    rate_limit_per_min: 5\n    allow_private: true\nupdate:\n  cache_ttl: 12h\nclipboard:\n  auto_clear_duration: 15\n  copyByDefault: true\n  printByDefault: true\naudit:\n  maxSizeMb: 50\n  maxBackups: 3\n  maxAgeDays: 7\nlogging:\n  level: debug\n  format: json\nsecurity:\n  disable_env_passphrase: true\n  allow_env_passphrase: true\nscan_patterns:\n  - name: aws\n    pattern: '^AKIA'\n    description: aws key\n    severity: high\npaymentPolicies:\n  card:\n    instrument: cards/visa\n    allowed_merchants: [acme]\n    max_amount:\n      per_transaction: \"10\"\n      per_day: \"50\"\n    currency: EUR\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    bot:\n        tier: standard\n        approvalMode: prompt\n        allowedPaths:\n            - a/*\n        redactFields:\n            - password\n        perToolRedactFields:\n            get:\n                - token\n        canWrite: true\n        canRunCommands: true\n        canManageConfig: true\n        canUseClipboard: true\n        canUseAutotype: true\n        canReadValues: true\n        exposeValueTools: true\n        autoUnseal: true\n        requireApproval: true\n        approvalTimeout: 45s\n        allowed_tools:\n            - vault_get\n        max_reads_per_hour: 11\n        max_reads_per_day: 22\n        max_secrets_in_session: 3\n        dynamicProviders:\n            aws:\n                - a\n        allowedEnvVars:\n            - HOME\n        allowedExecutables:\n            - /bin/ls\n        promptInjectionMode: wrap\n        skillPath: /skills/bot\n        skillVersion: v9\n        exposePaymentValues: true\n        paymentPolicy: card\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    path: /fixture/v\n    default_recipients:\n        - age1abc\n    confirm_remove: true\n    authMethod: touchid\n    useTouchID: true\n    legacy_mode: true\n    search_index: true\n    search_workers: 4\n    search_index_cache: true\n    config_cache_entries: 100\n    pseudonymize_paths: true\n    scrypt_work_factor: 17\n    auto_migrate_kdf: true\n    auto_heal_zero_key: true\n    last_rotated: 2026-01-02T03:04:05Z\n    format_version: 2\n    argon2id_time: 3\n    argon2id_memory: 65536\n    argon2id_threads: 4\ngit:\n    commit_template: tmpl\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 30s\nmcp:\n    port: 9095\n    bind: 127.0.0.1\n    httpTokenFile: /tmp/t\n    otlp_endpoint: localhost:4317\n    stdio: true\n    read_header_timeout: 6s\n    read_timeout: 7s\n    write_timeout: 8s\n    shutdown_timeout: 9s\n    approval_timeout: 10s\n    rate_limit: 11\n    trusted_proxy_ips:\n        - 10.0.0.1\n    metrics_auth_required: true\n    tls_cert_file: /c\n    tls_key_file: /k\n    tls_client_ca_file: /ca\n    approval_tls_cert_file: /ac\n    approval_tls_key_file: /ak\n    mtls_enabled: true\n    allow_insecure_bind: true\nupdate:\n    cache_ttl: 12h0m0s\nclipboard:\n    auto_clear_duration: 15\n    copyByDefault: true\naudit:\n    maxSizeMb: 50\n    maxBackups: 3\n    maxAgeDays: 7\nlogging:\n    level: debug\n    format: json\nvaultDir: /fixture/vault\ndefaultAgent: bot\nsessionTimeout: 20m0s\nsessionMaxLifetime: 4h0m0s\nauthMethod: touchid\nuseTouchID: true\nprofiles:\n    work:\n        vault: /fixture/work\ndefaultProfile: work\nscan_patterns:\n    - name: aws\n      pattern: ^AKIA\n      description: aws key\n      severity: high\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "tier_only_profiles",
+      "description": "tiered profiles hold the full preset field set",
+      "input": "vaultDir: /fixture/vault\nagents:\n  ro:\n    tier: read-only\n  std:\n    tier: standard\n  adm:\n    tier: admin\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    adm:\n        tier: admin\n        approvalMode: prompt\n        canWrite: true\n        canRunCommands: true\n        canManageConfig: true\n        canUseClipboard: true\n        canUseAutotype: true\n        canReadValues: true\n        exposeValueTools: true\n        autoUnseal: true\n        requireApproval: true\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\n    ro:\n        tier: read-only\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        canManageConfig: false\n        canUseClipboard: false\n        canUseAutotype: false\n        canReadValues: false\n        exposeValueTools: false\n        autoUnseal: false\n        requireApproval: false\n    std:\n        tier: standard\n        approvalMode: prompt\n        canWrite: false\n        canRunCommands: false\n        canManageConfig: false\n        canUseClipboard: true\n        canUseAutotype: true\n        canReadValues: true\n        exposeValueTools: false\n        autoUnseal: false\n        requireApproval: true\n        allowedExecutables:\n            - curl\n            - git\n            - terraform\n            - npm\n            - node\n            - python\n            - python3\n            - docker\n            - kubectl\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "tier_with_overrides",
+      "description": "a tiered profile with overridden capabilities keeps the overrides and the preset",
+      "input": "vaultDir: /fixture/vault\nagents:\n  ro:\n    tier: read-only\n    canWrite: true\n    canRunCommands: false\n  adm:\n    tier: admin\n    canManageConfig: false\n    requireApproval: false\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    adm:\n        tier: admin\n        approvalMode: none\n        canWrite: true\n        canRunCommands: true\n        canManageConfig: false\n        canUseClipboard: true\n        canUseAutotype: true\n        canReadValues: true\n        exposeValueTools: true\n        autoUnseal: true\n        requireApproval: false\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\n    ro:\n        tier: read-only\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: false\n        canManageConfig: false\n        canUseClipboard: false\n        canUseAutotype: false\n        canReadValues: false\n        exposeValueTools: false\n        autoUnseal: false\n        requireApproval: false\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "custom_explicit_false_capabilities",
+      "description": "explicit false capabilities on a custom profile",
+      "input": "vaultDir: /fixture/vault\nagents:\n  x:\n    canWrite: true\n    canRunCommands: false\n    canManageConfig: false\n    canUseClipboard: false\n    canUseAutotype: false\n    canReadValues: false\n    autoUnseal: false\n    requireApproval: false\n    exposePaymentValues: false\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\n    x:\n        approvalMode: none\n        canWrite: true\n        canRunCommands: false\n        canManageConfig: false\n        canUseClipboard: false\n        canUseAutotype: false\n        canReadValues: false\n        exposeValueTools: true\n        autoUnseal: false\n        requireApproval: false\n        exposePaymentValues: false\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "custom_true_capabilities",
+      "description": "true capabilities on a custom profile are written back, not reset by the next load",
+      "input": "vaultDir: /fixture/vault\nagents:\n  x:\n    canWrite: true\n    canManageConfig: true\n    canUseClipboard: true\n    canUseAutotype: true\n    canReadValues: true\n    autoUnseal: true\n  claude-code:\n    canUseClipboard: true\n    canReadValues: true\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        canUseClipboard: true\n        canReadValues: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\n    x:\n        canWrite: true\n        canManageConfig: true\n        canUseClipboard: true\n        canUseAutotype: true\n        canReadValues: true\n        exposeValueTools: true\n        autoUnseal: true\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "last_rotated_forms",
+      "description": "last_rotated written as an RFC 3339 timestamp with a fraction and an offset",
+      "input": "vaultDir: /fixture/vault\nvault:\n  last_rotated: 2026-01-02T03:04:05.5+02:00\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    last_rotated: 2026-01-02T03:04:05.5+02:00\n    format_version: 1\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "last_rotated_space_form",
+      "description": "last_rotated in the yaml timestamp space form is normalised by Go",
+      "input": "vaultDir: /fixture/vault\nvault:\n  last_rotated: 2026-01-02 03:04:05\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    last_rotated: 2026-01-02T03:04:05Z\n    format_version: 1\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "last_rotated_date_only",
+      "description": "last_rotated as a bare date is midnight UTC",
+      "input": "vaultDir: /fixture/vault\nvault:\n  last_rotated: 2026-1-2\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    last_rotated: 2026-01-02T00:00:00Z\n    format_version: 1\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "git_false_flags",
+      "description": "false auto_push / auto_pull are dropped by Go's omitempty (the loader default is true)",
+      "input": "vaultDir: /fixture/vault\ngit:\n  auto_push: false\n  auto_pull: false\n  commit_template: msg\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\ngit:\n    commit_template: msg\n    auto_pull_interval: 10s\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "clipboard_false_flag",
+      "description": "copyByDefault false is dropped by Go's omitempty (the loader default is true)",
+      "input": "vaultDir: /fixture/vault\nclipboard:\n  auto_clear_duration: 0\n  copyByDefault: false\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nclipboard:\n    auto_clear_duration: 0\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "mcp_false_and_zero_values",
+      "description": "explicit false and zero values of omitempty MCP fields",
+      "input": "vaultDir: /fixture/vault\nmcp:\n  port: 0\n  metrics_auth_required: false\n  rate_limit: 0\n  read_timeout: 0s\n  stdio: false\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nmcp:\n    bind: 127.0.0.1\n    httpTokenFile: auto\n    read_header_timeout: 5s\n    write_timeout: 10s\n    shutdown_timeout: 5s\n    approval_timeout: 30s\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "leading_break_list_item",
+      "description": "a list item that starts with a line break: yaml.v3's own output cannot be parsed back, Rust double-quotes it",
+      "input": "vaultDir: /fixture/vault\nagents:\n  bot:\n    canWrite: true\n    allowedPaths: [\"\\nlead\", \" sp\\nx\", plain]\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    bot:\n        allowedPaths:\n            - |4-\n              lead\n            - |4-\n               sp\n              x\n            - plain\n        canWrite: true\n        exposeValueTools: true\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": false
+    },
+    {
+      "name": "leading_break_scan_pattern",
+      "description": "a scan_patterns value that starts with a line break (mapping inside a sequence item): same yaml.v3 defect",
+      "input": "vaultDir: /fixture/vault\nscan_patterns:\n  - name: n\n    pattern: p\n    description: \"\\nlead\"\n    severity: low\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nscan_patterns:\n    - name: \"n\"\n      pattern: p\n      description: |4-\n        lead\n      severity: low\n",
+      "go_saved_faithful": false
+    },
+    {
+      "name": "leading_break_map_value",
+      "description": "a value that starts with a line break loses it in yaml.v3's output (it reloads as lead\\nx); Rust double-quotes it",
+      "input": "vaultDir: /fixture/vault\nvault:\n  path: \"\\nlead\\nx\"\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    path: |4-\n        lead\n        x\n    authMethod: passphrase\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": false
+    },
+    {
+      "name": "leading_space_map_value",
+      "description": "a value that starts with a space is a literal block with indentation indicator 4, which parses back at mapping depth 4",
+      "input": "vaultDir: /fixture/vault\nvault:\n  path: \" lead\\nx\"\ngit:\n  commit_template: \" lead\\nx\"\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    path: |4-\n         lead\n        x\n    authMethod: passphrase\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: |4-\n         lead\n        x\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "leading_tab_list_item",
+      "description": "a list item that starts with a tab and has a line break: yaml.v3 writes a literal block whose first content character is the tab, which neither parser reads back; Rust double-quotes it",
+      "input": "vaultDir: /fixture/vault\nagents:\n  bot:\n    canWrite: true\n    allowedPaths: [\"\\ta\\nb\", plain]\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    bot:\n        allowedPaths:\n            - |-\n              \ta\n              b\n            - plain\n        canWrite: true\n        exposeValueTools: true\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": false
+    },
+    {
+      "name": "leading_tab_map_value",
+      "description": "a value that starts with a tab and has a line break (also inside a sequence item): same yaml.v3 defect; Rust double-quotes it",
+      "input": "vaultDir: /fixture/vault\nvault:\n  path: \"\\ta\\nb\"\nscan_patterns:\n  - name: n\n    pattern: p\n    description: \"\\td\\nx\"\n    severity: low\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    path: |-\n        \ta\n        b\n    authMethod: passphrase\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nscan_patterns:\n    - name: \"n\"\n      pattern: p\n      description: |-\n        \td\n        x\n      severity: low\n",
+      "go_saved_faithful": false
+    },
+    {
+      "name": "leading_tab_map_key",
+      "description": "an agent / perToolRedactFields key that starts with a tab and has a line break: yaml.v3 writes `? |-` with a tab-led block, which neither parser reads back; Rust double-quotes it",
+      "input": "vaultDir: /fixture/vault\nagents:\n  \"\\ta\\nb\":\n    canWrite: true\n    perToolRedactFields:\n      \"\\tk\\nj\": [x]\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    ? |-\n        \ta\n        b\n    :   perToolRedactFields:\n            ? |-\n                \tk\n                j\n            :   - x\n        canWrite: true\n        exposeValueTools: true\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": false
+    },
+    {
+      "name": "mcp_full_fields",
+      "description": "every MCP field Go's SaveTo keeps, in Go's order (otlp_endpoint, trusted_proxy_ips, approval_tls_*)",
+      "input": "vaultDir: /fixture/vault\nmcp:\n  port: 9091\n  bind: 0.0.0.0\n  httpTokenFile: /tmp/tok\n  otlp_endpoint: 'http://otel:4318'\n  stdio: true\n  read_header_timeout: 7s\n  read_timeout: 1m30s\n  write_timeout: 1.5s\n  shutdown_timeout: 2m\n  approval_timeout: 45s\n  rate_limit: 120\n  trusted_proxy_ips: [10.0.0.1, 192.168.0.0/24]\n  metrics_auth_required: true\n  tls_cert_file: /c.pem\n  tls_key_file: /k.pem\n  tls_client_ca_file: /ca.pem\n  approval_tls_cert_file: certs/approval-client.pem\n  approval_tls_key_file: certs/approval-client.key\n  mtls_enabled: true\n  allow_insecure_bind: true\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nmcp:\n    port: 9091\n    bind: 0.0.0.0\n    httpTokenFile: /tmp/tok\n    otlp_endpoint: http://otel:4318\n    stdio: true\n    read_header_timeout: 7s\n    read_timeout: 1m30s\n    write_timeout: 1.5s\n    shutdown_timeout: 2m0s\n    approval_timeout: 45s\n    rate_limit: 120\n    trusted_proxy_ips:\n        - 10.0.0.1\n        - 192.168.0.0/24\n    metrics_auth_required: true\n    tls_cert_file: /c.pem\n    tls_key_file: /k.pem\n    tls_client_ca_file: /ca.pem\n    approval_tls_cert_file: certs/approval-client.pem\n    approval_tls_key_file: certs/approval-client.key\n    mtls_enabled: true\n    allow_insecure_bind: true\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "mcp_stdio_http_token_file",
+      "description": "stdio with an explicit httpTokenFile: Go order is port, bind, httpTokenFile, otlp_endpoint, stdio",
+      "input": "vaultDir: /fixture/vault\nmcp:\n  stdio: true\n  httpTokenFile: /tmp/mcp-token\n  otlp_endpoint: localhost:4317\n  port: 9092\n  bind: ::1\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nmcp:\n    port: 9092\n    bind: ::1\n    httpTokenFile: /tmp/mcp-token\n    otlp_endpoint: localhost:4317\n    stdio: true\n    read_header_timeout: 5s\n    read_timeout: 10s\n    write_timeout: 10s\n    shutdown_timeout: 5s\n    approval_timeout: 30s\n    rate_limit: 60\n    metrics_auth_required: true\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "mcp_oauth",
+      "description": "mcp.oauth is a declared difference: Go's SaveTo drops it, Rust keeps it",
+      "input": "vaultDir: /fixture/vault\nmcp:\n  port: 9093\n  oauth:\n    access_token_ttl: 2h\n    refresh_token_ttl: 90m\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nmcp:\n    port: 9093\n    bind: 127.0.0.1\n    httpTokenFile: auto\n    read_header_timeout: 5s\n    read_timeout: 10s\n    write_timeout: 10s\n    shutdown_timeout: 5s\n    approval_timeout: 30s\n    rate_limit: 60\n    metrics_auth_required: true\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "mcp_dropped_by_go",
+      "description": "approval_required and perplexity are dropped by Go and by Rust alike",
+      "input": "vaultDir: /fixture/vault\nmcp:\n  port: 9094\n  approval_required: true\n  perplexity:\n    api_key: pplx-secret\n    base_url: 'https://api.perplexity.ai'\n    rate_limit_per_min: 7\n    allow_private: true\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nmcp:\n    port: 9094\n    bind: 127.0.0.1\n    httpTokenFile: auto\n    read_header_timeout: 5s\n    read_timeout: 10s\n    write_timeout: 10s\n    shutdown_timeout: 5s\n    approval_timeout: 30s\n    rate_limit: 60\n    metrics_auth_required: true\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "durations_go_string",
+      "description": "durations are written as time.Duration.String() (90s is 1m30s, 1h30m is 1h30m0s)",
+      "input": "vaultDir: /fixture/vault\nsessionTimeout: 90s\nsessionMaxLifetime: 1h30m\ngit:\n  auto_pull_interval: 90s\nupdate:\n  cache_ttl: 36h30m\nmcp:\n  approval_timeout: 1h30m\n  read_timeout: 2500ms\nagents:\n  bot:\n    canWrite: true\n    approvalTimeout: 90s\n  other:\n    canWrite: true\n    approvalTimeout: 1h\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    bot:\n        canWrite: true\n        exposeValueTools: true\n        approvalTimeout: 1m30s\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\n    other:\n        canWrite: true\n        exposeValueTools: true\n        approvalTimeout: 1h0m0s\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 1m30s\nmcp:\n    port: 8080\n    bind: 127.0.0.1\n    httpTokenFile: auto\n    read_header_timeout: 5s\n    read_timeout: 2.5s\n    write_timeout: 10s\n    shutdown_timeout: 5s\n    approval_timeout: 1h30m0s\n    rate_limit: 60\n    metrics_auth_required: true\nupdate:\n    cache_ttl: 36h30m0s\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 1m30s\nsessionMaxLifetime: 1h30m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "quoting_agent_lists",
+      "description": "yaml.v3 scalar style decisions for list items (plain, single, double, escapes)",
+      "input": "vaultDir: /fixture/vault\nagents:\n  bot:\n    canWrite: true\n    allowedPaths:\n      - '&amp'\n      - '#c'\n      - \"2026-01-02\"\n      - \"2026-01-02T10:00:00Z\"\n      - \"\\U0001F600\"\n      - 'null'\n      - '~'\n      - '- x'\n      - \"it's\"\n      - ' lead'\n      - 'trail '\n      - \"tab\\there\"\n      - '1e3'\n      - '0x1F'\n      - '.inf'\n      - '1_000'\n      - 'y'\n      - 'a: b'\n      - '@at'\n      - '`tick'\n      - '%pct'\n      - '!bang'\n      - '*star'\n      - '?q'\n      - '|pipe'\n      - '>gt'\n      - '{br}'\n      - '[sq]'\n      - ',c'\n      - 'key:'\n      - 'a #b'\n      - \"caf\\u00e9\"\n      - \"bell\\a\"\n      - ''\n      - '12:30:45'\n      - ' '\n      - '---'\n      - '<<'\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    bot:\n        allowedPaths:\n            - '&amp'\n            - '#c'\n            - \"2026-01-02\"\n            - \"2026-01-02T10:00:00Z\"\n            - \"\\U0001F600\"\n            - \"null\"\n            - \"~\"\n            - '- x'\n            - it's\n            - ' lead'\n            - 'trail '\n            - \"tab\\there\"\n            - \"1e3\"\n            - \"0x1F\"\n            - \".inf\"\n            - \"1_000\"\n            - \"y\"\n            - 'a: b'\n            - '@at'\n            - '`tick'\n            - '%pct'\n            - '!bang'\n            - '*star'\n            - ?q\n            - '|pipe'\n            - '>gt'\n            - '{br}'\n            - '[sq]'\n            - ',c'\n            - 'key:'\n            - 'a #b'\n            - café\n            - \"bell\\a\"\n            - \"\"\n            - \"12:30:45\"\n            - ' '\n            - '---'\n            - <<\n        canWrite: true\n        exposeValueTools: true\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "quoting_scan_pattern_values",
+      "description": "the same style decisions for map values at another depth",
+      "input": "vaultDir: /fixture/vault\nscan_patterns:\n  - name: '&amp'\n    pattern: '#c'\n    description: \"2026-01-02\"\n    severity: \"\\U0001F600\"\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nscan_patterns:\n    - name: '&amp'\n      pattern: '#c'\n      description: \"2026-01-02\"\n      severity: \"\\U0001F600\"\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "empty_lists_in_maps",
+      "description": "an empty list under perToolRedactFields or dynamicProviders is written as []",
+      "input": "vaultDir: /fixture/vault\nagents:\n  bot:\n    canWrite: true\n    perToolRedactFields:\n      get: []\n      put:\n    dynamicProviders:\n      aws: []\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    bot:\n        perToolRedactFields:\n            get: []\n            put: []\n        canWrite: true\n        exposeValueTools: true\n        dynamicProviders:\n            aws: []\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "approval_timeout_zero",
+      "description": "an explicit approvalTimeout: 0s is written back as 0s",
+      "input": "vaultDir: /fixture/vault\nagents:\n  bot:\n    canWrite: true\n    approvalTimeout: 0s\n  other:\n    canWrite: true\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    bot:\n        canWrite: true\n        exposeValueTools: true\n        approvalTimeout: 0s\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\n    other:\n        canWrite: true\n        exposeValueTools: true\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "leading_break_map_key",
+      "description": "agent and perToolRedactFields keys that start with a line break: yaml.v3 writes them as `? |4-` and reads them back without the break, so \"\\na\\nb\" collides with \"a\\nb\"; Rust double-quotes them",
+      "input": "vaultDir: /fixture/vault\nagents:\n  \"\\na\\nb\":\n    canWrite: true\n    perToolRedactFields:\n      \"\\nk\": [x]\n  \"a\\nb\":\n    canWrite: false\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    ? |4-\n        a\n        b\n    :   perToolRedactFields:\n            ? |4-\n                k\n            :   - x\n        canWrite: true\n        exposeValueTools: true\n    ? |-\n        a\n        b\n    :   canWrite: false\n        exposeValueTools: true\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": false
+    },
+    {
+      "name": "leading_space_map_key",
+      "description": "an agent key that starts with a space and has a line break keeps its `? |4-` form (the indentation indicator matches at this depth)",
+      "input": "vaultDir: /fixture/vault\nagents:\n  \" a\\nb\":\n    canWrite: true\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    ? |4-\n         a\n        b\n    :   canWrite: true\n        exposeValueTools: true\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "custom_without_can_write",
+      "description": "a custom profile that never sets canWrite: Go writes no canWrite, Rust writes the false",
+      "input": "vaultDir: /fixture/vault\nagents:\n  x:\n    skillPath: /s/p\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\n    x:\n        exposeValueTools: true\n        skillPath: /s/p\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "tier_explicit_empty_read_only",
+      "description": "every preset-backed field of a read-only profile set explicitly to false/empty/null",
+      "input": "vaultDir: /fixture/vault\nagents:\n  bot:\n    tier: read-only\n    approvalMode: null\n    canWrite: false\n    canRunCommands: false\n    canManageConfig: false\n    canUseClipboard: false\n    canUseAutotype: false\n    canReadValues: false\n    exposeValueTools: false\n    autoUnseal: false\n    requireApproval: false\n    allowedExecutables: []\n  other:\n    canWrite: true\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    bot:\n        tier: read-only\n        canWrite: false\n        canRunCommands: false\n        canManageConfig: false\n        canUseClipboard: false\n        canUseAutotype: false\n        canReadValues: false\n        exposeValueTools: false\n        autoUnseal: false\n        requireApproval: false\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\n    other:\n        canWrite: true\n        exposeValueTools: true\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "tier_explicit_empty_standard",
+      "description": "every preset-backed field of a standard profile set explicitly to false/empty/null: dropping allowedExecutables: [] would re-grant the preset's nine executables",
+      "input": "vaultDir: /fixture/vault\nagents:\n  bot:\n    tier: standard\n    approvalMode: null\n    canWrite: false\n    canRunCommands: false\n    canManageConfig: false\n    canUseClipboard: false\n    canUseAutotype: false\n    canReadValues: false\n    exposeValueTools: false\n    autoUnseal: false\n    requireApproval: false\n    allowedExecutables: []\n  other:\n    canWrite: true\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    bot:\n        tier: standard\n        canWrite: false\n        canRunCommands: false\n        canManageConfig: false\n        canUseClipboard: false\n        canUseAutotype: false\n        canReadValues: false\n        exposeValueTools: false\n        autoUnseal: false\n        requireApproval: false\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\n    other:\n        canWrite: true\n        exposeValueTools: true\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "tier_explicit_empty_admin",
+      "description": "every preset-backed field of an admin profile set explicitly to false/empty/null",
+      "input": "vaultDir: /fixture/vault\nagents:\n  bot:\n    tier: admin\n    approvalMode: null\n    canWrite: false\n    canRunCommands: false\n    canManageConfig: false\n    canUseClipboard: false\n    canUseAutotype: false\n    canReadValues: false\n    exposeValueTools: false\n    autoUnseal: false\n    requireApproval: false\n    allowedExecutables: []\n  other:\n    canWrite: true\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    bot:\n        tier: admin\n        canWrite: false\n        canRunCommands: false\n        canManageConfig: false\n        canUseClipboard: false\n        canUseAutotype: false\n        canReadValues: false\n        exposeValueTools: false\n        autoUnseal: false\n        requireApproval: false\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\n    other:\n        canWrite: true\n        exposeValueTools: true\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "git_identity",
+      "description": "git.author and git.email are dropped by Go and kept by Rust",
+      "input": "vaultDir: /fixture/vault\ngit:\n  commit_template: msg\n  author: Ann\n  email: ann@example.test\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\ngit:\n    commit_template: msg\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "clipboard_print_by_default",
+      "description": "the deprecated printByDefault: Go folds it into copyByDefault and drops the key, Rust keeps it",
+      "input": "vaultDir: /fixture/vault\nclipboard:\n  auto_clear_duration: 15\n  printByDefault: true\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nclipboard:\n    auto_clear_duration: 15\n    copyByDefault: true\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    },
+    {
+      "name": "all_sections_modelled",
+      "description": "vault, git, mcp, update, clipboard together with audit and logging",
+      "input": "vaultDir: /fixture/vault\nvault:\n  path: /fixture/v\n  search_index: true\nmcp:\n  port: 9090\n  bind: 127.0.0.1\nupdate:\n  cache_ttl: 12h\nclipboard:\n  auto_clear_duration: 15\n  copyByDefault: true\ngit:\n  auto_push: true\n  auto_pull: true\n  commit_template: msg\naudit:\n  maxSizeMb: 5\nlogging:\n  format: json\n",
+      "mutation": "none",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    path: /fixture/v\n    authMethod: passphrase\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: msg\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nmcp:\n    port: 9090\n    bind: 127.0.0.1\n    httpTokenFile: auto\n    read_header_timeout: 5s\n    read_timeout: 10s\n    write_timeout: 10s\n    shutdown_timeout: 5s\n    approval_timeout: 30s\n    rate_limit: 60\n    metrics_auth_required: true\nupdate:\n    cache_ttl: 12h0m0s\nclipboard:\n    auto_clear_duration: 15\n    copyByDefault: true\naudit:\n    maxSizeMb: 5\n    maxBackups: 5\n    maxAgeDays: 30\nlogging:\n    level: warn\n    format: json\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "go_saved_faithful": true
+    }
+  ]
+}

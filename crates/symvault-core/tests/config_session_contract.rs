@@ -1,3 +1,6 @@
+// Loads configs through yaml-edit, whose rowan 0.16 thin Arc trips Miri under
+// Stacked and Tree Borrows (rust-analyzer/rowan#108); see `rust-miri` in the Makefile.
+#![cfg(not(miri))]
 #![deny(unsafe_code)]
 
 use serde::Deserialize;
@@ -207,13 +210,9 @@ fn generated_config_cases_match_rust_loader_and_writer() {
                     "{} has an empty Go diagnostic",
                     case.name
                 );
-                assert!(
-                    error.to_string().contains("invalid")
-                        || error.to_string().contains("duration")
-                        || error.to_string().contains("bind"),
-                    "{}: {error}",
-                    case.name
-                );
+                // The loader's errors are bare, as Go's are: the text is the
+                // recorded Go diagnostic, not a lookalike.
+                assert_eq!(error.to_string(), expected, "{}", case.name);
             }
             (actual, expected, error) => panic!(
                 "fixture shape mismatch for {}: result={actual:?}, expected={expected:?}, error={error:?}",

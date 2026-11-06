@@ -1,6 +1,6 @@
 //! Source-pinned byte replay of Go's early-return path for `update check`
 //! when AppVersion is not a stable semantic version. The pinned oracle is
-//! `go run .` at `ff50daf1`, with the three source files named in the fixture.
+//! the Go `main` package at `ff50daf1` (run from source), with the three source files named in the fixture.
 
 use std::path::Path;
 use std::process::{Command, Output};
@@ -89,10 +89,10 @@ fn nonrelease_update_check_matches_go_oracle_bytes() {
 #[test]
 fn fixture_source_digest_matches_pinned_go_sources() {
     let fixture = fixture();
-    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/port/go-snapshots");
     let mut hasher = Sha256::new();
     for name in &fixture.oracle.source_files {
-        let data = std::fs::read(repo_root.join(name))
+        let data = std::fs::read(repo_root.join(format!("{name}.txt")))
             .unwrap_or_else(|error| panic!("read {name}: {error}"));
         hasher.update(name.as_bytes());
         hasher.update([0]);

@@ -105,6 +105,60 @@ pub trait ToolCallRuntime: Send + Sync {
     /// JSON-RPC internal-error classification without executing the handler.
     fn authorize(&self, name: &str, arguments: &Value) -> Result<(), ToolCallResult>;
 
+    /// Name used in the drift refusal's re-issue hint (Go: `s.agent.Name`).
+    fn registry_drift_agent(&self) -> String {
+        String::new()
+    }
+
+    /// Go's `validateToolAccess` order for a scoped-token caller: availability
+    /// and profile tier, then the token's tool scope, the registry-drift
+    /// refusal, entry policy, and finally the handler's own capability checks.
+    /// `token_denied` is the caller's decision that the authenticated token
+    /// scope excludes `name`. Runtimes with several phases override this; the
+    /// default only supports policy-free runtimes and applies the token and
+    /// drift refusals after [`Self::authorize`].
+    fn authorize_with_token_scope(
+        &self,
+        name: &str,
+        arguments: &Value,
+        token_denied: bool,
+        drift: bool,
+    ) -> Result<(), ToolCallResult> {
+        self.authorize(name, arguments)?;
+        if token_denied {
+            return Err(token_scope_refusal(name));
+        }
+        if drift {
+            return Err(registry_drift_refusal(&self.registry_drift_agent()));
+        }
+        Ok(())
+    }
+
+    /// `authorize` plus Go's call-time tool-registry drift refusal for a token
+    /// issued against a different registry hash. Runtimes that gate on policy
+    /// override this so the refusal lands between the tier checks and the
+    /// policy gate, as in `validateToolAccess`; the default refuses after
+    /// `authorize`, which is only equivalent for policy-free runtimes.
+    ///
+    /// The default writes no `tool_registry_drift` audit entry and uses the
+    /// agent name from [`Self::registry_drift_agent`] (empty unless
+    /// overridden). It exists for policy-free runtimes in tests and examples
+    /// only: every production runtime (`StoreReadOnlyRuntime`, wired by the
+    /// CLI's `mcp serve` and `ProtocolHandler::with_store_read_only_runtime*`)
+    /// overrides it to audit and to name the agent.
+    fn authorize_with_registry_drift(
+        &self,
+        name: &str,
+        arguments: &Value,
+        drift: bool,
+    ) -> Result<(), ToolCallResult> {
+        self.authorize(name, arguments)?;
+        if drift {
+            return Err(registry_drift_refusal(&self.registry_drift_agent()));
+        }
+        Ok(())
+    }
+
     /// Execute an authorized tool. Handler failures become JSON-RPC internal
     /// errors, matching Go's `executeTool` dispatch boundary.
     fn call(&self, name: &str, arguments: &Value) -> Result<ToolCallResult, String>;
@@ -120,6 +174,18 @@ pub trait ToolCallRuntime: Send + Sync {
         context.check()?;
         self.call(name, arguments)
     }
+}
+
+/// Go's `errors.ToolNotAllowed(name, "token_scope", "")` tool result.
+pub(crate) fn token_scope_refusal(name: &str) -> ToolCallResult {
+    ToolCallResult::error(format!("Tool {name:?} requires tier \"token_scope\""))
+}
+
+/// Go's drift refusal result, an error tool result (not a JSON-RPC error).
+pub(crate) fn registry_drift_refusal(agent: &str) -> ToolCallResult {
+    ToolCallResult::error(format!(
+        "tool registry has changed since this token was issued \u{2014} re-issue the token with 'symvault agent token new {agent}'"
+    ))
 }
 
 /// Result of executing an already authorized MCP command.
@@ -173,6 +239,13 @@ pub struct ReadOnlyEntry {
 pub trait ReadOnlyStore: Send + Sync {
     fn list(&self) -> Result<Vec<ReadOnlyEntry>, String>;
     fn get(&self, path: &str) -> Result<Option<ReadOnlyEntry>, String>;
+
+    /// Whether the stored entry at `path` is flagged as a canary/honeytoken.
+    /// Feeds the anomaly detector's canary rule; stores without the flag, and
+    /// unreadable or missing entries, report `false`.
+    fn is_canary(&self, _path: &str) -> bool {
+        false
+    }
 
     /// Resolve a reference only if its current interpretation still selects
     /// the path previously scope-checked by the caller.
@@ -345,6 +418,11 @@ pub(crate) struct SecureInputPreflight {
     pub approval_mode: String,
 }
 
+pub(crate) struct AutotypePreflight {
+    pub path: String,
+    pub field: String,
+}
+
 pub(crate) struct ClipboardPreflight {
     pub path: String,
     pub approval_mode: String,
@@ -458,8 +536,14 @@ fn collect_string_values(value: &Value, values: &mut Vec<String>) {
     }
 }
 
-impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
-    fn authorize(&self, name: &str, _arguments: &Value) -> Result<(), ToolCallResult> {
+impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
+    /// First authorization phase, Go's `validateToolAccess` up to and including
+    /// the tier/exposure restriction: the explicit operator allowlist, actual
+    /// host availability, then the profile's tier and value-exposure rules.
+    /// A scoped token and the registry-drift refusal are decided after this
+    /// phase, so a tool hidden by the profile reports the profile reason even
+    /// when a token also excludes it.
+    pub(crate) fn authorize_access(&self, name: &str) -> Result<(), ToolCallResult> {
         if let Some(config) = &self.config.tool_list_config
             && !config.allowed_tools.is_empty()
             && !config.allowed_tools.iter().any(|allowed| allowed == name)
@@ -497,6 +581,23 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
                 "Tool \"{name}\" requires tier \"{required}\""
             )));
         }
+        // Go's `ExposeValueTools` safeguard is part of the same tier check.
+        if !self.config.available_tools.iter().any(|tool| tool == name)
+            && let Some(tool) = self
+                .config
+                .unavailable_tools
+                .iter()
+                .find(|tool| tool.name == name && tool.code == "blocked_by_agent")
+        {
+            return Err(ToolCallResult::error(tool.reason.clone()));
+        }
+        Ok(())
+    }
+
+    /// Second authorization phase: what Go's handlers decide after token, drift
+    /// and entry-policy checks have passed. Command capability denials keep
+    /// Go's JSON-RPC internal-error classification.
+    pub(crate) fn authorize_dispatch(&self, name: &str) -> Result<(), ToolCallResult> {
         if matches!(
             name,
             "run_command" | "execute_with_secret" | "execute_api_request"
@@ -515,23 +616,6 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             return Err(error);
         }
         if self.config.available_tools.iter().any(|tool| tool == name) {
-            let approval_mode =
-                if self.config.approval_mode.is_empty() && self.config.require_approval {
-                    "prompt"
-                } else {
-                    self.config.approval_mode.as_str()
-                };
-            if name == "get_entry_value"
-                && !self.config.can_read_values
-                && !matches!(approval_mode, "none" | "auto")
-            {
-                let message = if approval_mode == "deny" {
-                    "get_entry_value denied: approval mode is 'deny'"
-                } else {
-                    "get_entry_value requires approval but no interactive approval is available"
-                };
-                return Err(ToolCallResult::error(message));
-            }
             return Ok(());
         }
         let unavailable = self
@@ -543,6 +627,38 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             .map(|tool| tool.reason.clone())
             .unwrap_or_else(|| format!("tool {name:?} is not allowed"));
         Err(ToolCallResult::error(message))
+    }
+
+    /// Go's `handleGetValue` approval gate. It follows argument validation,
+    /// scope and the quarantine check, so malformed calls report the argument
+    /// error first. A profile without value capability needs an explicit
+    /// `none`/`auto` approval policy (ADR 0016: an empty configuration does not
+    /// imply consent to expose values).
+    fn value_read_gate(&self) -> Option<ToolCallResult> {
+        if self.config.can_read_values {
+            return None;
+        }
+        let approval_mode = if self.config.approval_mode.is_empty() && self.config.require_approval
+        {
+            "prompt"
+        } else {
+            self.config.approval_mode.as_str()
+        };
+        if matches!(approval_mode, "none" | "auto") {
+            return None;
+        }
+        Some(ToolCallResult::error(if approval_mode == "deny" {
+            "get_entry_value denied: approval mode is 'deny'"
+        } else {
+            "get_entry_value requires approval but no interactive approval is available"
+        }))
+    }
+}
+
+impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
+    fn authorize(&self, name: &str, _arguments: &Value) -> Result<(), ToolCallResult> {
+        self.authorize_access(name)?;
+        self.authorize_dispatch(name)
     }
 
     fn call(&self, name: &str, arguments: &Value) -> Result<ToolCallResult, String> {
@@ -629,6 +745,64 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             None => Ok(ToolCallResult::error("password field not found")),
             Some(Value::String(password)) => Ok(ToolCallResult::text(password.clone())),
             Some(_) => Ok(ToolCallResult::error("password field is not a string")),
+        }
+    }
+
+    /// Go `handleAutotype` up to (not including) reading the entry: capability,
+    /// required `path`, optional `field` (default `password`; a non-string value
+    /// falls back to the default like `GetString`), scope, then the approval
+    /// refusal (autotype cannot be approved interactively).
+    pub(crate) fn autotype_preflight(
+        &self,
+        arguments: &Value,
+    ) -> Result<AutotypePreflight, SecureInputPreflightError> {
+        if !self.config.can_use_autotype {
+            return Err(SecureInputPreflightError::Handler(
+                "autotype operations not permitted for this agent".into(),
+            ));
+        }
+        let path = required_string(arguments, "path")
+            .map_err(SecureInputPreflightError::Tool)?
+            .to_owned();
+        let field = arguments
+            .get("field")
+            .and_then(Value::as_str)
+            .unwrap_or("password")
+            .to_owned();
+        if !self.scope_allows(&path) {
+            return Err(SecureInputPreflightError::Handler(format!(
+                "access denied: path {} outside allowed scope",
+                symvault_core::go_quote(&path)
+            )));
+        }
+        if self.requires_approval() {
+            return Err(SecureInputPreflightError::Handler(
+                "autotype denied: approval required but cannot be granted".into(),
+            ));
+        }
+        Ok(AutotypePreflight { path, field })
+    }
+
+    /// The string field Go's autotype handler types; the text never becomes a
+    /// protocol result.
+    pub(crate) fn autotype_value(&self, path: &str, field: &str) -> Result<ToolCallResult, String> {
+        let Some(entry) = self
+            .store
+            .get(path)
+            .map_err(|error| format!("read entry: {error}"))?
+        else {
+            return Ok(ToolCallResult::error("Entry \"\" not found"));
+        };
+        match entry.fields.get(field) {
+            None => Ok(ToolCallResult::error(format!(
+                "field {} not found in entry {path}",
+                symvault_core::go_quote(field)
+            ))),
+            Some(Value::String(value)) => Ok(ToolCallResult::text(value.clone())),
+            Some(_) => Ok(ToolCallResult::error(format!(
+                "field {} is not a string",
+                symvault_core::go_quote(field)
+            ))),
         }
     }
 
@@ -923,12 +1097,14 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
                     .filter_map(|(alias, reference)| {
                         reference
                             .as_str()
-                            .map(|_| (alias.clone(), "***".to_owned()))
+                            .map(|reference| (alias.clone(), reference.to_owned()))
                     })
                     .collect::<BTreeMap<_, _>>()
             })
             .unwrap_or_default();
-        let output = match symvault_sync::template::render_builtin(template_type, name, &refs) {
+        // Custom templates under $HOME/.config/symvault/templates shadow the
+        // built-ins exactly as in Go; dry-run masks every value with `***`.
+        let output = match symvault_sync::template::render_masked(template_type, name, &refs) {
             Ok(output) => output,
             Err(error) => {
                 return Ok(ToolCallResult::error(format!("render template: {error}")));
@@ -1150,6 +1326,35 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
     }
 
     fn generate_totp(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        self.generate_totp_with(arguments, None)
+    }
+
+    /// Go `requiresApproval()`: `deny` and `prompt` (also the legacy
+    /// `requireApproval` flag with no explicit mode) need approval, every other
+    /// mode does not.
+    fn requires_approval(&self) -> bool {
+        let mode = if self.config.approval_mode.is_empty() {
+            if self.config.require_approval {
+                "prompt"
+            } else {
+                return false;
+            }
+        } else {
+            self.config.approval_mode.as_str()
+        };
+        matches!(mode, "deny" | "prompt")
+    }
+
+    /// Go `handleGenerateTOTP`. `clipboard` is the application-owned copy for
+    /// `destination: "clipboard"` (Go `clipboard.DefaultClipboard()` plus its
+    /// auto-clear): it receives the code and returns the seconds until the
+    /// clipboard clears, or the tool-error text. Without it the destination
+    /// answers Go's "clipboard not available".
+    pub(crate) fn generate_totp_with(
+        &self,
+        arguments: &Value,
+        clipboard: Option<&TotpClipboardCopy<'_>>,
+    ) -> Result<ToolCallResult, String> {
         let path = match required_string(arguments, "path") {
             Ok(path) => path,
             Err(result) => return Ok(result),
@@ -1222,7 +1427,20 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
                 if !self.config.can_use_clipboard {
                     return Err("clipboard operations not permitted for this agent".into());
                 }
-                Ok(ToolCallResult::error("clipboard not available"))
+                if self.requires_approval() {
+                    return Err("generate_totp denied: approval required but clipboard mode does not support approval".into());
+                }
+                let Some(copy) = clipboard else {
+                    return Ok(ToolCallResult::error("clipboard not available"));
+                };
+                match copy(&code.code) {
+                    Err(message) => Ok(ToolCallResult::error(message)),
+                    Ok(clears_in) => json_text(serde_json::json!({
+                        "success": true,
+                        "destination": "clipboard",
+                        "clipboard_clears_in": clears_in,
+                    })),
+                }
             }
             "autotype" => {
                 if !self.config.can_use_autotype {
@@ -1692,6 +1910,9 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
                 "entry is in quarantine — run 'symvault import review promote' to make it accessible",
             ));
         }
+        if let Some(denied) = self.value_read_gate() {
+            return Ok(denied);
+        }
         let Some(mut entry) = self
             .store
             .get(path)
@@ -1825,15 +2046,7 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
     }
 
     pub(crate) fn scope_allows(&self, path: &str) -> bool {
-        if self.config.allowed_paths.is_empty() {
-            return false;
-        }
-        let path = normalize_scope_path(path);
-        self.config.allowed_paths.iter().any(|allowed| {
-            allowed == "*"
-                || path == normalize_scope_path(allowed)
-                || path.starts_with(&format!("{}/", normalize_scope_path(allowed)))
-        })
+        scope_allows(&self.config.allowed_paths, path)
     }
 }
 
@@ -1851,6 +2064,10 @@ fn entry_title(path: &str) -> &str {
         Some(name) => name,
     }
 }
+
+/// Copies a TOTP code for `generate_totp`'s clipboard destination: the seconds
+/// until the clipboard clears, or the tool-error text.
+pub(crate) type TotpClipboardCopy<'a> = dyn Fn(&str) -> Result<i64, String> + 'a;
 
 fn json_text(value: Value) -> Result<ToolCallResult, String> {
     symvault_gojson::to_string(&value)
@@ -2054,6 +2271,65 @@ fn is_redacted_field(field: &str, patterns: &[String]) -> bool {
     })
 }
 
+/// Go's `normalizeScopePath` (`path.Clean(strings.TrimSpace(filepath.ToSlash(p)))`,
+/// with `.` mapped to the empty string), used for the allowed-path boundary.
+///
+/// Unlike [`normalize_scope_path`], which builds store-relative entry paths, this
+/// keeps a leading `/` and a `..` that climbs above a relative path, so
+/// `/prod/a` and `../prod/a` stay outside an allowed `prod`, as in Go. Only
+/// Windows turns `\` into `/` (`filepath.ToSlash` is the identity elsewhere).
+/// The allowed-path boundary shared by every tool.
+///
+/// A path is admitted only when BOTH boundaries admit it: Go's `pathAllowed`
+/// over [`go_scope_path`] (so `/prod/a` and `../prod/a` stay outside an allowed
+/// `prod`, as in Go) and the earlier Rust boundary over
+/// [`normalize_scope_path`] (so an allowed `..`, `\\` or a path that cleans to
+/// nothing never widens the scope). Rust is therefore never more permissive than
+/// Go or than its own earlier behaviour; every case where the two disagree is a
+/// deliberate, stricter deviation (docs/rust-port/upstream-go-bugs.md, 14).
+pub(crate) fn scope_allows(allowed_paths: &[String], path: &str) -> bool {
+    let go_path = go_scope_path(path);
+    let legacy_path = normalize_scope_path(path);
+    allowed_paths.iter().any(|allowed| {
+        if allowed == "*" {
+            return true;
+        }
+        let go_allowed = go_scope_path(allowed);
+        let legacy_allowed = normalize_scope_path(allowed);
+        let go = !go_allowed.is_empty()
+            && (go_path == go_allowed || go_path.starts_with(&format!("{go_allowed}/")));
+        let legacy =
+            legacy_path == legacy_allowed || legacy_path.starts_with(&format!("{legacy_allowed}/"));
+        go && legacy
+    })
+}
+
+pub(crate) fn go_scope_path(path: &str) -> String {
+    let trimmed = path.trim();
+    let slashed = if cfg!(windows) {
+        trimmed.replace('\\', "/")
+    } else {
+        trimmed.to_owned()
+    };
+    let rooted = slashed.starts_with('/');
+    let mut components: Vec<&str> = Vec::new();
+    for component in slashed.split('/') {
+        match component {
+            "" | "." => {}
+            ".." => {
+                if components.last().is_some_and(|last| *last != "..") {
+                    components.pop();
+                } else if !rooted {
+                    components.push("..");
+                }
+            }
+            value => components.push(value),
+        }
+    }
+    let joined = components.join("/");
+    if rooted { format!("/{joined}") } else { joined }
+}
+
 pub(crate) fn normalize_scope_path(path: &str) -> String {
     let mut components = Vec::new();
     let normalized = path.trim().replace('\\', "/");
@@ -2069,18 +2345,14 @@ pub(crate) fn normalize_scope_path(path: &str) -> String {
     components.join("/")
 }
 
+/// `handleToolsCall`'s `struct{Name string; Arguments json.RawMessage}`:
+/// `arguments` stays the exact source text (empty when absent) and is decoded
+/// separately, by [`decode_arguments`], the way `executeTool` does after the
+/// params decode succeeded.
+#[derive(Default)]
 struct CallParams {
     name: String,
-    arguments: Value,
-}
-
-impl Default for CallParams {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            arguments: Value::Object(Map::new()),
-        }
-    }
+    arguments: String,
 }
 
 struct CallParamsVisitor;
@@ -2093,21 +2365,31 @@ impl<'de> Visitor<'de> for CallParamsVisitor {
     }
 
     fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
-        Ok(CallParams {
-            name: String::new(),
-            arguments: Value::Object(Map::new()),
-        })
+        Ok(CallParams::default())
     }
 
     fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<Self::Value, M::Error> {
-        let mut result = CallParams {
-            name: String::new(),
-            arguments: Value::Object(Map::new()),
-        };
-        while let Some((key, value)) = map.next_entry::<String, Value>()? {
+        let mut result = CallParams::default();
+        // Members are read as raw text first: an unknown member is skipped
+        // without building a `Value` (so it may nest as deeply as the frame
+        // guard allows, like `encoding/json`'s skip), and only `name` is
+        // parsed; `arguments` is a `json.RawMessage` in Go and stays text.
+        while let Some((key, raw)) = map.next_entry::<String, Box<serde_json::value::RawValue>>()? {
             // encoding/json's field matching is case-insensitive and folds
             // the two non-ASCII runes that share ASCII simple-fold classes.
             let key = key.replace('ſ', "s").replace('K', "k");
+            let selected =
+                key.eq_ignore_ascii_case("name") || key.eq_ignore_ascii_case("arguments");
+            if !selected {
+                continue;
+            }
+            if key.eq_ignore_ascii_case("arguments") {
+                // A repeated `arguments` member overwrites the earlier one
+                // (RawMessage assignment), `null` included.
+                result.arguments = raw.get().to_owned();
+                continue;
+            }
+            let value: Value = serde_json::from_str(raw.get()).map_err(de::Error::custom)?;
             if key.eq_ignore_ascii_case("name") {
                 match value {
                     Value::String(name) => result.name = name,
@@ -2119,11 +2401,6 @@ impl<'de> Visitor<'de> for CallParamsVisitor {
                         )));
                     }
                 }
-            } else if key.eq_ignore_ascii_case("arguments") {
-                result.arguments = match value {
-                    Value::Null => Value::Object(Map::new()),
-                    other => other,
-                };
             }
         }
         Ok(result)
@@ -2136,11 +2413,56 @@ impl<'de> Deserialize<'de> for CallParams {
     }
 }
 
-pub(crate) fn parse_params(raw: Option<&str>) -> Result<(String, Value), String> {
+pub(crate) fn parse_params(raw: Option<&str>) -> Result<(String, String), String> {
+    // `encoding/json` decodes a lone surrogate escape to U+FFFD; serde rejects it.
     let params = raw
-        .map_or_else(|| Ok(CallParams::default()), serde_json::from_str)
+        .map_or_else(
+            || Ok(CallParams::default()),
+            |text| serde_json::from_str(&crate::go_params::replace_lone_surrogates(text)),
+        )
         .map_err(|err| err.to_string())?;
     Ok((params.name, params.arguments))
+}
+
+/// Why `arguments` could not be turned into the map a tool receives.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum ArgumentsError {
+    /// `executeTool`'s `decodeToolRequest` failed: JSON-RPC `-32603` with the
+    /// message `parse arguments: <encoding/json text>`.
+    Decode(String),
+    /// Rust-stricter, declared in ADR 0034 item 15: the `serde_json::Value`
+    /// recursion limit (128 levels) where Go accepts up to the 10000-level
+    /// frame limit. Reported as `-32602 Invalid params` with serde's text.
+    TooDeep(String),
+}
+
+/// `decodeToolRequest`: `json.Unmarshal(args, &map[string]any)` for the
+/// `arguments` text of a `tools/call` whose params already decoded.
+///
+/// Absent, empty and `null` arguments are an empty map. Any other value that
+/// is not an object is an `UnmarshalTypeError` naming its kind, without
+/// looking inside it (Go skips the value). An object is decoded into a
+/// `serde_json::Value` (a repeated key is last-wins and keys are
+/// case-sensitive, as in a Go map) after one iterative scan for a number that
+/// overflows `float64`: Go converts every number with `strconv.ParseFloat`,
+/// saves the first range error and reports it, naming the number as spelled.
+pub(crate) fn decode_arguments(raw: &str) -> Result<Value, ArgumentsError> {
+    let kind = crate::go_params::kind(raw);
+    if raw.trim().is_empty() || kind == crate::go_params::Kind::Null {
+        return Ok(Value::Object(Map::new()));
+    }
+    if kind != crate::go_params::Kind::Object {
+        return Err(ArgumentsError::Decode(format!(
+            "parse arguments: json: cannot unmarshal {} into Go value of type map[string]interface {{}}",
+            kind.go_name()
+        )));
+    }
+    if let Some(number) = crate::envelope::overflowing_number(raw) {
+        return Err(ArgumentsError::Decode(format!(
+            "parse arguments: json: cannot unmarshal number {number} into Go value of type float64"
+        )));
+    }
+    serde_json::from_str(raw).map_err(|error| ArgumentsError::TooDeep(error.to_string()))
 }
 
 pub(crate) fn payload(result: ToolCallResult) -> Value {
@@ -2170,5 +2492,223 @@ mod semantic_injection_tests {
         assert!(warning.contains("pattern=\"ignore previous instructions\""));
         assert!(warning.contains("agent=\"fixture\""));
         assert!(!warning.contains("synthetic-secret-value"));
+    }
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::scope_allows;
+
+    fn allows(allowed: &[&str], path: &str) -> bool {
+        let allowed: Vec<String> = allowed.iter().map(|value| (*value).to_owned()).collect();
+        scope_allows(&allowed, path)
+    }
+
+    #[test]
+    fn allowed_paths_that_clean_to_nothing_grant_nothing() {
+        for allowed in ["", " ", ".", "./", "a/..", "./a/../"] {
+            for path in ["/secret", "secret", "", "/", "prod/a", "../x"] {
+                assert!(
+                    !allows(&[allowed], path),
+                    "allowed {allowed:?} must not admit {path:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_boundary_follows_go_path_clean() {
+        assert!(allows(&["prod"], "prod"));
+        assert!(allows(&["prod"], "prod/a"));
+        assert!(allows(&["prod/"], "./prod/a/../b"));
+        assert!(!allows(&["prod"], "prod2/a"));
+        assert!(!allows(&["prod"], "/prod/a"));
+        assert!(!allows(&["prod"], "../prod/a"));
+        assert!(!allows(&["prod"], "prod/../other"));
+        assert!(allows(&["/"], "/"));
+        assert!(!allows(&["/"], "/x"));
+        assert!(allows(&["*"], "/anything"));
+        assert!(!allows(&[], "prod"));
+    }
+
+    #[test]
+    fn forms_the_earlier_rust_boundary_denied_stay_denied() {
+        // Go admits these; the earlier Rust boundary did not (security review).
+        for (allowed, path) in [
+            ("..", "../prod"),
+            ("\\\\", "\\\\/child"),
+            ("../é/../", "../x"),
+            ("/\\\\", "/\\\\/x"),
+        ] {
+            assert!(
+                !allows(&[allowed], path),
+                "allowed {allowed:?} must not admit {path:?}"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod params_duplicate_tests {
+    use super::{ArgumentsError, decode_arguments, parse_params};
+
+    fn arguments_of(params: &str) -> serde_json::Value {
+        let (_, arguments) = parse_params(Some(params)).expect("params decode");
+        decode_arguments(&arguments).expect("arguments decode")
+    }
+
+    /// Expected values were measured against Go's `encoding/json` decoding of
+    /// `struct{Name string; Arguments json.RawMessage}` (the oracle's tools/call
+    /// params): a wrong-typed `name` fails the decode wherever it sits, `null`
+    /// is a no-op that keeps an earlier value, case variants all land in the
+    /// same field, and a repeated `arguments` is last-wins.
+    #[test]
+    fn duplicate_members_follow_encoding_json() {
+        assert!(parse_params(Some(r#"{"name":5,"name":"x"}"#)).is_err());
+        assert!(parse_params(Some(r#"{"name":"x","name":5}"#)).is_err());
+
+        let (name, _) = parse_params(Some(r#"{"name":"x","name":null}"#)).expect("null is a no-op");
+        assert_eq!(name, "x");
+
+        let (name, _) =
+            parse_params(Some(r#"{"name":"a","NAME":"b"}"#)).expect("case variants decode");
+        assert_eq!(name, "b");
+
+        assert_eq!(
+            arguments_of(r#"{"name":"x","arguments":{"a":1},"arguments":{"b":2}}"#),
+            serde_json::json!({"b": 2})
+        );
+        assert_eq!(
+            arguments_of(r#"{"name":"x","arguments":{"a":1},"ARGUMENTS":null}"#),
+            serde_json::json!({}),
+            "a later null replaces the earlier RawMessage, which Go treats as no arguments"
+        );
+    }
+
+    /// Recorded from the oracle (`tools_call_arguments` probes of
+    /// `stdio-hygiene.json`): inside `arguments` a repeated key is last-wins at
+    /// every depth, keys are case-sensitive, `null` replaces.
+    #[test]
+    fn arguments_keys_follow_a_go_map() {
+        let args = |text: &str| decode_arguments(text).expect("arguments decode");
+        assert_eq!(
+            args(r#"{"k":"first","k":"second","K":"upper"}"#),
+            serde_json::json!({"k": "second", "K": "upper"})
+        );
+        assert_eq!(
+            args(r#"{"o":{"a":1,"a":5,"b":2},"o":{"c":3}}"#),
+            serde_json::json!({"o": {"c": 3}}),
+            "a repeated object member replaces the earlier object, it is not merged"
+        );
+        assert_eq!(
+            args(r#"{"a":"x","a":null}"#),
+            serde_json::json!({"a": null}),
+            "unlike a struct field, null replaces in a map"
+        );
+        assert_eq!(
+            args(r#"{"t\u0079pe":"nope","type":"ok"}"#),
+            serde_json::json!({"type": "ok"}),
+            "an escaped key is the same key once unquoted"
+        );
+    }
+
+    /// `encoding/json` decodes a lone surrogate escape to U+FFFD and skips an
+    /// unknown member however deeply it nests (up to the 10000-level frame
+    /// limit); neither may fail the `tools/call` decode. The recorded oracle
+    /// probes `args_lone_surrogate_*` confirm the `arguments` half.
+    #[test]
+    fn lone_surrogates_decode_and_unknown_members_skip_without_recursion() {
+        let (name, raw) = parse_params(Some(
+            r#"{"name":"a\uD800b","arguments":{"k\uDC00":"\uD800"}}"#,
+        ))
+        .expect("lone surrogates decode");
+        assert_eq!(name, "a\u{FFFD}b");
+        assert_eq!(
+            decode_arguments(&raw).expect("arguments decode"),
+            serde_json::json!({"k\u{FFFD}": "\u{FFFD}"})
+        );
+
+        let deep = format!("{}{}", "[".repeat(9_000), "]".repeat(9_000));
+        let (name, _) = parse_params(Some(&format!(
+            r#"{{"name":"x","zz":{deep},"ZZ":{{"y":{deep}}}}}"#
+        )))
+        .expect("an unknown member is skipped, not decoded");
+        assert_eq!(name, "x");
+    }
+
+    /// Recorded from the oracle: absent and `null` arguments are an empty map;
+    /// any other non-object is an `UnmarshalTypeError` naming its kind, and the
+    /// value is skipped, so an overflowing number or deep nesting inside an
+    /// array is irrelevant.
+    #[test]
+    fn non_object_arguments_are_type_errors_that_never_look_inside() {
+        assert_eq!(decode_arguments(""), Ok(serde_json::json!({})));
+        assert_eq!(decode_arguments("null"), Ok(serde_json::json!({})));
+        for (text, kind) in [
+            ("1e400", "number"),
+            ("[1e400]", "array"),
+            ("\"text\"", "string"),
+            ("true", "bool"),
+        ] {
+            assert_eq!(
+                decode_arguments(text),
+                Err(ArgumentsError::Decode(format!(
+                    "parse arguments: json: cannot unmarshal {kind} into Go value of type map[string]interface {{}}"
+                ))),
+                "{text}"
+            );
+        }
+        let deep = format!("{}{}", "[".repeat(5_000), "]".repeat(5_000));
+        assert_eq!(
+            decode_arguments(&deep),
+            Err(ArgumentsError::Decode(
+                "parse arguments: json: cannot unmarshal array into Go value of type map[string]interface {}"
+                    .to_string()
+            ))
+        );
+    }
+
+    /// Recorded from the oracle: a number that overflows `float64` anywhere
+    /// inside an object fails the decode, naming the first one as spelled;
+    /// underflow, the largest finite value, big integers and number-looking
+    /// strings or keys decode.
+    #[test]
+    fn number_overflow_fails_the_decode_like_encoding_json() {
+        let overflow = |text: &str| match decode_arguments(text) {
+            Err(ArgumentsError::Decode(message)) => message,
+            other => panic!("{text}: expected a decode error, got {other:?}"),
+        };
+        assert_eq!(
+            overflow(r#"{"n":1e400}"#),
+            "parse arguments: json: cannot unmarshal number 1e400 into Go value of type float64"
+        );
+        assert!(overflow(r#"{"x":[1,{"y":-1e400}]}"#).contains("number -1e400 "));
+        assert!(overflow(r#"{"x":[1e500,1e400]}"#).contains("number 1e500 "));
+        assert!(overflow(r#"{"n":1E+400}"#).contains("number 1E+400 "));
+        assert!(
+            overflow(r#"{"n":1.7976931348623159e308}"#).contains("number 1.7976931348623159e308 ")
+        );
+        for accepted in [
+            r#"{"n":1.7976931348623157e308}"#,
+            r#"{"a":1e-400,"b":5e-324,"c":-1e-999}"#,
+            r#"{"n":"1e400","1e400":1}"#,
+            r#"{"n":123456789012345678901234567890}"#,
+        ] {
+            assert!(decode_arguments(accepted).is_ok(), "{accepted}");
+        }
+    }
+
+    /// Declared difference (ADR 0034 item 15, ratified): a non-null object
+    /// `arguments` becomes a `serde_json::Value`, capped at 128 levels, where
+    /// Go accepts up to the 10000-level frame limit.
+    #[test]
+    fn arguments_nested_beyond_the_value_recursion_limit_are_rejected() {
+        let deep =
+            |levels: usize| format!(r#"{{"x":{}{}}}"#, "[".repeat(levels), "]".repeat(levels));
+        assert!(decode_arguments(&deep(100)).is_ok());
+        assert!(matches!(
+            decode_arguments(&deep(200)),
+            Err(ArgumentsError::TooDeep(_))
+        ));
     }
 }

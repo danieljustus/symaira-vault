@@ -14,9 +14,8 @@ use symvault_core::config::{Config, GitConfig};
 #[cfg(test)]
 use symvault_crypto::encrypt;
 use symvault_crypto::{
-    Identity, Recipient, SecretBytes, decrypt_identity, encrypt_identity_scrypt, fingerprint,
-    generate_identity, identity_string, parse_identity, parse_recipient, recipient_string,
-    reencrypt,
+    Identity, Recipient, SecretBytes, encrypt_identity_scrypt, fingerprint, generate_identity,
+    identity_string, parse_identity, parse_recipient, recipient_string, reencrypt,
 };
 use symvault_sync::{
     CommitOptions, DeviceRegistry, GitRepository, GoTime, JoinResponse, PairingFile,
@@ -90,6 +89,23 @@ pub(crate) fn unlock_vault(vault: &Path) -> Result<Identity, String> {
     unlock_vault_with_runtime(vault, &runtime)
 }
 
+/// `device pair` has no initialization gate in Go: `UnlockVault` resolves the
+/// actual configuration (a missing `config.yaml` is the default one), obtains
+/// the passphrase under that policy and only then opens the vault, which reads
+/// `identity.age` and loads `config.yaml`.
+fn unlock_vault_like_go_pair(vault: &Path) -> Result<Identity, String> {
+    let runtime = crate::runtime_session_manager();
+    unlock_vault_with_mode(vault, &runtime, true)
+}
+
+fn go_missing_file_error(vault: &Path, name: &str) -> String {
+    crate::config::format_go_path_error(
+        "open",
+        &vault.join(name),
+        &std::io::Error::from(std::io::ErrorKind::NotFound),
+    )
+}
+
 pub(crate) fn unlock_vault_for_transport(
     vault: &Path,
     interactive: bool,
@@ -102,7 +118,10 @@ pub(crate) fn open_unlocked_vault(vault: &Path, identity: &Identity) -> Result<(
     let store = symvault_store::Store::open(vault, identity).map_err(|error| error.to_string())?;
     store
         .migrate_legacy()
-        .map_err(|error| format!("migrate legacy entries: {error}"))
+        .map_err(|error| format!("migrate legacy entries: {error}"))?;
+    // Go's `Open` rebuilds a missing, stale or incomplete manifest on every open.
+    store.reconcile_manifest_on_open(identity);
+    Ok(())
 }
 
 pub(crate) fn unlock_vault_with_runtime(
@@ -110,6 +129,21 @@ pub(crate) fn unlock_vault_with_runtime(
     runtime: &crate::RuntimeSession,
 ) -> Result<Identity, String> {
     unlock_vault_with_mode(vault, runtime, true)
+}
+
+/// Go's `resolveConfig` as the first step of an open: a configuration that does not load or
+/// validate is refused as `configuration is invalid: <cause>` (`ExitConfigError`, see
+/// [`crate::CONFIG_INVALID_PREFIX`]); a missing `config.yaml` is the default configuration.
+pub(crate) fn resolve_configuration(vault: &Path, interactive: bool) -> Result<(), String> {
+    let config_path = vault.join("config.yaml");
+    if matches!(
+        fs::metadata(&config_path),
+        Err(ref error) if error.kind() == std::io::ErrorKind::NotFound
+    ) {
+        return Ok(());
+    }
+    crate::config::fix::resolve(&config_path, interactive)
+        .map_err(|error| format!("{}{error}", crate::CONFIG_INVALID_PREFIX))
 }
 
 fn unlock_vault_with_mode(
@@ -121,18 +155,35 @@ fn unlock_vault_with_mode(
         .to_str()
         .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
     let config_path = vault.join("config.yaml");
-    let config = Config::load(&config_path).map_err(|error| format!("load config: {error}"))?;
-    let config_bytes = safeio::read(&config_path)
-        .map_err(|e| format!("read config: {e}"))?
-        .ok_or_else(|| "configuration is missing".to_owned())?;
+    // Go resolves the configuration first (`resolveConfig`): a file that does not load or
+    // validate (a negative `clipboard.auto_clear_duration`, a syntax error) fails the open
+    // as `ExitConfigError`, before the passphrase policy; a missing file is the default one
+    // (and `OpenWithPassphrase` reports it later, once the identity is read).
+    resolve_configuration(vault, interactive)?;
+    let (config, config_bytes, config_present) = match Config::load(&config_path) {
+        Ok(config) => {
+            let bytes = safeio::read(&config_path)
+                .map_err(|e| format!("read config: {e}"))?
+                .ok_or_else(|| "configuration is missing".to_owned())?;
+            (config, bytes, true)
+        }
+        Err(symvault_core::config::ConfigError::Read(error))
+            if error.kind() == std::io::ErrorKind::NotFound =>
+        {
+            (Config::default(), b"{}".to_vec(), false)
+        }
+        Err(error) => return Err(format!("load config: {error}")),
+    };
 
     // A cached private identity is the fastest path and deliberately avoids
     // reading or decrypting the on-disk envelope. SessionManager renews the
-    // idle timestamp when `refresh` is true, matching Go's vault reads.
-    if let Ok(cached) = runtime
-        .manager
-        .load_identity(vault_string, true)
-        .map(zeroize::Zeroizing::new)
+    // idle timestamp when `refresh` is true, matching Go's vault reads. Go opens
+    // the cached identity through the configuration, so without one it is a miss.
+    if config_present
+        && let Ok(cached) = runtime
+            .manager
+            .load_identity(vault_string, true)
+            .map(zeroize::Zeroizing::new)
         && let Ok(text) = std::str::from_utf8(&cached)
         && let Ok(identity) = parse_identity(text.trim())
     {
@@ -140,10 +191,16 @@ fn unlock_vault_with_mode(
         return Ok(identity);
     }
 
+    // Go reads the identity file only once a passphrase is in hand, so a missing
+    // one must not hide the passphrase policy (prompt, Touch ID, environment).
     let id_path = vault.join("identity.age");
-    let data = safeio::read(&id_path)
-        .map_err(|e| format!("read identity: {e}"))?
-        .ok_or_else(|| "vault is not initialized (run 'symvault init' first)".to_owned())?;
+    let data = safeio::read(&id_path).map_err(|e| format!("read identity: {e}"))?;
+    let missing_identity = || {
+        format!(
+            "open vault: read identity file: {}",
+            go_missing_file_error(vault, "identity.age")
+        )
+    };
 
     // Prefer the encrypted session passphrase before invoking Touch ID or a
     // prompt. A bad/expired cache is recoverable and falls through to the
@@ -152,17 +209,44 @@ fn unlock_vault_with_mode(
         .manager
         .load_passphrase(vault_string)
         .map(zeroize::Zeroizing::new)
-        && let Ok(identity) = decrypt_identity(&data, &SecretBytes::new(&cached))
     {
-        open_unlocked_vault(vault, &identity).map_err(|error| format!("open vault: {error}"))?;
-        save_unlocked_session(runtime, vault_string, &config, &cached, &identity)?;
-        return Ok(identity);
+        let Some(data) = data.as_deref() else {
+            return Err(missing_identity());
+        };
+        // Go's `resolveUnlockPassphrase` hands the cached passphrase to
+        // `OpenWithPassphrase`, which heals a legacy zero-key identity too.
+        if let Ok(identity) = crate::identity_error::open_identity(vault, data, &cached) {
+            // `OpenWithPassphrase` loads config.yaml after the identity; the
+            // store would treat a missing file as the default configuration.
+            if !config_present {
+                return Err(format!(
+                    "open vault: load config: {}",
+                    go_missing_file_error(vault, "config.yaml")
+                ));
+            }
+            open_unlocked_vault(vault, &identity)
+                .map_err(|error| format!("open vault: {error}"))?;
+            save_unlocked_session(runtime, vault_string, &config, &cached, &identity)?;
+            return Ok(identity);
+        }
     }
 
     let passphrase =
         crate::unlock_passphrase_with_mode(&config_bytes, &config, vault, runtime, interactive)?;
-    let sec_pass = SecretBytes::new(passphrase.as_bytes());
-    let identity = decrypt_identity(&data, &sec_pass).map_err(|e| format!("unlock vault: {e}"))?;
+    // `OpenWithPassphrase` refuses an empty passphrase before it reads the
+    // identity file.
+    if passphrase.is_empty() {
+        return Err("open vault: passphrase is empty".to_owned());
+    }
+    let data = data.ok_or_else(missing_identity)?;
+    let identity = crate::identity_error::open_identity(vault, &data, passphrase.as_bytes())
+        .map_err(|error| format!("open vault: {error}"))?;
+    if !config_present {
+        return Err(format!(
+            "open vault: load config: {}",
+            go_missing_file_error(vault, "config.yaml")
+        ));
+    }
     open_unlocked_vault(vault, &identity).map_err(|error| format!("open vault: {error}"))?;
     if !input::env_passphrase_selected(&config_bytes) {
         save_unlocked_session(
@@ -974,7 +1058,7 @@ fn auto_commit_and_push(vault: &Path, message: &str) {
 }
 
 pub(super) fn pair(vault: &Path, quiet: bool) -> Result<(), String> {
-    let identity = unlock_vault(vault)?;
+    let identity = unlock_vault_like_go_pair(vault)?;
     let token = generate_token().map_err(|e| format!("generate token: {e}"))?;
     let public_key = recipient_string(&identity);
 
@@ -1072,7 +1156,15 @@ pub(super) fn join(
             .arg(remote_url)
             .arg(vault)
             .status()
-            .map_err(|e| format!("clone vault: {e}"))?;
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    // Same text as symvault_sync's GitError::GitNotFound (ADR 0033).
+                    "clone vault: git is required but was not found in PATH; install git and retry"
+                        .to_owned()
+                } else {
+                    format!("clone vault: {e}")
+                }
+            })?;
         if !status.success() {
             return Err(format!("clone vault: git clone failed with {status}"));
         }
@@ -1128,6 +1220,10 @@ pub(super) fn join(
         .map_err(|e| format!("save identity: {e}"))?;
     safeio::write_atomic(&vault.join("identity.age"), &enc_id)
         .map_err(|e| format!("save identity: {e}"))?;
+    // A vault Rust creates needs no pre-migration backup (D1); unmarked, the
+    // recipients write below would be refused (or back up the empty vault).
+    symvault_store::data_safety::mark_created(vault)
+        .map_err(|e| format!("write rust marker: {e}"))?;
 
     let recipients_content = format!(
         "# Symaira Vault vault recipients\n# Added by device join\n{}\n",
@@ -1328,6 +1424,10 @@ pub(super) fn add(
         .map_err(|e| format!("save identity: {e}"))?;
     safeio::write_atomic(&vault.join("identity.age"), &enc_id)
         .map_err(|e| format!("save identity: {e}"))?;
+    // A vault Rust creates needs no pre-migration backup (D1); unmarked, the
+    // recipients write below would be refused (or back up the empty vault).
+    symvault_store::data_safety::mark_created(vault)
+        .map_err(|e| format!("write rust marker: {e}"))?;
 
     let recipients_content = format!(
         "# Symaira Vault vault recipients\n# Added by device add --pair\n{}\n",
@@ -1588,6 +1688,7 @@ mod tests {
             encrypt_identity_scrypt(&identity, &SecretBytes::new(passphrase.as_bytes()), 10)
                 .unwrap();
         fs::write(root.join("identity.age"), encrypted).unwrap();
+        symvault_store::data_safety::test_support_pre_marked(&root);
         (root, identity, passphrase)
     }
 
@@ -1653,7 +1754,11 @@ mod tests {
         let backup = entries.join(".a.age.reencrypt-1-0-0.backup");
         let original = b"original ciphertext";
         let replacement = b"replacement ciphertext";
-        let store = symvault_store::Store::open(&root, &identity).unwrap();
+        let store = symvault_store::Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap();
         fs::write(&backup, original).unwrap();
         if after_install {
             fs::write(&target, replacement).unwrap();
@@ -1673,6 +1778,7 @@ mod tests {
                 installed: after_install,
             }],
         };
+        symvault_store::data_safety::test_support_pre_marked(&root);
         persist_reencrypt_journal(&root, &journal).unwrap();
         assert!(
             backup.is_file(),
@@ -1721,8 +1827,13 @@ mod tests {
                 installed: true,
             }],
         };
+        symvault_store::data_safety::test_support_pre_marked(&root);
         persist_reencrypt_journal(&root, &journal).unwrap();
-        let _store = symvault_store::Store::open(&root, &identity).unwrap();
+        let _store = symvault_store::Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap();
         assert_eq!(fs::read(&target).unwrap(), replacement);
         assert!(!backup.exists());
         assert!(!journal_path(&root).exists());
@@ -1762,9 +1873,14 @@ mod tests {
                     installed: false,
                 }],
             };
+            symvault_store::data_safety::test_support_pre_marked(&root);
             persist_reencrypt_journal(&root, &journal).unwrap();
 
-            symvault_store::Store::open(&root, &identity).unwrap();
+            symvault_store::Store::open(
+                symvault_store::data_safety::test_support_pre_marked(&root),
+                &identity,
+            )
+            .unwrap();
             assert_eq!(fs::read(&target).unwrap(), original);
             assert!(!temp.exists());
             assert!(!backup.exists());
@@ -1822,9 +1938,14 @@ mod tests {
                 installed: false,
             }],
         };
+        symvault_store::data_safety::test_support_pre_marked(&root);
         persist_reencrypt_journal(&root, &journal).unwrap();
 
-        let error = symvault_store::Store::open(&root, &identity).unwrap_err();
+        let error = symvault_store::Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap_err();
         assert!(error.to_string().contains("no ciphertext digest"));
         assert!(target.is_file());
         assert!(backup.is_file());
@@ -1850,8 +1971,13 @@ mod tests {
                 installed: true,
             }],
         };
+        symvault_store::data_safety::test_support_pre_marked(&root);
         persist_reencrypt_journal(&root, &journal).unwrap();
-        let error = symvault_store::Store::open(&root, &identity).unwrap_err();
+        let error = symvault_store::Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap_err();
         assert!(error.to_string().contains("unsafe"));
         assert_eq!(fs::read(&outside).unwrap(), b"outside original");
         let _ = fs::remove_dir_all(root);
@@ -1871,8 +1997,13 @@ mod tests {
                 installed: true,
             }],
         };
+        symvault_store::data_safety::test_support_pre_marked(&root);
         persist_reencrypt_journal(&root, &journal).unwrap();
-        let error = symvault_store::Store::open(&root, &identity).unwrap_err();
+        let error = symvault_store::Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap_err();
         assert!(error.to_string().contains("unsafe"));
         assert_eq!(fs::read(&target).unwrap(), b"original");
         let _ = fs::remove_dir_all(root);
@@ -1902,8 +2033,13 @@ mod tests {
                 installed: true,
             }],
         };
+        symvault_store::data_safety::test_support_pre_marked(&root);
         persist_reencrypt_journal(&root, &journal).unwrap();
-        let error = symvault_store::Store::open(&root, &identity).unwrap_err();
+        let error = symvault_store::Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap_err();
         assert!(error.to_string().contains("symlink"));
         assert_eq!(fs::read(&outside).unwrap(), b"outside original");
         let _ = fs::remove_dir_all(root);
@@ -1920,7 +2056,11 @@ mod tests {
         let replacement = b"replacement ciphertext";
         let manifest = root.join("manifest.age");
         let old_manifest = b"old manifest";
-        let store = symvault_store::Store::open(&root, &identity).unwrap();
+        let store = symvault_store::Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap();
         fs::write(&target, replacement).unwrap();
         fs::write(&backup, original).unwrap();
         fs::write(&manifest, old_manifest).unwrap();
@@ -1934,6 +2074,7 @@ mod tests {
                 installed: true,
             }],
         };
+        symvault_store::data_safety::test_support_pre_marked(&root);
         persist_reencrypt_journal(&root, &journal).unwrap();
         let snapshot = snapshot_file(&manifest).unwrap().unwrap();
         store
@@ -1954,7 +2095,13 @@ mod tests {
     #[test]
     fn store_write_lock_blocks_concurrent_writer() {
         let (root, identity, _passphrase) = encrypted_fixture();
-        let store = Arc::new(symvault_store::Store::open(&root, &identity).unwrap());
+        let store = Arc::new(
+            symvault_store::Store::open(
+                symvault_store::data_safety::test_support_pre_marked(&root),
+                &identity,
+            )
+            .unwrap(),
+        );
         let (held_tx, held_rx) = mpsc::channel();
         let (release_tx, release_rx) = mpsc::channel();
         let holder_store = Arc::clone(&store);
@@ -1981,7 +2128,9 @@ mod tests {
         );
         release_tx.send(()).unwrap();
         holder.join().unwrap().unwrap();
-        assert!(contender_rx.recv_timeout(Duration::from_secs(2)).unwrap());
+        // Setup bound, not the behavior under test: generous so load and coverage
+        // instrumentation cannot win the race (#1564-#1567).
+        assert!(contender_rx.recv_timeout(Duration::from_secs(30)).unwrap());
         contender.join().unwrap();
         let _ = fs::remove_dir_all(root);
     }
@@ -2176,6 +2325,7 @@ mod tests {
             let (temp, backup) = journaled_artifact_paths(&fixture.root, &fixture.target);
             let mut journal =
                 ReencryptJournal::new(&fixture.root, std::slice::from_ref(&fixture.file)).unwrap();
+            symvault_store::data_safety::test_support_pre_marked(&fixture.root);
             persist_reencrypt_journal(&fixture.root, &journal).unwrap();
 
             if boundary >= Boundary::OwnershipPersistedBeforeTempCreate {
@@ -2183,6 +2333,7 @@ mod tests {
                 entry.digest = digest(&fixture.file.replacement);
                 entry.temp = journal_string(&fixture.root, &temp).unwrap();
                 entry.backup = journal_string(&fixture.root, &backup).unwrap();
+                symvault_store::data_safety::test_support_pre_marked(&fixture.root);
                 persist_reencrypt_journal(&fixture.root, &journal).unwrap();
                 let durable = load_reencrypt_journal(&fixture.root).unwrap();
                 assert_eq!(durable.entries[0].temp, journal.entries[0].temp);
@@ -2217,6 +2368,7 @@ mod tests {
             }
 
             if boundary >= Boundary::SecondJournalPersisted {
+                symvault_store::data_safety::test_support_pre_marked(&fixture.root);
                 persist_reencrypt_journal(&fixture.root, &journal).unwrap();
                 // The second record is intentionally byte-identical: ownership
                 // must already be durable before the staged file is created.
@@ -2242,6 +2394,7 @@ mod tests {
             if boundary >= Boundary::InstalledJournalPersisted {
                 journal.entries[0].temp.clear();
                 journal.entries[0].installed = true;
+                symvault_store::data_safety::test_support_pre_marked(&fixture.root);
                 persist_reencrypt_journal(&fixture.root, &journal).unwrap();
             }
             if boundary >= Boundary::ArtifactsCleanedBeforeJournalRemoval {
@@ -2250,7 +2403,13 @@ mod tests {
 
             // Store::open runs the production recovery path against each
             // persisted snapshot, rather than testing a model of recovery.
-            drop(symvault_store::Store::open(&fixture.root, &fixture.identity).unwrap());
+            drop(
+                symvault_store::Store::open(
+                    symvault_store::data_safety::test_support_pre_marked(&fixture.root),
+                    &fixture.identity,
+                )
+                .unwrap(),
+            );
 
             let target_bytes = fs::read(&fixture.target).expect("recovered target exists");
             if boundary >= Boundary::ReplacementInstalledBeforeInstallJournal {
@@ -2308,6 +2467,7 @@ mod tests {
     #[test]
     fn production_reencrypt_flow_preserves_unowned_reencrypt_names() {
         let fixture = synthetic_reencrypt_vault();
+        symvault_store::data_safety::test_support_pre_marked(&fixture.root);
         let recipients = vec![
             parse_recipient(&recipient_string(&fixture.identity)).unwrap(),
             parse_recipient(&recipient_string(&fixture.new_identity)).unwrap(),

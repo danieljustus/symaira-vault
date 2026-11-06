@@ -311,7 +311,17 @@ fn unlock_validates_identity_and_uses_memory_fallback_without_keychain_access() 
         .expect("write wrong fixture passphrase");
     let wrong_output = wrong.wait_with_output().expect("wait for wrong unlock");
     assert_eq!(wrong_output.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&wrong_output.stderr).contains("unlock vault"));
+    // Go: `UnlockVaultForSession` fails with `open vault: <OpenWithPassphrase error>`,
+    // printed by cobra and again by `ExecuteRoot`.
+    let stderr = String::from_utf8_lossy(&wrong_output.stderr);
+    assert_eq!(
+        stderr
+            .lines()
+            .filter(|line| line.starts_with("Error: open vault: load identity: "))
+            .count(),
+        2,
+        "{stderr}"
+    );
 }
 
 #[test]

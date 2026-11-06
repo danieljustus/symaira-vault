@@ -683,7 +683,11 @@ mod tests {
                     .unwrap(),
                 )
                 .unwrap();
-                let store = Store::open(&root, &identity).unwrap();
+                let store = Store::open(
+                    symvault_store::data_safety::test_support_pre_marked(&root),
+                    &identity,
+                )
+                .unwrap();
                 for path in ["alpha/account", "alpha/token", "beta"] {
                     let mut entry = Entry::default();
                     entry

@@ -33,10 +33,13 @@ const MAX_OAUTH_CLIENTS_BYTES: usize = 1024 * 1024;
 /// family never sets, like refresh tokens) round-trip unchanged.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TokenRecord {
+    #[serde(default)]
     pub id: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub label: String,
+    #[serde(default)]
     pub hash: String,
+    #[serde(default)]
     pub prefix: String,
     #[serde(rename = "allowed_tools", default)]
     pub allowed_tools: Option<Vec<String>>,
@@ -52,7 +55,7 @@ pub struct TokenRecord {
         skip_serializing_if = "String::is_empty"
     )]
     pub agent_name: String,
-    #[serde(rename = "created_at")]
+    #[serde(rename = "created_at", default)]
     pub created_at: String,
     #[serde(
         rename = "expires_at",
@@ -285,8 +288,10 @@ pub fn verify_s256_code_verifier(verifier: &str, challenge: &str) -> bool {
 
 #[derive(Default, Deserialize)]
 struct RawFile {
+    // A JSON `null` entry decodes to Go's zero value, which carries no hash
+    // and is dropped like any other hash-less entry.
     #[serde(default)]
-    tokens: Option<BTreeMap<String, TokenRecord>>,
+    tokens: Option<BTreeMap<String, Option<TokenRecord>>>,
 }
 
 #[derive(Serialize)]
@@ -421,13 +426,16 @@ pub fn create_with_refresh(
     Ok((record, raw_access, raw_refresh))
 }
 
-/// Rotates a refresh token once, revoking its associated access token.
+/// Rotates a refresh token once, revoking its associated access token. As in
+/// Go (`RotateViaRefreshToken` → `CreateWithRefresh`), the replacement token is
+/// stamped with the caller's current tool-registry hash, not the old token's.
 pub fn rotate_via_refresh_token(
     root: &Path,
     raw_refresh_token: &str,
+    tool_registry_hash: &str,
     now: OffsetDateTime,
 ) -> Result<(TokenRecord, String, String), StoreError> {
-    rotate_via_refresh_token_inner(root, raw_refresh_token, None, now)
+    rotate_via_refresh_token_inner(root, raw_refresh_token, None, tool_registry_hash, now)
 }
 
 /// Rotates a refresh token and supplies a bounded access-token TTL when the
@@ -436,6 +444,7 @@ pub fn rotate_via_refresh_token_with_access_ttl(
     root: &Path,
     raw_refresh_token: &str,
     access_ttl_if_expired: time::Duration,
+    tool_registry_hash: &str,
     now: OffsetDateTime,
 ) -> Result<(TokenRecord, String, String), StoreError> {
     if access_ttl_if_expired <= time::Duration::ZERO {
@@ -443,13 +452,20 @@ pub fn rotate_via_refresh_token_with_access_ttl(
             "expired access-token replacement TTL must be positive".into(),
         ));
     }
-    rotate_via_refresh_token_inner(root, raw_refresh_token, Some(access_ttl_if_expired), now)
+    rotate_via_refresh_token_inner(
+        root,
+        raw_refresh_token,
+        Some(access_ttl_if_expired),
+        tool_registry_hash,
+        now,
+    )
 }
 
 fn rotate_via_refresh_token_inner(
     root: &Path,
     raw_refresh_token: &str,
     access_ttl_if_expired: Option<time::Duration>,
+    tool_registry_hash: &str,
     now: OffsetDateTime,
 ) -> Result<(TokenRecord, String, String), StoreError> {
     let root_cap = open_root(root)?;
@@ -494,7 +510,7 @@ fn rotate_via_refresh_token_inner(
         allowed_tools,
         agent_name: &old.agent_name,
         ttl: access_ttl,
-        tool_registry_hash: &old.tool_registry_hash,
+        tool_registry_hash,
     };
     let (mut rotated, raw_access) = new_record(&new, now)?;
     let mut refresh_bytes = [0_u8; 32];
@@ -686,8 +702,16 @@ fn is_expired(entry: &TokenRecord, now: OffsetDateTime) -> bool {
         .is_some_and(|value| parse_rfc3339(value).is_ok_and(|expires_at| now > expires_at))
 }
 
+/// Parses a registry timestamp exactly as Go's `time.Time` JSON decoding does
+/// (see `go_registry::parse_go_rfc3339`); anything Go rejects is an error here.
 fn parse_rfc3339(value: &str) -> Result<OffsetDateTime, time::error::Parse> {
-    OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
+    crate::go_registry::parse_go_rfc3339(value)
+        .ok_or(())
+        .or_else(|()| {
+            // `time` has no public constructor for its parse error; the empty
+            // string always yields one.
+            OffsetDateTime::parse("", &time::format_description::well_known::Rfc3339)
+        })
 }
 
 fn open_root(root: &Path) -> Result<fs::File, StoreError> {
@@ -714,12 +738,21 @@ fn read(path: &Path) -> Result<BTreeMap<String, TokenRecord>, StoreError> {
     if bytes.is_empty() {
         return Ok(BTreeMap::new());
     }
-    let raw: RawFile = serde_json::from_slice(&bytes).map_err(|error| {
+    // Go's json.Unmarshal semantics: duplicate members, case-insensitive field
+    // names and invalid UTF-8 are accepted or rejected exactly as Go does.
+    let parse_error = |error: &dyn std::fmt::Display| {
         StoreError::Config(format!(
             "load token registry: parse token registry: {error}"
         ))
-    })?;
-    Ok(raw.tokens.unwrap_or_default())
+    };
+    let value = crate::go_registry::decode_go_registry(&bytes).map_err(|e| parse_error(&e))?;
+    let raw: RawFile = serde_json::from_value(value).map_err(|e| parse_error(&e))?;
+    Ok(raw
+        .tokens
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|(id, record)| record.map(|record| (id, record)))
+        .collect())
 }
 
 fn write(
@@ -788,6 +821,10 @@ mod tests {
     use super::*;
     use std::{fs, sync::mpsc, time::Duration};
 
+    /// A real-shaped, non-empty tool-registry hash (the stale-era Go value).
+    const ROTATED_REGISTRY_HASH: &str =
+        "bccf8c7e8660328030bc4e9bbc0c0d43a650278bae4b8ef60d5543d64c46455d";
+
     fn vault_dir() -> (tempfile::TempDir, std::path::PathBuf) {
         let root = tempfile::tempdir_in(std::env::temp_dir().canonicalize().unwrap()).unwrap();
         let path = root.path().to_path_buf();
@@ -828,7 +865,9 @@ mod tests {
         drop(held_lock);
         assert!(
             done_rx
-                .recv_timeout(Duration::from_secs(2))
+                // Setup bound, not the behavior under test: generous so load and coverage
+                // instrumentation cannot win the race (#1564-#1567).
+                .recv_timeout(Duration::from_secs(30))
                 .expect("mutation completes after lock release")
         );
         assert!(path.join(TOKEN_REGISTRY_FILE).is_file());
@@ -970,7 +1009,8 @@ mod tests {
 
         let later = now + time::Duration::minutes(5);
         let (rotated, new_access, new_refresh) =
-            rotate_via_refresh_token(&path, &raw_refresh, later).expect("rotate refresh token");
+            rotate_via_refresh_token(&path, &raw_refresh, ROTATED_REGISTRY_HASH, later)
+                .expect("rotate refresh token");
         assert_ne!(new_access, raw_access);
         assert_ne!(new_refresh, raw_refresh);
         assert_eq!(
@@ -984,8 +1024,18 @@ mod tests {
             Some(go_rfc3339(later).as_str())
         );
         assert!(!stored[&rotated.id].revoked);
-        assert!(rotate_via_refresh_token(&path, &raw_refresh, later).is_err());
-        assert!(rotate_via_refresh_token(&path, &new_refresh, later).is_ok());
+        // The replacement is stamped with the caller's hash, not the old token's.
+        assert_eq!(rotated.tool_registry_hash, ROTATED_REGISTRY_HASH);
+        assert_eq!(
+            stored[&rotated.id].tool_registry_hash,
+            ROTATED_REGISTRY_HASH
+        );
+        assert_ne!(
+            stored[&original.id].tool_registry_hash,
+            stored[&rotated.id].tool_registry_hash
+        );
+        assert!(rotate_via_refresh_token(&path, &raw_refresh, "", later).is_err());
+        assert!(rotate_via_refresh_token(&path, &new_refresh, "", later).is_ok());
     }
 
     #[test]
@@ -1018,9 +1068,16 @@ mod tests {
             &path,
             &refresh,
             time::Duration::hours(24),
+            ROTATED_REGISTRY_HASH,
             later,
         )
         .expect("valid refresh can renew expired access token");
+        assert_eq!(rotated.tool_registry_hash, ROTATED_REGISTRY_HASH);
+        assert_eq!(
+            read(&path.join(TOKEN_REGISTRY_FILE)).expect("read rotated registry")[&rotated.id]
+                .tool_registry_hash,
+            ROTATED_REGISTRY_HASH
+        );
         assert_eq!(
             rotated.expires_at.as_deref(),
             Some(go_rfc3339(later + time::Duration::hours(24)).as_str())

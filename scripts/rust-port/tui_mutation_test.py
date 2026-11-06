@@ -13,10 +13,12 @@ import tempfile
 import tui_contract as tui
 
 
-def rejected(tree, binary, receipt, reason, source_only=False):
+def rejected(tree, binary, receipt, reason, source_only=False, snapshot_bin=None):
     receipt = receipt.resolve()  # child cwd is the disposable source tree
     argv = [sys.executable, str(tree/'scripts/rust-port/tui_contract.py'),
             '--rust-cli', str(binary), '--receipt', str(receipt)]
+    if snapshot_bin is not None:
+        argv += ['--snapshot-bin', str(snapshot_bin)]
     if source_only:
         argv.append('--source-only')
     result = subprocess.run(argv, cwd=tree, capture_output=True, timeout=1500)
@@ -51,7 +53,12 @@ def receipt_controls(args, binary, candidate, summary):
                 'capture-size': 'artifact size mismatch', 'capture-canary-bytes': 'canary disclosure',
                 'configured-zero-reloads-default': 'fixture clipboard duration mismatch',
                 'cleanup-failure-masquerading-as-pass': 'failed case observations',
-                'snapshot-rewrites-zero-before-runtime': 'pre-runtime fixture duration changed'}
+                'snapshot-rewrites-zero-before-runtime': 'pre-runtime fixture duration changed',
+                'tampered-recorded-go-snapshot': 'encrypted-store differential mismatch',
+                'tampered-recorded-go-keybindings': 'keybinding byte mismatch',
+                'rust-row-forged-as-recording': 'recorded observation',
+                'recorded-go-capture-unchecked': 'recorded Go terminal capture',
+                'recorded-observation-identity': 'recorded Go observation identity'}
     for name, reason in controls.items():
         mutant = copy.deepcopy(baseline)
         row = mutant['rust'][1]
@@ -66,6 +73,11 @@ def receipt_controls(args, binary, candidate, summary):
         elif name == 'configured-zero-reloads-default': mutant['seed_configs']['0']['effective_clipboard_seconds'] = 30
         elif name == 'cleanup-failure-masquerading-as-pass': row['cleanup_failure'] = 'deliberate structural failure'
         elif name == 'snapshot-rewrites-zero-before-runtime': mutant['go'][tui.CASES.index('zero-ttl-quit-cleanup')]['before_config']['persisted_clipboard_seconds'] = 30
+        elif name == 'tampered-recorded-go-snapshot': mutant['go'][1]['after'][0]['data_sha256'] = 'f'*64
+        elif name == 'tampered-recorded-go-keybindings': mutant['go'][-1]['stdout_sha256'] = '0'*64
+        elif name == 'rust-row-forged-as-recording': row['replayed'] = True
+        elif name == 'recorded-go-capture-unchecked': mutant['go'][0]['capture_policy_checked_at_capture'] = False
+        elif name == 'recorded-observation-identity': mutant['go_observation']['oracle_commit'] = '0'*40
         elif name == 'unrestored-terminal': row['input_restored'] = False
         elif name == 'canary-flag': row['canary_disclosure'] = True
         elif name == 'missing-null-valued-tags':
@@ -96,6 +108,7 @@ def main():
     parser.add_argument('--rust-cli', required=True, type=Path)
     parser.add_argument('--receipt', required=True, type=Path)
     parser.add_argument('--native-receipt', required=True, type=Path)
+    parser.add_argument('--snapshot-bin', required=True, type=Path)
     args = parser.parse_args()
     assert tui.clean_source(), 'mutation controls require clean baseline'
     args.receipt.parent.mkdir(parents=True, exist_ok=True)
@@ -134,10 +147,10 @@ def main():
                          '--bin', 'symvault', '--locked'], cwd=tree, env=env, timeout=900)
             mutant = base/'mutant-target/debug'/('symvault.exe' if os.name == 'nt' else 'symvault')
             mismatch = args.receipt.with_name('tui-mutation-binary-mismatch.json')
-            rejected(tui.ROOT, mutant, mismatch, 'source/binary mismatch', source_only=True)
+            rejected(tui.ROOT, mutant, mismatch, 'source/binary mismatch', source_only=True, snapshot_bin=args.snapshot_bin)
             summary['controls']['source-binary-mismatch'] = True
             semantic = args.receipt.with_name('tui-mutation-default-reveal.json')
-            result = rejected(tree, mutant, semantic, 'implicit canary reveal')
+            result = rejected(tree, mutant, semantic, 'implicit canary reveal', snapshot_bin=args.snapshot_bin.resolve())
             assert result['binary_source_verified'] is True
             assert result['rust'][0]['passed'] is False
             assert result['rust'][0]['case'] == tui.CASES[0]

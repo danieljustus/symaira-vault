@@ -23,6 +23,8 @@ struct Expected {
     #[serde(default)]
     entries: Option<Vec<ImportedEntry>>,
     error_contains: Option<String>,
+    /// Go's complete error text (the CLI prints it verbatim).
+    error: Option<String>,
 }
 
 #[test]
@@ -30,42 +32,54 @@ fn cxf_matches_pinned_go_fixture_and_negative_controls() {
     let fixture: Fixture =
         serde_json::from_str(include_str!("../../../testdata/port/import/cxf.json"))
             .expect("valid generated CXF fixture");
+    // 21 named cases plus the generated payload mutation sweep.
     assert_eq!(
         fixture.cases.len(),
-        20,
+        496,
         "fixture cardinality is part of the gate"
     );
+    let mut failures = Vec::new();
     for case in fixture.cases {
         let input = general_purpose::STANDARD
             .decode(&case.input_b64)
             .expect("fixture input base64");
         let result = parse_cxf(&input);
+        let id = &case.id;
         match (case.expected.entries, case.expected.error_contains) {
-            (Some(expected), None) => {
-                let got = result.unwrap_or_else(|error| panic!("{}: {error}", case.id));
-                assert_eq!(got, expected, "{}", case.id);
-            }
-            (None, Some(marker)) => {
-                let error = result.expect_err(&case.id);
-                assert!(
-                    error.to_string().contains(&marker),
-                    "{}: error {:?} does not contain {:?}",
-                    case.id,
-                    error,
-                    marker
-                );
-            }
-            (None, None) => {
-                let got = result.unwrap_or_else(|error| panic!("{}: {error}", case.id));
-                assert!(
-                    got.is_empty(),
-                    "{}: expected an empty successful import",
-                    case.id
-                );
-            }
-            other => panic!("{}: invalid expected shape: {:?}", case.id, other),
+            (Some(expected), None) => match result {
+                Ok(got) if got == expected => {}
+                Ok(got) => failures.push(format!(
+                    "{id}: entries differ\n  go:   {expected:?}\n  rust: {got:?}"
+                )),
+                Err(error) => failures.push(format!("{id}: rust error {error}")),
+            },
+            (None, Some(marker)) => match result {
+                Ok(got) => failures.push(format!("{id}: rust accepted {} entries", got.len())),
+                Err(error) => {
+                    let text = error.to_string();
+                    let go = case.expected.error.unwrap_or_default();
+                    if text != go {
+                        failures.push(format!("{id}: error differs\n  go:   {go}\n  rust: {text}"));
+                    }
+                    assert!(text.contains(&marker) || text != go, "{id}");
+                }
+            },
+            (None, None) => match result {
+                Ok(got) if got.is_empty() => {}
+                Ok(got) => {
+                    failures.push(format!("{id}: expected an empty import, got {}", got.len()))
+                }
+                Err(error) => failures.push(format!("{id}: rust error {error}")),
+            },
+            other => panic!("{id}: invalid expected shape: {other:?}"),
         }
     }
+    assert!(
+        failures.is_empty(),
+        "{} CXF cases differ from Go:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
 }
 
 #[test]

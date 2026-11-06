@@ -91,8 +91,10 @@ pub fn write_list<W: Write>(
                 .iter()
                 .map(|recipient| recipient.normalized.as_str())
                 .collect();
-            let rendered = serde_yaml_ng::to_string(&serde_json::json!({ "recipients": values }))
-                .map_err(|error| error.to_string())?;
+            let rendered =
+                symvault_gojson::yaml::to_string(&symvault_gojson::yaml::Node::from_json(
+                    &serde_json::json!({ "recipients": values }),
+                ));
             output
                 .write_all(rendered.as_bytes())
                 .map_err(|error| error.to_string())

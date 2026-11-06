@@ -1,0 +1,135 @@
+package vault
+
+// Capture helper for scripts/rust-port/reencrypt_journal_fixture.py. It is copied into an oracle worktree
+// as internal/vault/zz_reencrypt_journal_capture_test.go (never into this tree) and drives the production
+// journal functions to leave a vault in the state a crashed Go re-encryption leaves behind, then lets Go's
+// own recovery (vault.Open) produce the reference post-recovery tree.
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"filippo.io/age"
+)
+
+func copyVaultTree(t *testing.T, from, to string) {
+	t.Helper()
+	err := filepath.WalkDir(from, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(from, path)
+		target := filepath.Join(to, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o700)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, 0o600)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func snapshotVaultTree(t *testing.T, root string) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(root, path)
+		if rel == "." {
+			return nil
+		}
+		if d.IsDir() {
+			out[filepath.ToSlash(rel)] = "dir"
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		// The vault root is part of config.yaml and the journal: hash them with the @TREE_ROOT@ token.
+		data = bytes.ReplaceAll(data, []byte(root), []byte("@TREE_ROOT@"))
+		sum := sha256.Sum256(data)
+		out[filepath.ToSlash(rel)] = hex.EncodeToString(sum[:])
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestReencryptJournalFixtureCapture(t *testing.T) {
+	outDir := os.Getenv("SYMVAULT_REENCRYPT_FIXTURE_OUT")
+	if outDir == "" {
+		t.Skip("SYMVAULT_REENCRYPT_FIXTURE_OUT not set")
+	}
+	for _, scenario := range []string{"staged", "committed"} {
+		root, identity := initTestVault(t)
+		mustWriteEntry(t, root, identity, "cross-language", map[string]interface{}{"value": "go-production"})
+		FlushManifestUpdates()
+		candidates, err := collectReencryptCandidates(entriesDir(root))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(candidates) != 1 {
+			t.Fatalf("candidates = %d", len(candidates))
+		}
+		journal := newReencryptJournal(root, candidates)
+		if err := journal.persist(root); err != nil {
+			t.Fatal(err)
+		}
+		ciphertext, err := ReencryptBytes(candidates[0].raw, identity, []*age.X25519Recipient{identity.Recipient()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		staged, err := reencryptStage(candidates[0], ciphertext)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if scenario == "committed" {
+			if err := reencryptCommit(staged); err != nil {
+				t.Fatal(err)
+			}
+		}
+		closeReencryptCandidates(candidates)
+		if _, err := os.Stat(reencryptJournalPath(root)); err != nil {
+			t.Fatalf("%s: journal missing: %v", scenario, err)
+		}
+		pre := filepath.Join(outDir, scenario, "vault")
+		if err := os.MkdirAll(pre, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		copyVaultTree(t, root, pre)
+		if err := os.WriteFile(filepath.Join(outDir, scenario, "root"), []byte(root), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(outDir, scenario, "identity"), []byte(identity.String()), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		// Go's own recovery is the reference for the post-recovery tree.
+		if _, err := Open(root, identity); err != nil {
+			t.Fatalf("%s: Go Open recovery: %v", scenario, err)
+		}
+		got, err := ReadEntry(root, "cross-language", identity)
+		if err != nil || got.Data["value"] != "go-production" {
+			t.Fatalf("%s: Go recovered entry %v %v", scenario, got, err)
+		}
+		encoded, _ := json.MarshalIndent(snapshotVaultTree(t, root), "", "  ")
+		if err := os.WriteFile(filepath.Join(outDir, scenario, "go_post.json"), encoded, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

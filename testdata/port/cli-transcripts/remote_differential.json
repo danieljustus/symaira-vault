@@ -1,0 +1,699 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
+  "tests": {
+    "remote_init_matches_go_for_target_forms_and_rejects_empty_target": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "620cf652b9f298c7bd5b3c24ad8526fe4a003e52867b581f63a4723ff0c28f89",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "remote",
+              "init",
+              "alice@example.test"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Remote \"origin\" added successfully.\n"
+            },
+            "stderr": {
+              "text": "SSH target: alice@example.test\nRemote URL: ssh://alice@example.test/~symvault-remote.git\nBare repo path: ~/symvault-remote.git\nCreate the bare repo on the remote with:\n  ssh example.test 'git init --bare ~/symvault-remote.git'\nThen push with: symvault git push\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n\tignorecase = true\n\tprecomposeunicode = true\n[remote \"origin\"]\n\turl = ssh://alice@example.test/~symvault-remote.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+              }
+            },
+            {
+              "root": 1,
+              "path": "root/.symvault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/root\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "1ff6749dafa8347fc313dd586bc9e36e2c59d51e40066072b0ed337b6990b135",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:4>/root",
+              "remote",
+              "init",
+              "alice@example.test:/srv/ignored.git",
+              "--name",
+              "upstream",
+              "--path",
+              "/srv/custom.git"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:5>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:4>/root",
+              "XDG_CACHE_HOME": "<ROOT:5>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:5>/root/config",
+              "XDG_DATA_HOME": "<ROOT:5>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Remote \"upstream\" added successfully.\n"
+            },
+            "stderr": {
+              "text": "SSH target: alice@example.test:/srv/ignored.git\nRemote URL: ssh://alice@example.test/~srv/custom.git\nBare repo path: /srv/custom.git\nCreate the bare repo on the remote with:\n  ssh example.test 'git init --bare /srv/custom.git'\nThen push with: symvault git push\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 4,
+              "path": "root/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n\tignorecase = true\n\tprecomposeunicode = true\n[remote \"upstream\"]\n\turl = ssh://alice@example.test/~srv/custom.git\n\tfetch = +refs/heads/*:refs/remotes/upstream/*\n"
+              }
+            },
+            {
+              "root": 5,
+              "path": "root/.symvault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:4>/root\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "606e2a18283525519d1de55456888bf540016a4957288596e35c1b468b5a93e4",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:8>/root",
+              "remote",
+              "init",
+              "   "
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:9>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:8>/root",
+              "XDG_CACHE_HOME": "<ROOT:9>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:9>/root/config",
+              "XDG_DATA_HOME": "<ROOT:9>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: ssh-target must not be empty\nError: ssh-target must not be empty\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "remote_status_matches_go_for_local_repository_states": {
+      "seeds": [
+        {
+          "name": "init",
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n\tignorecase = true\n\tprecomposeunicode = true\n[user]\n\tname = Symaira Vault\n\temail = symvault@example.com\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/description",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "Unnamed repository; edit this file 'description' to name the repository.\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/info/exclude",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n# For a project mostly in C, the following would be a good set of\n# exclude patterns (uncomment them if you want to use them):\n# *.[oa]\n# *~\n/.symvault-rust\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.gitignore",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault-rust",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"schema\": 1,\n  \"kind\": \"rust-created\",\n  \"created_at\": \"2026-11-03T22:23:02.797711Z\",\n  \"vault_id\": \"9b07b89ba9ee3c01cec592a19228ec2497b2a06576a7da13d6f03a660677d4cd\"\n}\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: false\nvaultDir: <ROOT:0>/root\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIHdYbVZwdVczajlXZS9xQU42QlBnWGcgdD0zLG09NjU1MzYscD00CkxLOFRld2NSRUM0MExndi9jbzJzUlJHRlZ1UUZ4dnNzQ05KeHNiN3o3RVZudVhLZkcybysvTElBc0dFCi0+IDJVPy1ncmVhc2UgbFYzV34gLEF0YwpocndGdFFIYmVabllBSG9aTW9lM09jTDNhdmZZZU5YWkY4UFRMU1BjbUR0eEUycklEaTJoU3ZkR25DcwotLS0gN1dpQUZyTlV3SldkTEJiWFc2N2ZXWEdORjhRZkIxM0RuS0RNcFhIWVJGdwo3IMNVXGvE4vnYuaZ9nT6WgOI5zTQgCuyJlx3X5Rfkvj02i0MGODx9lChgVv/pZCBMcRW9GKPWUvA0Y2wJ0f4vvLSBBd1KsfynPuWFZmIFomuRBzzjToZSHNITvAVAHtV1uhqHt7JiOPxX"
+              }
+            }
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1mvr2acw7e7mmd87s5v3tvdt3q9j4mgtk9aaylgs8kux7e3w9t40qeve5nd\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
+        }
+      ],
+      "calls": [
+        {
+          "key": "8947f599cf21de0fde917fa9f6080fac954c2320878f386cd0e611c4392ae6b4",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "remote",
+              "status"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "No remote configured.\n"
+            },
+            "stderr": {
+              "text": "Use 'symvault remote init <ssh-target>' to configure a remote.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ba3e0ed5377fb53942b9a3c4c59b1d9a1241b4335a64a3fab2de210239d46b59",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "--output",
+              "json",
+              "remote",
+              "status"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"configured\":false,\"message\":\"No remote configured\"}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f9e0c458a82d9b8f67b888dc96316a3e4e073585f29efe803b15ef541065dfca",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "--quiet",
+              "remote",
+              "status"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Use 'symvault remote init <ssh-target>' to configure a remote.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "8947f599cf21de0fde917fa9f6080fac954c2320878f386cd0e611c4392ae6b4",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "remote",
+              "status"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Remote configuration for \"origin\":\n  URL:      <ROOT:2>/root\n  AutoPush: disabled\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ba3e0ed5377fb53942b9a3c4c59b1d9a1241b4335a64a3fab2de210239d46b59",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "--output",
+              "json",
+              "remote",
+              "status"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"configured\":true,\"remote\":{\"autoPush\":false,\"name\":\"origin\",\"url\":\"<ROOT:2>/root\"}}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "57b19b9ee38dbb93c73304c3dc9a69b0bce1b0707fe684a1b9082087bb5db1e6",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "--output",
+              "yaml",
+              "remote",
+              "status"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "configured: true\nremote:\n    autoPush: false\n    name: origin\n    url: <ROOT:2>/root\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ba3e0ed5377fb53942b9a3c4c59b1d9a1241b4335a64a3fab2de210239d46b59",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "--output",
+              "json",
+              "remote",
+              "status"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"configured\":true,\"remote\":{\"autoPush\":false,\"name\":\"origin\",\"url\":\"ssh://host/über<&>\\u2028repo\"}}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "57b19b9ee38dbb93c73304c3dc9a69b0bce1b0707fe684a1b9082087bb5db1e6",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "--output",
+              "yaml",
+              "remote",
+              "status"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "configured: true\nremote:\n    autoPush: false\n    name: origin\n    url: 'ssh://host/über<&>         repo'\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ba3e0ed5377fb53942b9a3c4c59b1d9a1241b4335a64a3fab2de210239d46b59",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "--output",
+              "json",
+              "remote",
+              "status"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"configured\":true,\"remote\":{\"autoPush\":false,\"name\":\"origin\",\"url\":\"ssh://host/line\\n  next\"}}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "57b19b9ee38dbb93c73304c3dc9a69b0bce1b0707fe684a1b9082087bb5db1e6",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "--output",
+              "yaml",
+              "remote",
+              "status"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "configured: true\nremote:\n    autoPush: false\n    name: origin\n    url: |-\n        ssh://host/line\n          next\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

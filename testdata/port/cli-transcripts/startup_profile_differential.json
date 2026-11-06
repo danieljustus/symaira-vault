@@ -1,0 +1,651 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+    "go_version": "go1.26.10",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "linux",
+    "macos"
+  ],
+  "tests": {
+    "differential_child_marker_reports_integer_on_both": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "7172832df0988be37927e5731d1c324bfdf5da67bdf0a9ab6df322650af02ce1",
+          "request": {
+            "args": [
+              "startup-profile"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "LC_ALL": "C.UTF-8",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_PASSPHRASE": "differential-test-only",
+              "SYMVAULT_STARTUP_PROFILE_CHILD": "1",
+              "SYMVAULT_VAULT": "<ROOT:0>/home/missing-vault",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/xdg/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/xdg/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/xdg/data",
+              "XDG_STATE_HOME": "<ROOT:0>/home/xdg/state"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "99917\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "differential_count_clamping_matches": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "83912218ac8402f922274e58d250895ef7dd62c0df85d912d667dd97d168fbc1",
+          "request": {
+            "args": [
+              "startup-profile",
+              "--count",
+              "0"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "LC_ALL": "C.UTF-8",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_PASSPHRASE": "differential-test-only",
+              "SYMVAULT_VAULT": "<ROOT:0>/home/missing-vault",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/xdg/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/xdg/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/xdg/data",
+              "XDG_STATE_HOME": "<ROOT:0>/home/xdg/state"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Profiling startup time (1 iterations)...\n\nStartup Time Statistics\n──────────────────────────────────────────────────\n  Min:        12.775083ms\n  Max:        12.775083ms\n  Avg:        12.775083ms\n  P95:        12.775083ms\n  P99:        12.775083ms\n  Success:    1 / 1 iterations\n\nEnvironment\n──────────────────────────────────────────────────\n  Go:         go1.26.10\n  OS/Arch:    darwin/arm64\n  CPU:        12 core(s)\n  GOMAXPROCS: 12\n\nOptimization Hints\n──────────────────────────────────────────────────\n  • Init functions run sequentially before main(); heavy inits slow every command.\n  • Use lazy initialization (sync.Once) for expensive package-level setup.\n  • Reduce import breadth: each imported package adds init() overhead.\n  • Consider build tags to exclude unused features from default builds.\n  • Run 'symvault startup-profile --trace startup.trace' then 'go tool trace startup.trace'\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "33a9c169d48eb3f40cb67181cbecdce7c75e8e4df6652db7f90c9e1ae9ffce90",
+          "request": {
+            "args": [
+              "startup-profile",
+              "--count",
+              "-5"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "LC_ALL": "C.UTF-8",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_PASSPHRASE": "differential-test-only",
+              "SYMVAULT_VAULT": "<ROOT:0>/home/missing-vault",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/xdg/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/xdg/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/xdg/data",
+              "XDG_STATE_HOME": "<ROOT:0>/home/xdg/state"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Profiling startup time (1 iterations)...\n\nStartup Time Statistics\n──────────────────────────────────────────────────\n  Min:        20.184459ms\n  Max:        20.184459ms\n  Avg:        20.184459ms\n  P95:        20.184459ms\n  P99:        20.184459ms\n  Success:    1 / 1 iterations\n\nEnvironment\n──────────────────────────────────────────────────\n  Go:         go1.26.10\n  OS/Arch:    darwin/arm64\n  CPU:        12 core(s)\n  GOMAXPROCS: 12\n\nOptimization Hints\n──────────────────────────────────────────────────\n  • Init functions run sequentially before main(); heavy inits slow every command.\n  • Use lazy initialization (sync.Once) for expensive package-level setup.\n  • Reduce import breadth: each imported package adds init() overhead.\n  • Consider build tags to exclude unused features from default builds.\n  • Run 'symvault startup-profile --trace startup.trace' then 'go tool trace startup.trace'\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "c09a2611fcc572eb543c7355538d0ab586a3c444b26182d83eb35c28eca0c49f",
+          "request": {
+            "args": [
+              "startup-profile",
+              "-n",
+              "0"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "LC_ALL": "C.UTF-8",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_PASSPHRASE": "differential-test-only",
+              "SYMVAULT_VAULT": "<ROOT:0>/home/missing-vault",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/xdg/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/xdg/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/xdg/data",
+              "XDG_STATE_HOME": "<ROOT:0>/home/xdg/state"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Profiling startup time (1 iterations)...\n\nStartup Time Statistics\n──────────────────────────────────────────────────\n  Min:        22.39575ms\n  Max:        22.39575ms\n  Avg:        22.39575ms\n  P95:        22.39575ms\n  P99:        22.39575ms\n  Success:    1 / 1 iterations\n\nEnvironment\n──────────────────────────────────────────────────\n  Go:         go1.26.10\n  OS/Arch:    darwin/arm64\n  CPU:        12 core(s)\n  GOMAXPROCS: 12\n\nOptimization Hints\n──────────────────────────────────────────────────\n  • Init functions run sequentially before main(); heavy inits slow every command.\n  • Use lazy initialization (sync.Once) for expensive package-level setup.\n  • Reduce import breadth: each imported package adds init() overhead.\n  • Consider build tags to exclude unused features from default builds.\n  • Run 'symvault startup-profile --trace startup.trace' then 'go tool trace startup.trace'\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "differential_missing_and_broken_config_still_benchmark": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "88aaf74da6ddf2254ec5ac1132c24ad9c670ee50868c9525853a832a2ef869e3",
+          "request": {
+            "args": [
+              "startup-profile",
+              "--count",
+              "1"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "LC_ALL": "C.UTF-8",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_PASSPHRASE": "differential-test-only",
+              "SYMVAULT_VAULT": "<ROOT:0>/home/missing-vault",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/xdg/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/xdg/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/xdg/data",
+              "XDG_STATE_HOME": "<ROOT:0>/home/xdg/state"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Profiling startup time (1 iterations)...\n\nStartup Time Statistics\n──────────────────────────────────────────────────\n  Min:        13.33275ms\n  Max:        13.33275ms\n  Avg:        13.33275ms\n  P95:        13.33275ms\n  P99:        13.33275ms\n  Success:    1 / 1 iterations\n\nEnvironment\n──────────────────────────────────────────────────\n  Go:         go1.26.10\n  OS/Arch:    darwin/arm64\n  CPU:        12 core(s)\n  GOMAXPROCS: 12\n\nOptimization Hints\n──────────────────────────────────────────────────\n  • Init functions run sequentially before main(); heavy inits slow every command.\n  • Use lazy initialization (sync.Once) for expensive package-level setup.\n  • Reduce import breadth: each imported package adds init() overhead.\n  • Consider build tags to exclude unused features from default builds.\n  • Run 'symvault startup-profile --trace startup.trace' then 'go tool trace startup.trace'\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "bb6bf46c8d694f342dca78dd7c98bf7d2efb217ac26a586fef5fa173c2dad3e8",
+          "request": {
+            "args": [
+              "startup-profile",
+              "--count",
+              "1"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/home",
+              "LC_ALL": "C.UTF-8",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_PASSPHRASE": "differential-test-only",
+              "SYMVAULT_VAULT": "<ROOT:1>/home/missing-vault",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:1>/home/xdg/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/home/xdg/config",
+              "XDG_DATA_HOME": "<ROOT:1>/home/xdg/data",
+              "XDG_STATE_HOME": "<ROOT:1>/home/xdg/state"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Profiling startup time (1 iterations)...\n\nStartup Time Statistics\n──────────────────────────────────────────────────\n  Min:        13.95825ms\n  Max:        13.95825ms\n  Avg:        13.95825ms\n  P95:        13.95825ms\n  P99:        13.95825ms\n  Success:    1 / 1 iterations\n\nEnvironment\n──────────────────────────────────────────────────\n  Go:         go1.26.10\n  OS/Arch:    darwin/arm64\n  CPU:        12 core(s)\n  GOMAXPROCS: 12\n\nOptimization Hints\n──────────────────────────────────────────────────\n  • Init functions run sequentially before main(); heavy inits slow every command.\n  • Use lazy initialization (sync.Once) for expensive package-level setup.\n  • Reduce import breadth: each imported package adds init() overhead.\n  • Consider build tags to exclude unused features from default builds.\n  • Run 'symvault startup-profile --trace startup.trace' then 'go tool trace startup.trace'\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "differential_positional_and_empty_trace_are_accepted_on_both": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "c50cf5174b2fbcba619944736c062df1843ce4e11e1532790d603b0bcbd7ed09",
+          "request": {
+            "args": [
+              "startup-profile",
+              "extra-positional",
+              "-n",
+              "1"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "LC_ALL": "C.UTF-8",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_PASSPHRASE": "differential-test-only",
+              "SYMVAULT_VAULT": "<ROOT:0>/home/missing-vault",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/xdg/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/xdg/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/xdg/data",
+              "XDG_STATE_HOME": "<ROOT:0>/home/xdg/state"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Profiling startup time (1 iterations)...\n\nStartup Time Statistics\n──────────────────────────────────────────────────\n  Min:        14.730958ms\n  Max:        14.730958ms\n  Avg:        14.730958ms\n  P95:        14.730958ms\n  P99:        14.730958ms\n  Success:    1 / 1 iterations\n\nEnvironment\n──────────────────────────────────────────────────\n  Go:         go1.26.10\n  OS/Arch:    darwin/arm64\n  CPU:        12 core(s)\n  GOMAXPROCS: 12\n\nOptimization Hints\n──────────────────────────────────────────────────\n  • Init functions run sequentially before main(); heavy inits slow every command.\n  • Use lazy initialization (sync.Once) for expensive package-level setup.\n  • Reduce import breadth: each imported package adds init() overhead.\n  • Consider build tags to exclude unused features from default builds.\n  • Run 'symvault startup-profile --trace startup.trace' then 'go tool trace startup.trace'\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "7acbc41f71f6562a6496336bd4edd4631e7e97f00019df1d5b7d0eea4e01f37b",
+          "request": {
+            "args": [
+              "startup-profile",
+              "--trace",
+              "",
+              "-n",
+              "1"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "LC_ALL": "C.UTF-8",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_PASSPHRASE": "differential-test-only",
+              "SYMVAULT_VAULT": "<ROOT:0>/home/missing-vault",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/xdg/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/xdg/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/xdg/data",
+              "XDG_STATE_HOME": "<ROOT:0>/home/xdg/state"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Profiling startup time (1 iterations)...\n\nStartup Time Statistics\n──────────────────────────────────────────────────\n  Min:        20.49575ms\n  Max:        20.49575ms\n  Avg:        20.49575ms\n  P95:        20.49575ms\n  P99:        20.49575ms\n  Success:    1 / 1 iterations\n\nEnvironment\n──────────────────────────────────────────────────\n  Go:         go1.26.10\n  OS/Arch:    darwin/arm64\n  CPU:        12 core(s)\n  GOMAXPROCS: 12\n\nOptimization Hints\n──────────────────────────────────────────────────\n  • Init functions run sequentially before main(); heavy inits slow every command.\n  • Use lazy initialization (sync.Once) for expensive package-level setup.\n  • Reduce import breadth: each imported package adds init() overhead.\n  • Consider build tags to exclude unused features from default builds.\n  • Run 'symvault startup-profile --trace startup.trace' then 'go tool trace startup.trace'\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "714eba501593cec44d54035f3f4c9c1b1bfd3f71e53f61afa1433ec5f43c7fc0",
+          "request": {
+            "args": [
+              "startup-profile",
+              "-n",
+              "1",
+              "--top",
+              "-3"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "LC_ALL": "C.UTF-8",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_PASSPHRASE": "differential-test-only",
+              "SYMVAULT_VAULT": "<ROOT:0>/home/missing-vault",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/xdg/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/xdg/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/xdg/data",
+              "XDG_STATE_HOME": "<ROOT:0>/home/xdg/state"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Profiling startup time (1 iterations)...\n\nStartup Time Statistics\n──────────────────────────────────────────────────\n  Min:        21.242416ms\n  Max:        21.242416ms\n  Avg:        21.242416ms\n  P95:        21.242416ms\n  P99:        21.242416ms\n  Success:    1 / 1 iterations\n\nEnvironment\n──────────────────────────────────────────────────\n  Go:         go1.26.10\n  OS/Arch:    darwin/arm64\n  CPU:        12 core(s)\n  GOMAXPROCS: 12\n\nOptimization Hints\n──────────────────────────────────────────────────\n  • Init functions run sequentially before main(); heavy inits slow every command.\n  • Use lazy initialization (sync.Once) for expensive package-level setup.\n  • Reduce import breadth: each imported package adds init() overhead.\n  • Consider build tags to exclude unused features from default builds.\n  • Run 'symvault startup-profile --trace startup.trace' then 'go tool trace startup.trace'\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "differential_report_matches_after_normalizing_runtime_specific_lines": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "88aaf74da6ddf2254ec5ac1132c24ad9c670ee50868c9525853a832a2ef869e3",
+          "request": {
+            "args": [
+              "startup-profile",
+              "--count",
+              "1"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "LC_ALL": "C.UTF-8",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_PASSPHRASE": "differential-test-only",
+              "SYMVAULT_VAULT": "<ROOT:0>/home/missing-vault",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/xdg/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/xdg/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/xdg/data",
+              "XDG_STATE_HOME": "<ROOT:0>/home/xdg/state"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Profiling startup time (1 iterations)...\n\nStartup Time Statistics\n──────────────────────────────────────────────────\n  Min:        45.873833ms\n  Max:        45.873833ms\n  Avg:        45.873833ms\n  P95:        45.873833ms\n  P99:        45.873833ms\n  Success:    1 / 1 iterations\n\nEnvironment\n──────────────────────────────────────────────────\n  Go:         go1.26.10\n  OS/Arch:    darwin/arm64\n  CPU:        12 core(s)\n  GOMAXPROCS: 12\n\nOptimization Hints\n──────────────────────────────────────────────────\n  • Init functions run sequentially before main(); heavy inits slow every command.\n  • Use lazy initialization (sync.Once) for expensive package-level setup.\n  • Reduce import breadth: each imported package adds init() overhead.\n  • Consider build tags to exclude unused features from default builds.\n  • Run 'symvault startup-profile --trace startup.trace' then 'go tool trace startup.trace'\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "differential_trace_with_unusable_path_exits_one_on_both": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "d2851318670b1aecd9932f18414ca8808d3f9f6c8c43a2a870ff500517f7ae00",
+          "request": {
+            "args": [
+              "startup-profile",
+              "--trace",
+              "<ROOT:0>"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "LC_ALL": "C.UTF-8",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_PASSPHRASE": "differential-test-only",
+              "SYMVAULT_VAULT": "<ROOT:0>/home/missing-vault",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/xdg/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/xdg/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/xdg/data",
+              "XDG_STATE_HOME": "<ROOT:0>/home/xdg/state"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: cannot create trace file: open <ROOT:0>: is a directory\nError: cannot create trace file: open <ROOT:0>: is a directory\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "differential_unknown_flag_exits_one_on_both": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "b72c7a404b2fb68261b811c57e0501b52e143afc914bf388bcedc0fe3149de91",
+          "request": {
+            "args": [
+              "startup-profile",
+              "--definitely-not-a-flag"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "LC_ALL": "C.UTF-8",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_PASSPHRASE": "differential-test-only",
+              "SYMVAULT_VAULT": "<ROOT:0>/home/missing-vault",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/xdg/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/xdg/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/xdg/data",
+              "XDG_STATE_HOME": "<ROOT:0>/home/xdg/state"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown flag: --definitely-not-a-flag\nError: unknown flag: --definitely-not-a-flag\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "differential_unsupported_json_error_is_byte_identical": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "a336f4c7e4e06b33e09d8e38180c32d551c1c0c67d77ab60f04b051b3f58a10c",
+          "request": {
+            "args": [
+              "startup-profile",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "LC_ALL": "C.UTF-8",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_PASSPHRASE": "differential-test-only",
+              "SYMVAULT_VAULT": "<ROOT:0>/home/missing-vault",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/xdg/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/xdg/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/xdg/data",
+              "XDG_STATE_HOME": "<ROOT:0>/home/xdg/state"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: output format \"json\" is not supported by 'symvault startup-profile' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault startup-profile' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+            },
+            "exit_code": 9,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "a5b538e751b077e1eba88d6e1c89329e879ac9c1e11e15752d6147c0e44a19b4",
+          "request": {
+            "args": [
+              "startup-profile",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "LC_ALL": "C.UTF-8",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_PASSPHRASE": "differential-test-only",
+              "SYMVAULT_VAULT": "<ROOT:0>/home/missing-vault",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/xdg/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/xdg/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/xdg/data",
+              "XDG_STATE_HOME": "<ROOT:0>/home/xdg/state"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: output format \"yaml\" is not supported by 'symvault startup-profile' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"yaml\" is not supported by 'symvault startup-profile' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+            },
+            "exit_code": 9,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "8fcc1a8b802d2b8e493b427d82c65787502ec46795d19f5dc7571cd8429b5ba8",
+          "request": {
+            "args": [
+              "startup-profile",
+              "extra-positional",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "LC_ALL": "C.UTF-8",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_PASSPHRASE": "differential-test-only",
+              "SYMVAULT_VAULT": "<ROOT:0>/home/missing-vault",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/xdg/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/xdg/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/xdg/data",
+              "XDG_STATE_HOME": "<ROOT:0>/home/xdg/state"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: output format \"json\" is not supported by 'symvault startup-profile' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault startup-profile' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+            },
+            "exit_code": 9,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "6133d086d20e381386c46e25f1bc6c5413e810cf726332ba32b4c239364bb2ec",
+          "request": {
+            "args": [
+              "startup-profile",
+              "--json",
+              "--quiet"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "LC_ALL": "C.UTF-8",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_PASSPHRASE": "differential-test-only",
+              "SYMVAULT_VAULT": "<ROOT:0>/home/missing-vault",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/xdg/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/xdg/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/xdg/data",
+              "XDG_STATE_HOME": "<ROOT:0>/home/xdg/state"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: output format \"json\" is not supported by 'symvault startup-profile' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault startup-profile' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+            },
+            "exit_code": 9,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

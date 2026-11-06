@@ -1,0 +1,8 @@
+.git
+target
+dist
+**/target
+client
+*.test
+.env
+identity.age

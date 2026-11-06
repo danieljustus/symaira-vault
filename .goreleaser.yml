@@ -5,9 +5,11 @@ version: 2
 
 before:
   hooks:
-    - env GOWORK=off go mod tidy
-    - env GOWORK=off go mod download
-    - env GOWORK=off make completions
+    # The Rust CLI is the shipped binary (Go CLI retired, ADR in docs/rust-port).
+    # Completions and man pages come from the Rust binary's own generators.
+    # (Man pages go to dist/, which GoReleaser requires to be empty until the
+    # build starts, so they are generated in the first build's pre hook.)
+    - env SYMVAULT_VERSION={{ .Version }} make completions
     - >-
       sh -c 'SENSITIVE_FILES="identity.age mcp-token .env coverage coverage.out *.test cmd.test mcp.test vault.test";
       for f in $SENSITIVE_FILES; do
@@ -22,56 +24,67 @@ before:
       fi;
       echo "Secret/artifact gate passed"'
 
+# Both builds compile crates/symvault-cli. SYMVAULT_VERSION is the only stamp the
+# Rust CLI reads (option_env! in crates/symvault-cli/src/main.rs); commit/date/
+# builtBy have no Rust counterpart. Linux targets are static musl (the Go
+# builds were CGO_ENABLED=0) cross-built with cargo-zigbuild; darwin builds
+# natively with cargo so the system frameworks resolve against the host SDK.
+# Both go through cargo-auditable so syft finds the crate list in the binary.
+#
+# Tool versions are pinned in release.yml and the Dockerfile (cargo-zigbuild
+# 0.23.4, cargo-auditable 0.7.5, ziglang 0.17.0, Rust 1.98.0 via
+# rust-toolchain.toml); `--locked` pins every crate.
+#
+# Reproducibility choice: mod_timestamp pins each binary's mtime to the commit
+# time ({{ .CommitTimestamp }}; this repo does not export SOURCE_DATE_EPOCH, the
+# commit timestamp is the same instant it would carry), so re-running the
+# release on the same commit does not change file metadata that GoReleaser
+# copies into archives and MCPB bundles. Byte-identical binaries are
+# NOT claimed: cargo embeds build-host paths and the zig/Apple linkers are not
+# verified deterministic here, and the LICENSE/README/completions/man members
+# keep their checkout mtimes. The Rust sources define no build timestamp
+# (SYMVAULT_VERSION is the only stamp), so nothing else varies per run.
 builds:
   - id: symvault-static
-    main: .
+    builder: rust
     binary: symvault
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    targets:
+      - x86_64-unknown-linux-musl
+      - aarch64-unknown-linux-musl
+    tool: ./scripts/cargo-auditable.sh
+    command: zigbuild
     hooks:
       pre:
-        - cmd: sh -c 'if [ "{{ .Os }}/{{ .Arch }}" = "linux/amd64" ]; then env GOWORK=off make release-manpages; fi'
+        - cmd: sh -c 'if [ "{{ .Os }}/{{ .Arch }}" = "linux/amd64" ]; then env SYMVAULT_VERSION={{ .Version }} make release-manpages; fi'
       post:
         - 'scripts/build-mcpb.sh --version "{{ .Version }}" --os "{{ .Os }}" --arch "{{ .Arch }}" --binary "{{ .Path }}"'
+    flags:
+      - --release
+      - --locked
+      - -p=symvault-cli
+      - --bin=symvault
     env:
-      - CGO_ENABLED=0
-      - GOWORK=off
-    goos:
-      - linux
-      - freebsd
-    goarch:
-      - amd64
-      - arm64
-    goamd64:
-      - v1
-    goarm:
-      - "7"
-    ldflags:
-      - -s -w
-      - -X main.version={{.Version}}
-      - -X main.commit={{.Commit}}
-      - -X main.date={{.Date}}
-      - -X main.builtBy=goreleaser
-    mod_timestamp: "{{ .CommitTimestamp }}"
+      - SYMVAULT_VERSION={{ .Version }}
   - id: symvault-darwin
-    main: .
+    builder: rust
     binary: symvault
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    targets:
+      - aarch64-apple-darwin
+    tool: ./scripts/cargo-auditable.sh
+    command: build
+    flags:
+      - --release
+      - --locked
+      - -p=symvault-cli
+      - --bin=symvault
+    env:
+      - SYMVAULT_VERSION={{ .Version }}
     hooks:
       post:
         - 'scripts/build-mcpb.sh --version "{{ .Version }}" --os "{{ .Os }}" --arch "{{ .Arch }}" --binary "{{ .Path }}"'
         - cmd: sh -c 'if [ -n "${CODESIGN_IDENTITY:-}" ]; then codesign -s "$CODESIGN_IDENTITY" --timestamp --options runtime "{{ .Path }}"; echo "Signed {{ .Path }}"; fi'
-    env:
-      - CGO_ENABLED=1
-      - GOWORK=off
-    goos:
-      - darwin
-    goarch:
-      - arm64
-    ldflags:
-      - -s -w
-      - -X main.version={{.Version}}
-      - -X main.commit={{.Commit}}
-      - -X main.date={{.Date}}
-      - -X main.builtBy=goreleaser
-    mod_timestamp: "{{ .CommitTimestamp }}"
 
 # macOS code signing and notarization
 # Requires Apple Developer ID (Team ID: M4744F3TAA) and App Store Connect API keys.
@@ -160,9 +173,14 @@ release:
     ### Download
     Download the appropriate binary for your platform from the assets below.
 
+    `symvault` needs the `git` executable at runtime (vault history and sync
+    shell out to it). The deb/rpm/apk packages depend on `git`; install it
+    yourself when using the archive, install script or Homebrew-less setups
+    (macOS: `xcode-select --install` or `brew install git`).
+
     ### Build from source
     ```bash
-    go install github.com/danieljustus/symaira-vault@{{ .Tag }}
+    cargo install --locked --git https://github.com/danieljustus/symaira-vault --tag {{ .Tag }} symvault-cli
     ```
 
 # Homebrew: Formula/symvault.rb is rendered by scripts/homebrew-formula.sh and
@@ -181,7 +199,9 @@ nfpms:
       - deb
       - rpm
       - apk
-    recommends:
+    # git is a hard runtime dependency of the Rust CLI (it shells out to git;
+    # the Go CLI embedded go-git). See docs/adr/0033-git-binary-runtime-dependency.md.
+    dependencies:
       - git
     bindir: /usr/bin
     section: utils

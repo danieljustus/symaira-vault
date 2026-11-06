@@ -21,8 +21,15 @@
 //! unit test `flag_types_match_the_command_tree` compares every flag both trees
 //! share against the Go type recorded in `command-tree.json`.
 //!
-//! Known limits: only booleans and the integer flags in `INT_FLAGS` get Go's
-//! `invalid argument` wording (other int/int64/duration flags are not parsed); a
+//! Every typed flag of the command tree gets pflag's `invalid argument` wording while
+//! the flags are parsed (so before the argument validator, the output gate, the
+//! required-flag check and any vault precondition): booleans, the `int`/`int64` flags
+//! in `INT_FLAGS`, the `time.Duration` flags in `DURATION_FLAGS` and the
+//! `stringSlice` flags in `STRING_SLICE_FLAGS` (a CSV parse error). The unit test
+//! `typed_flag_tables_cover_every_typed_flag_of_the_command_tree` fails when the tree
+//! has a typed flag no table names.
+//!
+//! Known limits: a
 //! flag that exists only in Go is not reported as unknown by Rust's tree; and the
 //! suggestion order of `SUGGESTION_ORDER` is the strict partial order measured
 //! from the oracle, not Go's registration order.
@@ -60,8 +67,78 @@ const JOIN_SUFFIX: &str = " — either '<remote-url> <token>' or '--pairing-file
 const JOIN_PAIRING_FILE_MESSAGE: &str =
     "with --pairing-file, pass only the pairing token: 'device join --pairing-file <path> <token>'";
 
-/// Integer-valued flags, by command path and long name.
-const INT_FLAGS: &[(&str, &str)] = &[("generate", "length")];
+/// Flags Go declares as `int` or `int64`, by command path and long name. pflag parses
+/// the value with `strconv.ParseInt(s, 0, 64)` while the flags are parsed, so a
+/// malformed one is a usage error even in an uninitialized vault.
+const INT_FLAGS: &[(&str, &str)] = &[
+    ("add", "length"),
+    ("agent audit", "limit"),
+    ("audit", "tail"),
+    ("file add", "max-size"),
+    ("generate", "length"),
+    ("intake", "batch-limit"),
+    ("intake", "max-files"),
+    ("mcp", "port"),
+    ("serve", "port"),
+    ("startup-profile", "count"),
+    ("startup-profile", "top"),
+];
+
+/// Flags Go declares as `time.Duration` whose value pflag parses with
+/// `time.ParseDuration` before the command runs (so a malformed value is a usage
+/// error even in an uninitialized vault).
+const DURATION_FLAGS: &[(&str, &str)] = &[
+    ("dynamic generate", "ttl"),
+    ("file use", "timeout"),
+    ("intake watch", "debounce"),
+    ("intake watch", "interval"),
+    ("run", "timeout"),
+    ("unlock", "ttl"),
+];
+
+/// Flags Go declares as `stringSlice`: pflag reads every value as one CSV record
+/// (`encoding/csv`), so a stray quote is a usage error before the command runs.
+/// (`stringArray` flags take the value verbatim and cannot fail.)
+const STRING_SLICE_FLAGS: &[(&str, &str)] = &[
+    ("agent token new", "tools"),
+    ("agent token rotate", "tools"),
+    ("broker", "passthrough"),
+    ("doctor", "exclude"),
+    ("doctor", "only"),
+    ("run", "broker-passthrough"),
+];
+
+/// Flags cobra's `MarkFlagRequired` makes mandatory, by command path. Cobra
+/// reports the unset ones after the argument validator and the root
+/// `PersistentPreRunE` (the output-format gate) and before the command body, as
+/// `required flag(s) "a", "b" not set`, in flag registration order.
+const REQUIRED_FLAGS: &[(&str, &[&str])] = &[
+    ("dynamic generate", &["engine", "role"]),
+    ("export", &["format"]),
+    ("profile add", &["vault"]),
+    ("template generate", &["type"]),
+];
+
+/// Local bool flags of commands the native CLI parses by hand (no clap
+/// definition, so the tree cannot type them). pflag parses them before cobra
+/// validates arguments, and a local flag shadows a persistent one of the same
+/// name (`update info --json`). Checked against `command-tree.json` by
+/// `hand_parsed_bool_flags_match_the_command_tree`.
+const HAND_PARSED_BOOLS: &[(&str, &[&str])] = &[
+    ("update apply", &["dry-run", "force", "json"]),
+    ("update check", &["force", "json", "quiet"]),
+    ("update info", &["json"]),
+];
+
+/// Go commands with `SilenceErrors`: cobra omits its copy, but the root
+/// executor still prints the returned error once.
+const SILENCED: &[&str] = &["update apply", "update check", "update info"];
+
+fn hand_parsed_bool(path: &str, name: &str) -> bool {
+    HAND_PARSED_BOOLS
+        .iter()
+        .any(|(command, flags)| *command == path && flags.contains(&name))
+}
 
 const SUGGESTION_ORDER: &[&str] = &[
     "audit",
@@ -354,6 +431,7 @@ const JSON_REFUSED: &[&str] = &[
     "audit export",
     "audit rotate-key",
     "auth rotate-passphrase",
+    "auth set",
     "backup",
     "broker",
     "dynamic generate",
@@ -429,6 +507,7 @@ const OUTPUT_REFUSED: &[&str] = &[
     "audit",
     "audit rotate-key",
     "auth rotate-passphrase",
+    "auth set",
     "auth status",
     "backup",
     "broker",
@@ -539,13 +618,39 @@ fn arity_message(path: &str, count: usize, flags: ValidatorFlags) -> Option<Stri
 /// The format the gate refuses for this command, if any: `--json` wins over
 /// `--output`, exactly like the persistent flags it models.
 fn refused_format(path: &str, json_flag: bool, output: Option<&str>) -> Option<String> {
-    if json_flag && JSON_REFUSED.contains(&path) {
+    // cobra's generated `completion <shell>` commands support no other format.
+    let builtin = path.starts_with("completion ");
+    if json_flag && (builtin || JSON_REFUSED.contains(&path)) {
         return Some("json".to_owned());
     }
     output
         .filter(|value| *value != "text")
-        .filter(|_| OUTPUT_REFUSED.contains(&path))
+        .filter(|_| builtin || OUTPUT_REFUSED.contains(&path))
         .map(str::to_owned)
+}
+
+/// The shells cobra generates a `completion <shell>` subcommand for.
+const COMPLETION_SHELLS: &[&str] = &["bash", "fish", "powershell", "zsh"];
+
+/// `completion <shell>` for the `completion` command with a shell positional:
+/// the command cobra actually runs.
+fn completion_shell(path: &str, positionals: &[String]) -> Option<String> {
+    let shell = positionals.first()?;
+    (path == "completion" && COMPLETION_SHELLS.contains(&shell.as_str()))
+        .then(|| format!("completion {shell}"))
+}
+
+/// Cobra's `validateRequiredFlags` message, if a required flag is unset.
+fn missing_required_flags(path: &str, set: &[String]) -> Option<String> {
+    let (_, required) = REQUIRED_FLAGS
+        .iter()
+        .find(|(command, _)| *command == path)?;
+    let missing: Vec<String> = required
+        .iter()
+        .filter(|name| !set.iter().any(|seen| seen == **name))
+        .map(|name| format!("\"{name}\""))
+        .collect();
+    (!missing.is_empty()).then(|| format!("required flag(s) {} not set", missing.join(", ")))
 }
 
 fn doubled(message: &str) -> String {
@@ -557,6 +662,17 @@ fn fail(message: &str, code: u8) -> Verdict {
         stderr: doubled(message),
         code,
     }
+}
+
+/// [`fail`], but printed once for a [`SILENCED`] command.
+fn fail_at(path: &str, message: &str, code: u8) -> Verdict {
+    if SILENCED.contains(&path) {
+        return Verdict::Fail {
+            stderr: format!("Error: {message}\n"),
+            code,
+        };
+    }
+    fail(message, code)
 }
 
 const SUPPORTED_COMMANDS: &str = "admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate";
@@ -610,6 +726,13 @@ fn eats_next(arg: &Arg) -> bool {
     arg.get_action().takes_values() && !arg.is_require_equals_set()
 }
 
+/// [`eats_next`] as cobra's `Find` sees it: the help flag is only added to the
+/// command once it is found, so while the command is resolved a bare `-h` /
+/// `--help` takes the next token as its value like any flag that wants one.
+fn eats_next_at_find(arg: &Arg) -> bool {
+    eats_next(arg) || is_help_arg(arg)
+}
+
 /// A Go bool flag: clap `SetTrue`/`SetFalse`, or the `--flag[=bool]` spelling
 /// (`ArgAction::Set` with `require_equals` and an optional value) that
 /// accepts Go's `ParseBool` forms with the last occurrence winning.
@@ -625,7 +748,8 @@ fn is_help_arg(arg: &Arg) -> bool {
     arg.get_id().as_str() == "help"
 }
 
-/// cobra's `stripFlags`: the positional tokens before `--`.
+/// cobra's `stripFlags`: the positional tokens before `--` (the empty string is
+/// never one: `s != ""` in cobra).
 fn strip_flags(tokens: &[String], flags: Flags<'_>, lenient: bool) -> Vec<String> {
     let mut positional = Vec::new();
     let mut index = 0;
@@ -638,7 +762,7 @@ fn strip_flags(tokens: &[String], flags: Flags<'_>, lenient: bool) -> Vec<String
             if !token.contains('=') {
                 let known = flags.long(name);
                 let skip = match known {
-                    Some(arg) => eats_next(arg),
+                    Some(arg) => eats_next_at_find(arg),
                     None => !lenient,
                 };
                 if skip {
@@ -649,14 +773,14 @@ fn strip_flags(tokens: &[String], flags: Flags<'_>, lenient: bool) -> Vec<String
             if !token.contains('=') && token.len() == 2 {
                 let known = token.chars().nth(1).and_then(|c| flags.short(c));
                 let skip = match known {
-                    Some(arg) => eats_next(arg),
+                    Some(arg) => eats_next_at_find(arg),
                     None => !lenient,
                 };
                 if skip {
                     index += 1;
                 }
             }
-        } else if !token.starts_with('-') {
+        } else if !token.is_empty() && !token.starts_with('-') {
             positional.push(token.clone());
         }
         index += 1;
@@ -664,47 +788,44 @@ fn strip_flags(tokens: &[String], flags: Flags<'_>, lenient: bool) -> Vec<String
     positional
 }
 
-/// cobra's `argsMinusFirstX`: drop the first occurrence of the command word.
-fn args_minus_first(tokens: &[String], word: &str, flags: Flags<'_>, lenient: bool) -> Vec<String> {
-    let mut kept = Vec::new();
-    let mut removed = false;
+/// cobra's `argsMinusFirstX`: the index of the first occurrence of the command word
+/// that is not the value of a flag and comes before `--`.
+fn first_word_index(
+    tokens: &[String],
+    word: &str,
+    flags: Flags<'_>,
+    lenient: bool,
+) -> Option<usize> {
     let mut index = 0;
     while index < tokens.len() {
         let token = &tokens[index];
         if token == "--" {
-            kept.extend(tokens[index..].iter().cloned());
-            break;
+            return None;
         }
         let mut skip_value = false;
         if let Some(name) = token.strip_prefix("--") {
             if !token.contains('=') {
                 skip_value = match flags.long(name) {
-                    Some(arg) => eats_next(arg),
+                    Some(arg) => eats_next_at_find(arg),
                     None => !lenient,
                 };
             }
         } else if token.starts_with('-') && token.len() == 2 && !token.contains('=') {
             skip_value = match token.chars().nth(1).and_then(|c| flags.short(c)) {
-                Some(arg) => eats_next(arg),
+                Some(arg) => eats_next_at_find(arg),
                 None => !lenient,
             };
         }
         if skip_value {
-            kept.push(token.clone());
-            if let Some(next) = tokens.get(index + 1) {
-                kept.push(next.clone());
-            }
             index += 2;
             continue;
         }
-        if !removed && token == word {
-            removed = true;
-        } else {
-            kept.push(token.clone());
+        if token == word {
+            return Some(index);
         }
         index += 1;
     }
-    kept
+    None
 }
 
 /// A resolved command: the clap definition when the native tree has it, and its
@@ -872,6 +993,206 @@ pub fn parse_go_int(value: &str) -> Result<i64, String> {
         .map_err(|error| format!("strconv.ParseInt: parsing {value:?}: {}", error.text()))
 }
 
+/// pflag's `invalid argument` diagnostic for a value of a typed flag (`Set` failed).
+fn typed_value_error(path: &str, name: &str, arg: &Arg, value: &str) -> Option<String> {
+    let key = (path, name);
+    if INT_FLAGS.contains(&key)
+        && let Err(error) = go_parse_int(value)
+    {
+        return Some(invalid_argument(value, arg, "ParseInt", error.text()));
+    }
+    if DURATION_FLAGS.contains(&key)
+        && let Err(reason) = symvault_core::config::parse_go_duration(value)
+    {
+        return Some(invalid_argument_reason(value, arg, &reason));
+    }
+    if STRING_SLICE_FLAGS.contains(&key)
+        && let Some(reason) = go_csv_error(value)
+    {
+        return Some(invalid_argument_reason(value, arg, &reason));
+    }
+    None
+}
+
+/// The error pflag's `stringSlice` reports for `value`: `readAsCSV` hands the whole value
+/// (unless empty) to a default `encoding/csv` reader and returns its first record, so
+/// the message is the reader's own (`ParseError`, or `EOF` for a value of blank
+/// lines). `None` means the value is a valid record.
+fn go_csv_error(value: &str) -> Option<String> {
+    go_csv_record(value).err()
+}
+
+/// pflag's `readAsCSV` (`stringSlice.Set`): an empty value is an empty slice, anything
+/// else is the first record `csv.NewReader(strings.NewReader(val)).Read()` returns, so
+/// `"a,b"` is two elements, `"a,"` has an empty second one, `\"a,b\"` is one, `""` inside
+/// quotes is a quote, a record ends at the first line break outside quotes (later lines
+/// are ignored) and leading blank lines are skipped. The error is the reader's message.
+/// This follows `Reader.readRecord` for the comma separator, strict quotes, no comment
+/// character and no space trimming.
+pub fn go_csv_record(value: &str) -> Result<Vec<String>, String> {
+    if value.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut reader = CsvLines {
+        data: value.as_bytes(),
+        at: 0,
+        num_line: 0,
+    };
+    // Skip empty lines; running out of input before a record is `io.EOF`.
+    let (mut line, mut eof) = reader.read_line();
+    while !eof && line.len() == csv_newline_len(&line) {
+        (line, eof) = reader.read_line();
+    }
+    if eof {
+        return Err("EOF".to_owned());
+    }
+    let rec_line = reader.num_line;
+    let mut pos_line = reader.num_line;
+    let mut pos_col = 1_usize;
+    let mut from = 0_usize;
+    let parse_error = |line: usize, column: usize, reason: &str| {
+        if rec_line == line {
+            format!("parse error on line {line}, column {column}: {reason}")
+        } else {
+            format!(
+                "record on line {rec_line}; parse error on line {line}, column {column}: {reason}"
+            )
+        }
+    };
+    const BARE_QUOTE: &str = "bare \" in non-quoted-field";
+    const QUOTE: &str = "extraneous or missing \" in quoted-field";
+    let mut fields: Vec<Vec<u8>> = Vec::new();
+    loop {
+        let rest = &line[from..];
+        if rest.first() != Some(&b'"') {
+            let comma = rest.iter().position(|byte| *byte == b',');
+            let field = match comma {
+                Some(index) => &rest[..index],
+                None => &rest[..rest.len() - csv_newline_len(rest)],
+            };
+            if let Some(quote) = field.iter().position(|byte| *byte == b'"') {
+                return Err(parse_error(reader.num_line, pos_col + quote, BARE_QUOTE));
+            }
+            fields.push(field.to_vec());
+            // No comma: this was the last field and the record is complete.
+            let Some(index) = comma else { break };
+            from += index + 1;
+            pos_col += index + 1;
+            continue;
+        }
+        from += 1;
+        pos_col += 1;
+        let mut field = Vec::new();
+        loop {
+            let rest = &line[from..];
+            if let Some(index) = rest.iter().position(|byte| *byte == b'"') {
+                field.extend_from_slice(&rest[..index]);
+                from += index + 1;
+                pos_col += index + 1;
+                let rest = &line[from..];
+                match rest.first() {
+                    Some(b'"') => {
+                        field.push(b'"');
+                        from += 1;
+                        pos_col += 1;
+                    }
+                    Some(b',') => {
+                        from += 1;
+                        pos_col += 1;
+                        fields.push(std::mem::take(&mut field));
+                        break;
+                    }
+                    _ if csv_newline_len(rest) == rest.len() => {
+                        fields.push(field);
+                        return Ok(csv_strings(fields));
+                    }
+                    _ => return Err(parse_error(reader.num_line, pos_col - 1, QUOTE)),
+                }
+            } else if !rest.is_empty() {
+                // End of line inside the quotes: the field continues on the next line (a
+                // following `io.EOF` is not an error by itself, only the missing quote).
+                field.extend_from_slice(rest);
+                pos_col += rest.len();
+                (line, _) = reader.read_line();
+                from = 0;
+                if !line.is_empty() {
+                    pos_line += 1;
+                    pos_col = 1;
+                }
+            } else {
+                // Abrupt end of input inside a quoted field.
+                return Err(parse_error(pos_line, pos_col, QUOTE));
+            }
+        }
+    }
+    Ok(csv_strings(fields))
+}
+
+/// The fields of a record as text. Every split point is an ASCII byte of a UTF-8 value,
+/// so a field is valid UTF-8 whenever the value was.
+fn csv_strings(fields: Vec<Vec<u8>>) -> Vec<String> {
+    fields
+        .into_iter()
+        .map(|field| String::from_utf8_lossy(&field).into_owned())
+        .collect()
+}
+
+/// The elements of a `stringSlice` flag after pflag parsed every occurrence: the first
+/// occurrence replaces the flag's default and later ones append, each as one CSV record
+/// (`go_csv_record`), so `--tools ""` is an empty slice, not the default. Without any
+/// occurrence the default stays. `evaluate` rejected a malformed occurrence as a usage
+/// error before any command runs, so an error cannot reach this point.
+pub fn string_slice_flag(occurrences: &[String], default: &[&str]) -> Vec<String> {
+    if occurrences.is_empty() {
+        return default.iter().map(|value| (*value).to_owned()).collect();
+    }
+    let mut values = Vec::new();
+    for occurrence in occurrences {
+        match go_csv_record(occurrence) {
+            Ok(record) => values.extend(record),
+            Err(_) => debug_assert!(false, "stringSlice value {occurrence:?} passed evaluate"),
+        }
+    }
+    values
+}
+
+/// Length of the line terminator (`\n`) that ends `line`, as `encoding/csv`'s `lengthNL`.
+fn csv_newline_len(line: &[u8]) -> usize {
+    usize::from(line.last() == Some(&b'\n'))
+}
+
+/// `encoding/csv`'s `Reader.readLine` over an in-memory value.
+struct CsvLines<'a> {
+    data: &'a [u8],
+    at: usize,
+    num_line: usize,
+}
+
+impl CsvLines<'_> {
+    /// The next line with `\r\n` folded to `\n` and a trailing `\r` before the end of
+    /// input dropped, plus whether the input was already exhausted (`io.EOF` with no data).
+    fn read_line(&mut self) -> (Vec<u8>, bool) {
+        let rest = &self.data[self.at..];
+        let size = rest
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map_or(rest.len(), |index| index + 1);
+        let mut line = rest[..size].to_vec();
+        self.at += size;
+        let eof = line.is_empty();
+        if !eof && line.last() == Some(&b'\r') {
+            line.pop();
+        }
+        self.num_line += 1;
+        let length = line.len();
+        if length >= 2 && line[length - 2] == b'\r' && line[length - 1] == b'\n' {
+            line[length - 2] = b'\n';
+            line.pop();
+        }
+        (line, eof)
+    }
+}
+
 fn flag_label(arg: &Arg) -> String {
     let long = arg.get_long().unwrap_or_default();
     match arg.get_short() {
@@ -887,12 +1208,33 @@ fn invalid_argument(value: &str, arg: &Arg, parser: &str, reason: &str) -> Strin
     )
 }
 
+fn invalid_argument_reason(value: &str, arg: &Arg, reason: &str) -> String {
+    format!(
+        "invalid argument {value:?} for {label:?} flag: {reason}",
+        label = flag_label(arg)
+    )
+}
+
 struct Parsed {
     positionals: Vec<String>,
+    /// Long names of the flags that appeared on the command line (pflag
+    /// `Changed`), whatever their value.
+    set: Vec<String>,
     /// The flags an argument validator reads.
     validator: ValidatorFlags,
     json_flag: bool,
     output: Option<String>,
+    /// The last `--vault` / `--profile` value (the agent-mode gate resolves the vault).
+    vault: Option<String>,
+    profile: Option<String>,
+    /// pflag's final value of the `help` flag: only a help flag the parse really
+    /// reached (not a flag's value, not behind `--`) with a true value counts.
+    help: bool,
+}
+
+/// pflag's `strconv.ParseBool` truth of an already validated bool-flag value.
+fn bool_enabled(value: &str) -> bool {
+    matches!(value, "1" | "t" | "T" | "TRUE" | "true" | "True")
 }
 
 /// pflag's parse of the remaining tokens against the command's flag set.
@@ -904,13 +1246,19 @@ fn parse_flags(
 ) -> Result<Parsed, String> {
     let mut parsed = Parsed {
         positionals: Vec::new(),
+        set: Vec::new(),
         validator: ValidatorFlags::default(),
         json_flag: false,
         output: None,
+        vault: None,
+        profile: None,
+        help: false,
     };
     let mut index = 0;
     let note = |arg: &Arg, value: Option<&str>, parsed: &mut Parsed| match (arg.get_long(), value) {
         (Some("output"), Some(value)) => parsed.output = Some(value.to_owned()),
+        (Some("vault"), Some(value)) => parsed.vault = Some(value.to_owned()),
+        (Some("profile"), Some(value)) => parsed.profile = Some(value.to_owned()),
         (Some("url"), Some(value)) if path == "find" => {
             parsed.validator.url_filter = !value.is_empty();
         }
@@ -931,6 +1279,16 @@ fn parse_flags(
                 Some((name, value)) => (name, Some(value)),
                 None => (rest, None),
             };
+            if lenient && hand_parsed_bool(path, name) {
+                if let Some(value) = inline
+                    && !go_parse_bool(value)
+                {
+                    return Err(format!(
+                        "invalid argument {value:?} for \"--{name}\" flag: strconv.ParseBool: parsing {value:?}: invalid syntax"
+                    ));
+                }
+                continue;
+            }
             let Some(arg) = flags.long(name) else {
                 if lenient {
                     continue;
@@ -938,7 +1296,17 @@ fn parse_flags(
                 return Err(format!("unknown flag: --{name}"));
             };
             if is_help_arg(arg) {
+                if let Some(value) = inline
+                    && !go_parse_bool(value)
+                {
+                    return Err(invalid_argument(value, arg, "ParseBool", "invalid syntax"));
+                }
+                // Like every bool flag, the last occurrence decides.
+                parsed.help = inline.is_none_or(bool_enabled);
                 continue;
+            }
+            if let Some(long) = arg.get_long() {
+                parsed.set.push(long.to_owned());
             }
             if !is_bool_arg(arg) {
                 let value = match inline {
@@ -952,10 +1320,8 @@ fn parse_flags(
                         None => return Err(format!("flag needs an argument: --{name}")),
                     },
                 };
-                if INT_FLAGS.contains(&(path, name))
-                    && let Err(error) = go_parse_int(&value)
-                {
-                    return Err(invalid_argument(&value, arg, "ParseInt", error.text()));
+                if let Some(error) = typed_value_error(path, name, arg, &value) {
+                    return Err(error);
                 }
                 note(arg, Some(&value), &mut parsed);
             } else {
@@ -966,9 +1332,7 @@ fn parse_flags(
                 }
                 // pflag assigns the parsed value on every occurrence: the last one wins,
                 // so `--json --json=false` leaves the flag unset.
-                let enabled = inline.is_none_or(|value| {
-                    matches!(value, "1" | "t" | "T" | "TRUE" | "true" | "True")
-                });
+                let enabled = inline.is_none_or(bool_enabled);
                 if arg.get_long() == Some("json") {
                     parsed.json_flag = enabled;
                 }
@@ -986,7 +1350,32 @@ fn parse_flags(
                     return Err(format!("unknown shorthand flag: {short:?} in -{rest}"));
                 };
                 at += 1;
+                if !is_help_arg(arg)
+                    && let Some(long) = arg.get_long()
+                {
+                    parsed.set.push(long.to_owned());
+                }
                 if is_help_arg(arg) || is_bool_arg(arg) {
+                    // pflag: `-y=value` hands everything after the `=` to the flag, but only
+                    // when something follows it; a bare `-y=` leaves `=` as the next shorthand.
+                    if at + 1 < cluster.len() && cluster[at] == '=' {
+                        let value: String = cluster[at + 1..].iter().collect();
+                        if !go_parse_bool(&value) {
+                            return Err(invalid_argument(
+                                &value,
+                                arg,
+                                "ParseBool",
+                                "invalid syntax",
+                            ));
+                        }
+                        if is_help_arg(arg) {
+                            parsed.help = bool_enabled(&value);
+                        }
+                        break;
+                    }
+                    if is_help_arg(arg) {
+                        parsed.help = true;
+                    }
                     continue;
                 }
                 let value: String = if at < cluster.len() {
@@ -1004,10 +1393,8 @@ fn parse_flags(
                     }
                 };
                 let long = arg.get_long().unwrap_or_default();
-                if INT_FLAGS.contains(&(path, long))
-                    && let Err(error) = go_parse_int(&value)
-                {
-                    return Err(invalid_argument(&value, arg, "ParseInt", error.text()));
+                if let Some(error) = typed_value_error(path, long, arg, &value) {
+                    return Err(error);
                 }
                 note(arg, Some(&value), &mut parsed);
                 break;
@@ -1060,25 +1447,55 @@ fn unknown_command(word: &str) -> Verdict {
     }
 }
 
-/// Evaluates `args` (without the program name) the way cobra does.
-pub fn evaluate(args: &[String], mut root: Command) -> Verdict {
-    if args
-        .iter()
-        .take_while(|token| *token != "--")
-        .any(|token| token == "-h" || token == "--help")
-    {
-        return Verdict::Proceed;
-    }
-    root.build();
+/// Evaluates `args` (without the program name) the way cobra does: command
+/// resolution, flag parsing, the argument validator and the output-format gate.
+/// `error_taxonomy`'s fixture rows model exactly that stage, so this entry point
+/// stops there; [`evaluate_with_required`] adds the required-flag stage after it.
+#[cfg(test)]
+pub fn evaluate(args: &[String], root: Command) -> Verdict {
+    evaluate_stages(args, root, false)
+}
+
+/// [`evaluate`] plus cobra's `validateRequiredFlags`, which runs after the
+/// gate and before the command body.
+pub fn evaluate_with_required(args: &[String], root: Command) -> Verdict {
+    evaluate_stages(args, root, true)
+}
+
+/// How cobra's command resolution ended.
+enum Stop {
+    /// A command was resolved, or none (the root).
+    Resolved,
+    /// The first positional is `help`: the native help command walks the topic.
+    Help,
+    /// The first positional is no command of the root.
+    Unknown(String),
+}
+
+struct Resolution<'a> {
+    current: Node<'a>,
+    /// The tokens left once the command words are removed.
+    tokens: Vec<String>,
+    /// Index in the original arguments of the last command word (`help` included).
+    last_word: Option<usize>,
+    stop: Stop,
+}
+
+/// cobra's `Find`: strip the flags, take the first positional as the next command word
+/// and repeat on what is left. A lone `-` starts with a dash, so it is skipped here
+/// and stays in `tokens` for the flag parser, which counts it as a positional.
+fn resolve<'a>(args: &[String], root: &'a Command) -> Resolution<'a> {
     let mut current = Node {
         command: None,
         path: Vec::new(),
     };
     let mut tokens = args.to_vec();
+    let mut origin: Vec<usize> = (0..args.len()).collect();
+    let mut last_word = None;
     loop {
         let flags = Flags {
-            command: current.command.unwrap_or(&root),
-            root: &root,
+            command: current.command.unwrap_or(root),
+            root,
         };
         let lenient = current.command.is_none() && !current.path.is_empty();
         let positional = strip_flags(&tokens, flags, lenient);
@@ -1086,24 +1503,79 @@ pub fn evaluate(args: &[String], mut root: Command) -> Verdict {
             break;
         };
         let lookup = Node {
-            command: current.command.or(current.path.is_empty().then_some(&root)),
+            command: current.command.or(current.path.is_empty().then_some(root)),
             path: current.path.clone(),
         };
+        let index = first_word_index(&tokens, first, flags, lenient);
         match find_next(&lookup, first) {
             Some(next) => {
-                tokens = args_minus_first(&tokens, first, flags, lenient);
+                if let Some(index) = index {
+                    tokens.remove(index);
+                    last_word = Some(origin.remove(index));
+                }
                 current = next;
             }
             None => {
-                if current.path.is_empty() {
+                let stop = if current.path.is_empty() {
                     if first == "help" {
-                        return Verdict::Proceed;
+                        last_word = index.map(|index| origin[index]);
+                        Stop::Help
+                    } else {
+                        Stop::Unknown(first.clone())
                     }
-                    return unknown_command(first);
-                }
-                break;
+                } else {
+                    Stop::Resolved
+                };
+                return Resolution {
+                    current,
+                    tokens,
+                    last_word,
+                    stop,
+                };
             }
         }
+    }
+    Resolution {
+        current,
+        tokens,
+        last_word,
+        stop: Stop::Resolved,
+    }
+}
+
+fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdict {
+    root.build();
+    let Resolution {
+        current,
+        tokens,
+        stop,
+        ..
+    } = resolve(args, &root);
+    match stop {
+        Stop::Resolved => {}
+        Stop::Help => {
+            // cobra's `help` command is runnable and requires a vault, so the
+            // agent-mode gate runs before it prints anything, unless the help
+            // command's own help flag was really given.
+            if required {
+                let flags = Flags {
+                    command: &root,
+                    root: &root,
+                };
+                if let Ok(parsed) = parse_flags(&tokens, flags, "help", true)
+                    && !parsed.help
+                    && let Some(refusal) = crate::agent_gate::preflight(
+                        "help",
+                        parsed.vault.as_deref(),
+                        parsed.profile.as_deref(),
+                    )
+                {
+                    return fail(&refusal.message, refusal.code);
+                }
+            }
+            return Verdict::Proceed;
+        }
+        Stop::Unknown(word) => return unknown_command(&word),
     }
     let path_text = current.path.join(" ");
     let flags = Flags {
@@ -1113,10 +1585,26 @@ pub fn evaluate(args: &[String], mut root: Command) -> Verdict {
     let lenient = current.command.is_none() && !current.path.is_empty();
     let parsed = match parse_flags(&tokens, flags, &path_text, lenient) {
         Ok(parsed) => parsed,
-        Err(message) => return fail(&message, 1),
+        Err(message) => return fail_at(&path_text, &message, 1),
     };
-    if current.path.is_empty() {
+    // cobra checks the help flag right after parsing, before any validator and
+    // before the pre-run (so before the agent-mode gate). Only a help flag the
+    // parse reached counts: `--tools --help` hands `--help` to `--tools` as its
+    // value and the command runs.
+    if parsed.help {
+        // A group prints its own help, also when the command line carries an
+        // unknown subcommand (`agent x -h=true`): cobra's `Find` leaves the group
+        // as the command that handles the help flag.
+        if GROUPS.contains(&path_text.as_str()) {
+            return Verdict::GroupHelp(path_text);
+        }
         return Verdict::Proceed;
+    }
+    if current.path.is_empty() {
+        // The root is not runnable: whatever is left (a lone `-`, everything after `--`,
+        // only persistent flags) is a positional cobra's legacy check never sees, and
+        // the root prints its help before the output-format gate runs.
+        return Verdict::GroupHelp(String::new());
     }
     if GROUPS.contains(&path_text.as_str()) {
         return Verdict::GroupHelp(path_text);
@@ -1129,39 +1617,182 @@ pub fn evaluate(args: &[String], mut root: Command) -> Verdict {
             crate::cli_artifacts::quote_go_string(first),
             crate::cli_artifacts::quote_go_string(&format!("symvault {path_text}"))
         );
-        // These Go commands set SilenceErrors: cobra omits its copy, but the
-        // root executor still prints the returned argument-validation error.
-        if matches!(
-            path_text.as_str(),
-            "update apply" | "update check" | "update info"
-        ) {
-            return Verdict::Fail {
-                stderr: format!("Error: {message}\n"),
-                code: 1,
-            };
-        }
-        return fail(&message, 1);
+        return fail_at(&path_text, &message, 1);
     }
     if let Some(message) = arity_message(&path_text, parsed.positionals.len(), parsed.validator) {
         return fail(&message, 1);
     }
-    if let Some(format) = refused_format(&path_text, parsed.json_flag, parsed.output.as_deref()) {
-        return fail(&gate_message(&format, &path_text), 9);
+    // `completion <shell>` is cobra's built-in subcommand: the gate and the
+    // agent check see its full path. `completion` alone only prints group help.
+    let shell_path = completion_shell(&path_text, &parsed.positionals);
+    // The generated shell commands take no arguments (cobra.NoArgs): an extra
+    // positional ends the run before the output-format gate and the agent check.
+    if let Some(shell_path) = &shell_path
+        && let Some(extra) = parsed.positionals.get(1)
+    {
+        let message = format!(
+            "unknown command {} for {}",
+            crate::cli_artifacts::quote_go_string(extra),
+            crate::cli_artifacts::quote_go_string(&format!("symvault {shell_path}"))
+        );
+        return fail(&message, 1);
+    }
+    let command_path = shell_path.as_deref().unwrap_or(&path_text);
+    if let Some(format) = refused_format(command_path, parsed.json_flag, parsed.output.as_deref()) {
+        return fail(&gate_message(&format, command_path), 9);
+    }
+    // Root PersistentPreRunE's last step: the agent-mode gate, before cobra's
+    // required-flag validation.
+    if required
+        && !(path_text == "completion" && shell_path.is_none())
+        && let Some(refusal) = crate::agent_gate::preflight(
+            &path_text,
+            parsed.vault.as_deref(),
+            parsed.profile.as_deref(),
+        )
+    {
+        return fail(&refusal.message, refusal.code);
+    }
+    if required && let Some(message) = missing_required_flags(&path_text, &parsed.set) {
+        return fail(&message, 1);
     }
     Verdict::Proceed
+}
+
+/// The positions of the lone `-` tokens that are positionals of the command (not a flag's
+/// value) and precede its last word.
+fn bare_dashes_before(tokens: &[String], flags: Flags<'_>, lenient: bool) -> Vec<usize> {
+    let mut found = Vec::new();
+    let mut index = 0;
+    while index < tokens.len() {
+        let token = &tokens[index];
+        if token == "--" {
+            break;
+        }
+        let takes_value = if let Some(name) = token.strip_prefix("--") {
+            !token.contains('=')
+                && match flags.long(name) {
+                    Some(arg) => eats_next(arg),
+                    None => !lenient,
+                }
+        } else if token.starts_with('-') && token.len() == 2 && !token.contains('=') {
+            match token.chars().nth(1).and_then(|c| flags.short(c)) {
+                Some(arg) => eats_next(arg),
+                None => !lenient,
+            }
+        } else {
+            false
+        };
+        if takes_value {
+            index += 2;
+            continue;
+        }
+        if token == "-" {
+            found.push(index);
+        }
+        index += 1;
+    }
+    found
+}
+
+/// The arguments clap should parse. cobra skips a lone `-` while it resolves the command
+/// and hands it to the resolved command as a positional (`- list`, `share - list`), but
+/// clap reads it as the first positional of the parent and never reaches the subcommand.
+/// Every lone `-` that precedes the last command word moves right behind that word, which
+/// is the position cobra gives it relative to the arguments that follow.
+pub fn clap_arguments(args: Vec<std::ffi::OsString>, mut root: Command) -> Vec<std::ffi::OsString> {
+    let Some(strings) = args
+        .iter()
+        .skip(1)
+        .map(|arg| arg.to_str().map(str::to_owned))
+        .collect::<Option<Vec<String>>>()
+    else {
+        return args;
+    };
+    if !strings.iter().any(|token| token == "-") {
+        return args;
+    }
+    root.build();
+    let resolution = resolve(&strings, &root);
+    if matches!(resolution.stop, Stop::Unknown(_)) {
+        return args;
+    }
+    let Some(word) = resolution.last_word else {
+        return args;
+    };
+    let flags = Flags {
+        command: resolution.current.command.unwrap_or(&root),
+        root: &root,
+    };
+    let lenient = resolution.current.command.is_none() && !resolution.current.path.is_empty();
+    let dashes = bare_dashes_before(&strings[..word], flags, lenient);
+    if dashes.is_empty() {
+        return args;
+    }
+    let mut rewritten = Vec::with_capacity(args.len());
+    rewritten.push(args[0].clone());
+    for (index, token) in args.iter().skip(1).enumerate() {
+        if !dashes.contains(&index) {
+            rewritten.push(token.clone());
+        }
+        if index == word {
+            rewritten.extend(dashes.iter().map(|_| std::ffi::OsString::from("-")));
+        }
+    }
+    rewritten
+}
+
+/// Arguments that are not UTF-8 stay out of the emulation unless an agent is
+/// set (the regular parser reports them otherwise, as before). In agent mode the
+/// command must not run unless Go's pre-run would let it: the emulation runs on
+/// the lossy text of the arguments and every refusal it reaches (usage error,
+/// output-format gate, agent gate, unresolvable vault path) ends the process.
+/// Messages echo a non-UTF-8 argument with U+FFFD where Go prints the raw bytes.
+fn gate_non_utf8(
+    args: &[std::ffi::OsString],
+    root: Command,
+    agent_mode: bool,
+) -> Option<std::process::ExitCode> {
+    use std::io::Write;
+    if !agent_mode {
+        return None;
+    }
+    let lossy: Vec<String> = args
+        .iter()
+        .skip(1)
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    match evaluate_with_required(&lossy, root) {
+        Verdict::Fail { stderr, code } => {
+            let _ = std::io::stderr().write_all(stderr.as_bytes());
+            Some(std::process::ExitCode::from(code))
+        }
+        Verdict::Proceed | Verdict::GroupHelp(_) => None,
+    }
 }
 
 /// Runs the emulation on the process arguments and prints Go's diagnostic.
 /// `Some(code)` means the process must exit with `code`.
 pub fn check(args: &[std::ffi::OsString], root: Command) -> Option<std::process::ExitCode> {
+    check_with(args, root, crate::agent_gate::agent_active())
+}
+
+/// [`check`] with agent mode (`SYMVAULT_AGENT` non-empty) given explicitly.
+fn check_with(
+    args: &[std::ffi::OsString],
+    root: Command,
+    agent_mode: bool,
+) -> Option<std::process::ExitCode> {
     use std::io::Write;
     let strings: Option<Vec<String>> = args
         .iter()
         .skip(1)
         .map(|arg| arg.to_str().map(str::to_owned))
         .collect();
-    let strings = strings?;
-    match evaluate(&strings, root) {
+    let Some(strings) = strings else {
+        return gate_non_utf8(args, root, agent_mode);
+    };
+    match evaluate_with_required(&strings, root) {
         Verdict::Proceed => None,
         Verdict::Fail { stderr, code } => {
             let _ = std::io::stderr().write_all(stderr.as_bytes());
@@ -1190,6 +1821,163 @@ mod tests {
         assert_eq!(levenshtein("lst", "list"), 1);
         assert_eq!(levenshtein("LIST", "list"), 0);
         assert_eq!(levenshtein("e", "get"), 2);
+    }
+
+    #[test]
+    fn required_flags_follow_cobra_order_and_wording() {
+        let run = |args: &[&str]| {
+            let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+            evaluate_with_required(&args, root())
+        };
+        let missing = fail("required flag(s) \"format\" not set", 1);
+        assert_eq!(run(&["export", "-y"]), missing);
+        assert_eq!(run(&["export"]), missing);
+        // Any occurrence counts as set, even an empty value or a repeat.
+        assert_eq!(run(&["export", "--format", ""]), Verdict::Proceed);
+        assert_eq!(
+            run(&["export", "--format=csv", "--format=json"]),
+            Verdict::Proceed
+        );
+        // The argument validator and the gate come first.
+        assert!(matches!(
+            run(&["export", "extra"]),
+            Verdict::Fail { ref stderr, .. } if stderr.contains("unknown command \"extra\"")
+        ));
+        assert!(matches!(
+            run(&["export", "--json"]),
+            Verdict::Fail { code: 9, .. }
+        ));
+        // `evaluate` itself stays at the validator/gate stage.
+        assert_eq!(evaluate(&["export".to_owned()], root()), Verdict::Proceed);
+    }
+
+    /// The `help` flag as pflag leaves it after parsing `args` (command words resolved).
+    fn parsed_help(args: &[&str]) -> Result<bool, String> {
+        let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+        let mut command = root();
+        command.build();
+        let resolution = resolve(&args, &command);
+        let flags = Flags {
+            command: resolution.current.command.unwrap_or(&command),
+            root: &command,
+        };
+        let lenient = resolution.current.command.is_none() && !resolution.current.path.is_empty();
+        parse_flags(
+            &resolution.tokens,
+            flags,
+            &resolution.current.path.join(" "),
+            lenient,
+        )
+        .map(|parsed| parsed.help)
+    }
+
+    /// A help token is a help request only when pflag parses it as the help flag:
+    /// not as the value of a flag that takes one, not behind `--`, and the last
+    /// occurrence of the bool flag decides.
+    #[test]
+    fn help_token_is_a_request_only_as_a_help_flag() {
+        let value_of_a_flag: &[&[&str]] = &[
+            &["agent", "token", "new", "x", "--tools", "--help"],
+            &["agent", "token", "new", "--tools", "-h", "x"],
+            &["agent", "token", "new", "x", "--tools=--help"],
+            &["run", "--broker-passthrough", "--help", "true"],
+            &["broker", "--passthrough", "--help"],
+            &["list", "--vault", "-h"],
+            &["list", "--output", "--help"],
+            &["--vault", "--help", "list"],
+            &["list", "--", "--help"],
+            &["list", "--help=false"],
+            &["list", "-h=false"],
+            &["list", "--help", "--help=false"],
+            &["list"],
+        ];
+        for args in value_of_a_flag {
+            assert_eq!(parsed_help(args), Ok(false), "{args:?}");
+        }
+        let requests: &[&[&str]] = &[
+            &["list", "--help"],
+            &["list", "-h"],
+            &["list", "--help=true"],
+            &["list", "-h=true"],
+            &["list", "--help=false", "--help"],
+            &["--help"],
+            &["-h", "list"],
+            &["agent", "token", "new", "x", "--tools", "a", "--help"],
+            &["agent", "token", "new", "x", "--help", "--tools", "a"],
+        ];
+        for args in requests {
+            assert_eq!(parsed_help(args), Ok(true), "{args:?}");
+        }
+        for args in [&["list", "--help=foo"][..], &["list", "-h=foo"]] {
+            assert!(parsed_help(args).is_err(), "{args:?}");
+        }
+    }
+
+    /// The help shortcut must not hide the validators that cobra runs for a
+    /// command whose `--help` is only a flag value.
+    #[test]
+    fn help_shortcut_skips_nothing_when_the_token_is_a_flag_value() {
+        let run = |args: &[&str]| {
+            let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+            evaluate(&args, root())
+        };
+        assert_eq!(run(&["export", "--help", "extra"]), Verdict::Proceed);
+        assert_eq!(run(&["export", "-h", "extra"]), Verdict::Proceed);
+        for args in [
+            &["export", "--format", "--help", "extra"][..],
+            &["export", "--format", "-h", "extra"],
+            &["export", "--format=--help", "extra"],
+            &["export", "--", "--help", "extra"],
+        ] {
+            assert!(
+                matches!(run(args), Verdict::Fail { code: 1, ref stderr }
+                    if stderr.contains("unknown command \"")),
+                "{args:?}"
+            );
+        }
+        // A parse error ends the run wherever the help flag stands.
+        assert!(matches!(
+            run(&["list", "--help", "--bogus"]),
+            Verdict::Fail { code: 1, .. }
+        ));
+        assert!(matches!(
+            run(&["list", "--bogus", "--help"]),
+            Verdict::Fail { code: 1, .. }
+        ));
+        // An unknown command is an error before its help flag is looked at.
+        assert!(matches!(
+            run(&["nosuch", "--help"]),
+            Verdict::Fail { code: 1, .. }
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_arguments_are_checked_in_agent_mode_only() {
+        use std::{ffi::OsString, os::unix::ffi::OsStringExt, process::ExitCode};
+        let args = |tail: &[&[u8]]| -> Vec<OsString> {
+            std::iter::once(OsString::from("symvault"))
+                .chain(tail.iter().map(|arg| OsString::from_vec(arg.to_vec())))
+                .collect()
+        };
+        // Go's usage error comes first (`add` takes one argument); the lossy
+        // text is enough to see it.
+        let usage = args(&[b"add", b"\xff", b"extra", b"more"]);
+        assert_eq!(
+            check_with(&usage, root(), true),
+            Some(ExitCode::from(1)),
+            "agent mode evaluates arguments that are not UTF-8"
+        );
+        assert_eq!(
+            check_with(&usage, root(), false),
+            None,
+            "no agent: unchanged"
+        );
+        // A command that would run (nothing for the emulation to refuse here)
+        // is left to the regular path, whichever mode.
+        let runs = args(&[b"get", b"\xff"]);
+        assert_eq!(check_with(&runs, root(), true), None);
+        assert_eq!(check_with(&runs, root(), false), None);
     }
 
     #[test]
@@ -1345,7 +2133,7 @@ mod tests {
         assert!(fixture.usage.len() >= 40);
         let mut failures = Vec::new();
         for case in &fixture.usage {
-            let got = evaluate(&case.observation.args, root());
+            let got = evaluate_with_required(&case.observation.args, root());
             let want = if matches!(case.observation.exit_code, 0 | 3) {
                 // Group help (stdout), a successful command or the command body's own
                 // "vault not initialized" failure (exit 3): never the emulation's verdict.
@@ -1460,6 +2248,15 @@ mod tests {
         let mut refused = 0;
         for row in &fixture.gate {
             let stripped = row.path.trim_start_matches("symvault ");
+            if stripped == "auth set" {
+                // Go validates `auth set`'s arguments with a custom closure, which
+                // the taxonomy probe does not recognise as an arity error, so its
+                // row records 0 valid arguments and "not refused". With the one
+                // required argument the gate refuses both formats; that refusal is
+                // byte-pinned by `output_modes` (auth-set.json/.yaml/.output-json).
+                assert!(JSON_REFUSED.contains(&stripped) && OUTPUT_REFUSED.contains(&stripped));
+                continue;
+            }
             assert_eq!(
                 JSON_REFUSED.contains(&stripped),
                 row.json_refused,
@@ -1584,6 +2381,44 @@ mod tests {
         evaluate(&args, root())
     }
 
+    /// `completion <shell>` takes no arguments (cobra.NoArgs): that error comes
+    /// before the output-format gate, with or without a format flag.
+    #[test]
+    fn completion_shell_extra_argument_precedes_the_format_gate() {
+        for args in [
+            &["completion", "bash", "extra", "--json"][..],
+            &["completion", "bash", "--json", "extra"],
+            &["completion", "zsh", "extra", "--output", "yaml"],
+        ] {
+            let Verdict::Fail { stderr, code } = verdict(args) else {
+                panic!("{args:?} must fail");
+            };
+            assert_eq!(code, 1, "{args:?}");
+            assert!(
+                stderr.contains("unknown command \"extra\" for \"symvault completion"),
+                "{stderr}"
+            );
+        }
+        // The format gate still decides without an extra argument.
+        assert!(refused(&["completion", "bash", "--json"]));
+    }
+
+    /// A group prints its own help for a true help flag, an unknown subcommand
+    /// included.
+    #[test]
+    fn group_help_flag_wins_over_an_unknown_subcommand() {
+        for args in [
+            &["agent", "x", "-h=true"][..],
+            &["auth", "x", "--help=true"],
+            &["device", "x", "-h=true"],
+        ] {
+            assert!(
+                matches!(verdict(args), Verdict::GroupHelp(_)),
+                "{args:?} must print the group help"
+            );
+        }
+    }
+
     fn refused(args: &[&str]) -> bool {
         matches!(verdict(args), Verdict::Fail { code: 9, .. })
     }
@@ -1622,10 +2457,246 @@ mod tests {
     }
 
     #[test]
+    fn hand_parsed_bool_flags_match_the_command_tree() {
+        let tree = tree();
+        for (path, names) in HAND_PARSED_BOOLS {
+            let entry = tree["commands"]
+                .as_array()
+                .expect("commands")
+                .iter()
+                .find(|entry| go_path(entry) == *path)
+                .unwrap_or_else(|| panic!("{path} is not in command-tree.json"));
+            let mut go_bools: Vec<&str> = entry["local_flags"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|flag| flag["type"] == "bool" && flag["name"] != "help")
+                .map(|flag| flag["name"].as_str().expect("flag name"))
+                .collect();
+            go_bools.sort_unstable();
+            assert_eq!(go_bools, *names, "{path}");
+            assert!(
+                clap_command(&root(), path).is_none(),
+                "{path} now has a clap definition"
+            );
+        }
+    }
+
+    #[test]
     fn flag_types_match_the_command_tree() {
         let (mismatches, compared) = flag_type_mismatches(&root());
         assert!(compared > 150, "only {compared} flags compared");
         assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+    }
+
+    /// Every Go bool flag (local and persistent) is a pflag `BoolVar`, which accepts
+    /// `--flag`, `--flag=<ParseBool form>` and repeats with the last value winning.
+    /// A clap `SetTrue` flag rejects `--flag=false`, so each one must be the
+    /// `--flag[=bool]` spelling (`ArgAction::Set`, optional `require_equals` value).
+    /// Returns the bool flags that are not, plus the number of bool flags compared.
+    fn bool_flags_without_explicit_value(root: &Command) -> (Vec<String>, usize) {
+        let tree = tree();
+        let mut offenders = Vec::new();
+        let mut compared = 0;
+        for entry in tree["commands"].as_array().expect("commands") {
+            let path = go_path(entry);
+            let Some(command) = clap_command(root, &path) else {
+                continue;
+            };
+            let flags = Flags { command, root };
+            for key in ["local_flags", "persistent_flags"] {
+                for flag in entry[key].as_array().into_iter().flatten() {
+                    let name = flag["name"].as_str().expect("flag name");
+                    if flag["type"] != "bool" || name == "help" {
+                        continue;
+                    }
+                    let mut check = |label: String, arg: Option<&Arg>| {
+                        let Some(arg) = arg else {
+                            return;
+                        };
+                        compared += 1;
+                        let explicit = arg.get_action().takes_values()
+                            && arg.is_require_equals_set()
+                            && arg
+                                .get_num_args()
+                                .is_some_and(|range| range.min_values() == 0);
+                        if !explicit {
+                            offenders.push(format!("{path} {label}"));
+                        }
+                    };
+                    check(format!("--{name}"), flags.long(name));
+                    if let Some(short) = flag["shorthand"].as_str().and_then(|s| s.chars().next()) {
+                        check(format!("-{short}"), flags.short(short));
+                    }
+                }
+            }
+        }
+        (offenders, compared)
+    }
+
+    #[test]
+    fn go_bool_flags_accept_an_explicit_value() {
+        let (offenders, compared) = bool_flags_without_explicit_value(&root());
+        assert!(compared > 80, "only {compared} bool flags compared");
+        assert!(
+            offenders.is_empty(),
+            "{} of {compared} bool flags reject --flag=<bool>:\n{}",
+            offenders.len(),
+            offenders.join("\n")
+        );
+    }
+
+    /// pflag hands everything after `-f=` to the shorthand's flag; only a bare `-f=` leaves
+    /// `=` behind as the next (unknown) shorthand.
+    #[test]
+    fn shorthand_bool_takes_an_equals_value() {
+        assert_eq!(verdict(&["sync", "-f=false"]), Verdict::Proceed);
+        assert_eq!(verdict(&["sync", "-f", "-f=0"]), Verdict::Proceed);
+        let Verdict::Fail { stderr, code } = verdict(&["sync", "-f=maybe"]) else {
+            panic!("-f=maybe must be refused");
+        };
+        assert_eq!(code, 1);
+        assert!(
+            stderr.starts_with(
+                "Error: invalid argument \"maybe\" for \"-f, --force\" flag: strconv.ParseBool: parsing \"maybe\": invalid syntax\n"
+            ),
+            "{stderr}"
+        );
+        let Verdict::Fail { stderr, .. } = verdict(&["sync", "-f="]) else {
+            panic!("-f= must be refused");
+        };
+        assert!(
+            stderr.starts_with("Error: unknown shorthand flag: '=' in -=\n"),
+            "{stderr}"
+        );
+    }
+
+    /// clap itself must take `--flag=false`, `-x=false` and a repeat in either order for
+    /// every Go bool flag (the emulation above runs first, but only clap decides the
+    /// accepting cases, e.g. `doctor --fix=false`, whose report is host dependent and so
+    /// cannot be replayed from the corpus). Errors about *missing* required arguments are
+    /// fine: the flag syntax was already accepted when clap reached them.
+    #[test]
+    fn clap_parses_explicit_values_of_every_go_bool_flag() {
+        use clap::error::ErrorKind;
+        let root = root();
+        let tree = tree();
+        let mut parsed = 0;
+        for entry in tree["commands"].as_array().expect("commands") {
+            let path = go_path(entry);
+            if path.is_empty() || clap_command(&root, &path).is_none() {
+                continue;
+            }
+            for flag in entry["local_flags"].as_array().into_iter().flatten() {
+                let name = flag["name"].as_str().expect("flag name");
+                if flag["type"] != "bool" || name == "help" {
+                    continue;
+                }
+                let long = format!("--{name}");
+                let mut forms = vec![
+                    vec![format!("{long}=false")],
+                    vec![long.clone(), format!("{long}=false")],
+                    vec![format!("{long}=false"), long.clone()],
+                    vec![format!("{long}=F"), format!("{long}=1")],
+                ];
+                if let Some(short) = flag["shorthand"].as_str() {
+                    forms.push(vec![format!("-{short}=false")]);
+                }
+                for form in forms {
+                    let mut argv = vec!["symvault".to_owned()];
+                    argv.extend(path.split(' ').map(str::to_owned));
+                    argv.extend(form);
+                    parsed += 1;
+                    if let Err(error) = root.clone().try_get_matches_from(&argv) {
+                        assert!(
+                            matches!(
+                                error.kind(),
+                                ErrorKind::MissingRequiredArgument
+                                    | ErrorKind::MissingSubcommand
+                                    | ErrorKind::DisplayHelp
+                                    | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+                            ),
+                            "{}: {:?}: {error}",
+                            argv.join(" "),
+                            error.kind()
+                        );
+                    }
+                }
+            }
+        }
+        assert!(parsed > 300, "only {parsed} argument vectors parsed");
+    }
+
+    #[test]
+    fn duration_flag_table_names_duration_flags() {
+        let tree = tree();
+        for (path, name) in DURATION_FLAGS {
+            let entry = tree["commands"]
+                .as_array()
+                .expect("commands")
+                .iter()
+                .find(|entry| go_path(entry) == *path)
+                .unwrap_or_else(|| panic!("{path} is not in the command tree"));
+            let flag = entry["local_flags"]
+                .as_array()
+                .expect("flags")
+                .iter()
+                .find(|flag| flag["name"] == *name)
+                .unwrap_or_else(|| panic!("{path} has no --{name}"));
+            assert_eq!(flag["type"], "duration", "{path} --{name}");
+        }
+    }
+
+    /// Error texts recorded from the pinned Go binary (`symvault run --timeout
+    /// <value>`, which prints `time.ParseDuration`'s error after pflag's `invalid
+    /// argument ... flag:` prefix) and values it accepted (a vault error, not a
+    /// flag error, follows).
+    #[test]
+    fn go_duration_errors_match_the_recorded_oracle_texts() {
+        for (value, expected) in [
+            ("5", Some("time: missing unit in duration \"5\"")),
+            ("", Some("time: invalid duration \"\"")),
+            ("x", Some("time: invalid duration \"x\"")),
+            ("5x", Some("time: unknown unit \"x\" in duration \"5x\"")),
+            ("1h30", Some("time: missing unit in duration \"1h30\"")),
+            (
+                "1é",
+                Some("time: unknown unit \"\\xc3\\xa9\" in duration \"1\\xc3\\xa9\""),
+            ),
+            (
+                "9223372036854775807s",
+                Some("time: invalid duration \"9223372036854775807s\""),
+            ),
+            ("0.0.1s", Some("time: missing unit in duration \"0.0.1s\"")),
+            (
+                "9223372036854775808ns",
+                Some("time: invalid duration \"9223372036854775808ns\""),
+            ),
+            (
+                "-9223372036854775809ns",
+                Some("time: invalid duration \"-9223372036854775809ns\""),
+            ),
+            ("9223372036854775807ns", None),
+            ("2μs", None),
+            ("0.5h", None),
+            ("0", None),
+            ("-0", None),
+            ("+0", None),
+            ("+5s", None),
+            ("1.5s", None),
+            (".5s", None),
+            ("1h30m", None),
+            ("2µs", None),
+            ("-9223372036854775808ns", None),
+        ] {
+            assert_eq!(
+                symvault_core::config::parse_go_duration(value)
+                    .err()
+                    .as_deref(),
+                expected,
+                "{value:?}"
+            );
+        }
     }
 
     #[test]
@@ -1650,6 +2721,322 @@ mod tests {
                 flag["type"]
             );
         }
+    }
+
+    #[test]
+    fn string_slice_flag_table_names_string_slice_flags() {
+        let tree = tree();
+        for (path, name) in STRING_SLICE_FLAGS {
+            let entry = tree["commands"]
+                .as_array()
+                .expect("commands")
+                .iter()
+                .find(|entry| go_path(entry) == *path)
+                .unwrap_or_else(|| panic!("{path} is not in the command tree"));
+            let flag = entry["local_flags"]
+                .as_array()
+                .expect("flags")
+                .iter()
+                .find(|flag| flag["name"] == *name)
+                .unwrap_or_else(|| panic!("{path} has no --{name}"));
+            assert_eq!(flag["type"], "stringSlice", "{path} --{name}");
+        }
+    }
+
+    /// Every flag of the Go tree whose type is not string or bool (and not a
+    /// `stringArray`, which takes any value) must be in exactly the table of its type,
+    /// and the required flags must be exactly the `MarkFlagRequired` ones, so a new
+    /// typed or required flag cannot ship without Go's diagnostic.
+    #[test]
+    fn typed_flag_tables_cover_every_typed_flag_of_the_command_tree() {
+        let tree = tree();
+        let mut problems = Vec::new();
+        let mut typed = 0;
+        let mut required = Vec::new();
+        for entry in tree["commands"].as_array().expect("commands") {
+            let path = go_path(entry);
+            for key in ["local_flags", "persistent_flags"] {
+                for flag in entry[key].as_array().into_iter().flatten() {
+                    let name = flag["name"].as_str().expect("flag name");
+                    let kind = flag["type"].as_str().expect("flag type");
+                    let key = (path.as_str(), name);
+                    let tables: [(&str, &[(&str, &str)]); 3] = [
+                        ("int", INT_FLAGS),
+                        ("duration", DURATION_FLAGS),
+                        ("stringSlice", STRING_SLICE_FLAGS),
+                    ];
+                    for (table_kind, table) in tables {
+                        let listed = table.contains(&key);
+                        let expected =
+                            kind == table_kind || (table_kind == "int" && kind == "int64");
+                        if listed != expected {
+                            problems.push(format!(
+                                "{path} --{name} is {kind}, {table_kind} table lists it: {listed}"
+                            ));
+                        }
+                    }
+                    if !matches!(kind, "bool" | "string" | "stringArray") {
+                        typed += 1;
+                    }
+                    if flag["annotations"]["cobra_annotation_bash_completion_one_required_flag"]
+                        .is_array()
+                    {
+                        required.push((path.clone(), name.to_owned()));
+                    }
+                }
+            }
+        }
+        assert!(typed >= 23, "only {typed} typed flags in the tree");
+        let mut table: Vec<(String, String)> = REQUIRED_FLAGS
+            .iter()
+            .flat_map(|(path, names)| {
+                names
+                    .iter()
+                    .map(move |name| ((*path).to_owned(), (*name).to_owned()))
+            })
+            .collect();
+        table.sort();
+        required.sort();
+        assert_eq!(
+            table, required,
+            "REQUIRED_FLAGS vs the tree's required flags"
+        );
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+
+    /// Texts recorded from the pinned Go binary (`symvault doctor --only <value>`: the
+    /// `encoding/csv` error after pflag's `invalid argument ... flag:` prefix).
+    #[test]
+    fn go_csv_errors_match_the_recorded_oracle_texts() {
+        for (value, expected) in [
+            (
+                "\"a",
+                Some("parse error on line 1, column 3: extraneous or missing \" in quoted-field"),
+            ),
+            (
+                "a\"b",
+                Some("parse error on line 1, column 2: bare \" in non-quoted-field"),
+            ),
+            (
+                "a,b\"",
+                Some("parse error on line 1, column 4: bare \" in non-quoted-field"),
+            ),
+            (
+                "\"a\"b",
+                Some("parse error on line 1, column 3: extraneous or missing \" in quoted-field"),
+            ),
+            (
+                "a,\"b\"c",
+                Some("parse error on line 1, column 5: extraneous or missing \" in quoted-field"),
+            ),
+            ("\n", Some("EOF")),
+            (
+                "\"a\nb",
+                Some(
+                    "record on line 1; parse error on line 2, column 2: extraneous or missing \" in quoted-field",
+                ),
+            ),
+            ("a,b", None),
+            ("", None),
+            ("\"a,b\"", None),
+            ("\"a\"\"b\"", None),
+            ("\"a\nb\"", None),
+            (
+                "a\"",
+                Some("parse error on line 1, column 2: bare \" in non-quoted-field"),
+            ),
+            (
+                "\n\n\"a",
+                Some("parse error on line 3, column 3: extraneous or missing \" in quoted-field"),
+            ),
+            ("a\nb\"", None),
+            (
+                "\"a\r\nb",
+                Some(
+                    "record on line 1; parse error on line 2, column 2: extraneous or missing \" in quoted-field",
+                ),
+            ),
+            ("\r\n", Some("EOF")),
+            (
+                "\"",
+                Some("parse error on line 1, column 2: extraneous or missing \" in quoted-field"),
+            ),
+            (
+                "\"\n",
+                Some("parse error on line 1, column 3: extraneous or missing \" in quoted-field"),
+            ),
+            (
+                "\"a\r",
+                Some("parse error on line 1, column 3: extraneous or missing \" in quoted-field"),
+            ),
+            (
+                "a\r\"",
+                Some("parse error on line 1, column 3: bare \" in non-quoted-field"),
+            ),
+            (
+                "x,\"y\n\"z\"w",
+                Some(
+                    "record on line 1; parse error on line 2, column 1: extraneous or missing \" in quoted-field",
+                ),
+            ),
+            ("a,\n\"b", None),
+            ("a\n\"", None),
+            ("a\r\nb\"", None),
+        ] {
+            assert_eq!(go_csv_error(value).as_deref(), expected, "{value:?}");
+        }
+    }
+
+    /// `pflag.StringSlice` over real pflag v1.0.10 (`--s=<occurrence>` for each occurrence,
+    /// recorded with a Go program that calls `FlagSet.Parse`): the elements, or the
+    /// reader's message of the first failing occurrence.
+    #[test]
+    fn go_csv_record_equals_pflag_string_slice() {
+        type Row = (
+            &'static [&'static str],
+            Result<&'static [&'static str], &'static str>,
+        );
+        let rows: &[Row] = &[
+            (&[""], Ok(&[])),
+            (&["a"], Ok(&["a"])),
+            (&["a,b"], Ok(&["a", "b"])),
+            (&["a,,b"], Ok(&["a", "", "b"])),
+            (&[","], Ok(&["", ""])),
+            (&["a,"], Ok(&["a", ""])),
+            (&[",a"], Ok(&["", "a"])),
+            (&["\"a,b\",c"], Ok(&["a,b", "c"])),
+            (&["\"a\"\"b\""], Ok(&["a\"b"])),
+            (
+                &["\"a\"b"],
+                Err("parse error on line 1, column 3: extraneous or missing \" in quoted-field"),
+            ),
+            (
+                &["a\"b"],
+                Err("parse error on line 1, column 2: bare \" in non-quoted-field"),
+            ),
+            (
+                &["\"a"],
+                Err("parse error on line 1, column 3: extraneous or missing \" in quoted-field"),
+            ),
+            (
+                &["\""],
+                Err("parse error on line 1, column 2: extraneous or missing \" in quoted-field"),
+            ),
+            (&["\n"], Err("EOF")),
+            (&["\n\na,b"], Ok(&["a", "b"])),
+            (&["a,b\nc"], Ok(&["a", "b"])),
+            (&["a,b\r\nc"], Ok(&["a", "b"])),
+            (&["\"a\nb\",c"], Ok(&["a\nb", "c"])),
+            (&["\"a\r\nb\""], Ok(&["a\nb"])),
+            (&["a\rb"], Ok(&["a\rb"])),
+            (&["a\r"], Ok(&["a"])),
+            (&[" a , b"], Ok(&[" a ", " b"])),
+            (&["\\,"], Ok(&["\\", ""])),
+            (&["a\\,b"], Ok(&["a\\", "b"])),
+            (&["\"\""], Ok(&[""])),
+            (
+                &["\"\"x"],
+                Err("parse error on line 1, column 2: extraneous or missing \" in quoted-field"),
+            ),
+            (&["\"\",a"], Ok(&["", "a"])),
+            (&["a,\"\""], Ok(&["a", ""])),
+            (&["\"a\",\"b\""], Ok(&["a", "b"])),
+            (
+                &["\"a\" ,b"],
+                Err("parse error on line 1, column 3: extraneous or missing \" in quoted-field"),
+            ),
+            (&["é,ü"], Ok(&["é", "ü"])),
+            (&["\"é\",\"ü\""], Ok(&["é", "ü"])),
+            (&["a\n"], Ok(&["a"])),
+            (&["a,b\n"], Ok(&["a", "b"])),
+            (&["\n"], Err("EOF")),
+            (
+                &["x,\"y\n\"z\"w"],
+                Err(
+                    "record on line 1; parse error on line 2, column 1: extraneous or missing \" in quoted-field",
+                ),
+            ),
+            (
+                &["\"a,b\",\"c"],
+                Err("parse error on line 1, column 9: extraneous or missing \" in quoted-field"),
+            ),
+            (&["a,\n\"b"], Ok(&["a", ""])),
+            (&["\"a\"\r\n"], Ok(&["a"])),
+            (&["\"a\"\n\"b\""], Ok(&["a"])),
+            (
+                &["\"a\nb"],
+                Err(
+                    "record on line 1; parse error on line 2, column 2: extraneous or missing \" in quoted-field",
+                ),
+            ),
+            (&["a", "b,c"], Ok(&["a", "b", "c"])),
+            (&["", "x"], Ok(&["x"])),
+            (&["x", ""], Ok(&["x"])),
+            (
+                &["\"a", "b"],
+                Err("parse error on line 1, column 3: extraneous or missing \" in quoted-field"),
+            ),
+        ];
+        assert_eq!(rows.len(), 45);
+        let mut errors = 0;
+        for (occurrences, expected) in rows {
+            let occurrences: Vec<String> = occurrences
+                .iter()
+                .map(|value| (*value).to_owned())
+                .collect();
+            let mut actual: Result<Vec<String>, String> = Ok(Vec::new());
+            for occurrence in &occurrences {
+                match go_csv_record(occurrence) {
+                    Ok(record) => {
+                        if let Ok(values) = &mut actual {
+                            values.extend(record);
+                        }
+                    }
+                    Err(reason) => {
+                        actual = Err(reason);
+                        break;
+                    }
+                }
+            }
+            let expected = expected
+                .map(|values| {
+                    values
+                        .iter()
+                        .map(|value| (*value).to_owned())
+                        .collect::<Vec<_>>()
+                })
+                .map_err(str::to_owned);
+            assert_eq!(actual, expected, "{occurrences:?}");
+            if let Err(reason) = &expected {
+                errors += 1;
+                let first = occurrences.iter().find_map(|value| go_csv_error(value));
+                assert_eq!(first.as_ref(), Some(reason), "{occurrences:?}");
+            } else {
+                // Every accepted occurrence has no error; string_slice_flag appends them.
+                assert!(
+                    occurrences
+                        .iter()
+                        .all(|value| go_csv_error(value).is_none())
+                );
+                assert_eq!(
+                    Ok(string_slice_flag(&occurrences, &["*"])),
+                    expected,
+                    "{occurrences:?}"
+                );
+            }
+        }
+        assert_eq!(errors, 12);
+    }
+
+    #[test]
+    fn string_slice_flag_keeps_the_default_only_without_an_occurrence() {
+        let none: Vec<String> = Vec::new();
+        assert_eq!(string_slice_flag(&none, &["*"]), ["*"]);
+        assert!(string_slice_flag(&none, &[]).is_empty());
+        let empty = vec![String::new()];
+        assert!(string_slice_flag(&empty, &["*"]).is_empty());
+        let two = vec!["a,b".to_owned(), "\"c,d\"".to_owned()];
+        assert_eq!(string_slice_flag(&two, &["*"]), ["a", "b", "c,d"]);
     }
 
     #[test]
@@ -1736,6 +3123,96 @@ mod tests {
             vec!["share", "list", "x"],
         ] {
             assert_eq!(verdict(&args), Verdict::Proceed);
+        }
+    }
+
+    /// The arguments clap parses for `args` (without the program name).
+    fn clap_args(args: &[&str]) -> Vec<String> {
+        let mut all = vec![std::ffi::OsString::from("symvault")];
+        all.extend(args.iter().map(std::ffi::OsString::from));
+        clap_arguments(all, root())
+            .into_iter()
+            .skip(1)
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn root_without_a_command_prints_its_help_like_cobra() {
+        let verdict = |args: &[&str]| {
+            let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+            evaluate_with_required(&args, root())
+        };
+        let root_help = Verdict::GroupHelp(String::new());
+        // No command: a lone dash, `--` and everything after it, persistent flags only.
+        for args in [
+            vec![],
+            vec!["-"],
+            vec!["--"],
+            vec!["-", "--"],
+            vec!["--", "-"],
+            vec!["-", "-"],
+            vec!["--json"],
+            vec!["--output", "xml"],
+            vec!["--json", "-"],
+            vec!["--", "list"],
+            vec!["--", "get", "x"],
+            vec!["--", "help"],
+            vec!["--", "--json"],
+            vec!["--", "--version"],
+            vec!["--vault", "somewhere"],
+        ] {
+            assert_eq!(verdict(&args), root_help, "{args:?}");
+        }
+        // `help` is a command of the native help handler, not an empty root.
+        assert_eq!(verdict(&["help"]), Verdict::Proceed);
+        assert_eq!(verdict(&["-", "help"]), Verdict::Proceed);
+        // A word before `--` is still resolved (and reported) as before.
+        assert!(matches!(
+            verdict(&["-", "unknownthing"]),
+            Verdict::Fail { code: 1, .. }
+        ));
+    }
+
+    #[test]
+    fn a_lone_dash_moves_behind_the_last_command_word_for_clap() {
+        // cobra skips the dash while it resolves the command and counts it as a positional of
+        // the command; clap would read it as the parent's first positional.
+        assert_eq!(clap_args(&["-", "list"]), ["list", "-"]);
+        assert_eq!(clap_args(&["share", "-", "list"]), ["share", "list", "-"]);
+        assert_eq!(clap_args(&["-", "share", "list"]), ["share", "list", "-"]);
+        assert_eq!(clap_args(&["-", "-", "list"]), ["list", "-", "-"]);
+        assert_eq!(
+            clap_args(&["-", "share", "-", "list"]),
+            ["share", "list", "-", "-"]
+        );
+        // Flags keep their place; only the positional dash moves.
+        assert_eq!(clap_args(&["-", "--json", "list"]), ["--json", "list", "-"]);
+        assert_eq!(
+            clap_args(&["--vault", "-", "list"]),
+            ["--vault", "-", "list"],
+            "a flag's value is not a positional"
+        );
+        assert_eq!(clap_args(&["--vault=-", "list"]), ["--vault=-", "list"]);
+        // The dash goes right behind the word, ahead of what cobra passes after it.
+        assert_eq!(clap_args(&["-", "list", "foo"]), ["list", "-", "foo"]);
+        assert_eq!(
+            clap_args(&["-", "version", "--json"]),
+            ["version", "-", "--json"]
+        );
+        // `help` walks its topic itself.
+        assert_eq!(clap_args(&["-", "help", "list"]), ["help", "-", "list"]);
+        // Nothing to move: unchanged, including a dash behind the word or after `--`.
+        for args in [
+            vec!["list", "-"],
+            vec!["list"],
+            vec!["-"],
+            vec!["help", "-", "list"],
+            vec!["-", "unknownthing"],
+            vec!["--", "-"],
+            vec!["run", "--", "-"],
+        ] {
+            assert_eq!(clap_args(&args), args, "{args:?}");
         }
     }
 

@@ -572,15 +572,11 @@ fn wait_and_clear(
 pub fn native_get_clipboard() -> Arc<dyn TextClipboard> {
     #[cfg(target_os = "macos")]
     {
-        Arc::new(MacClipboard)
+        pasteboard_text_clipboard(Arc::new(crate::desktop_commands::SystemHost::pasteboard()))
     }
     #[cfg(target_os = "linux")]
     {
-        Arc::new(CommandTextClipboard(
-            crate::desktop_commands::CommandClipboard::new(Arc::new(
-                crate::desktop_commands::SystemHost::new(),
-            )),
-        ))
+        command_text_clipboard(Arc::new(crate::desktop_commands::SystemHost::new()))
     }
     #[cfg(windows)]
     {
@@ -592,34 +588,49 @@ pub fn native_get_clipboard() -> Arc<dyn TextClipboard> {
     }
 }
 
-#[cfg(target_os = "macos")]
-struct MacClipboard;
+/// The pasteboard (`pbcopy`/`pbpaste`, Go's macOS atotto backend) as a `get`
+/// clipboard over any [`crate::desktop_commands::DesktopHost`]. Tests pass an
+/// isolated host with fake tools on any Unix.
+#[must_use]
+pub fn pasteboard_text_clipboard(
+    host: Arc<dyn crate::desktop_commands::DesktopHost>,
+) -> Arc<dyn TextClipboard> {
+    Arc::new(PasteboardTextClipboard(
+        crate::desktop_commands::PasteboardClipboard::new(host),
+    ))
+}
 
-#[cfg(target_os = "macos")]
-impl TextClipboard for MacClipboard {
+struct PasteboardTextClipboard(crate::desktop_commands::PasteboardClipboard);
+
+impl TextClipboard for PasteboardTextClipboard {
     fn copy(&self, text: &str) -> Result<(), String> {
         use crate::Clipboard;
-        crate::MacOsPlatform
-            .set(text.as_bytes())
-            .map_err(|error| error.message)
+        self.0.set(text.as_bytes()).map_err(|error| error.message)
     }
 
     fn read(&self) -> Result<String, String> {
-        let output = std::process::Command::new("/usr/bin/pbpaste")
-            .stdin(std::process::Stdio::null())
-            .output()
-            .map_err(|error| error.to_string())?;
-        if !output.status.success() {
-            return Err(format!("{}", output.status));
-        }
-        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+        self.0
+            .read()
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+            .map_err(|error| error.message)
     }
 }
 
-#[cfg(target_os = "linux")]
+/// The atotto-style command clipboard (Go's Linux `clipboard.DefaultClipboard()`)
+/// as a `get` clipboard over any [`crate::desktop_commands::DesktopHost`]. Tool
+/// selection happens here, once. [`native_get_clipboard`] passes the real host
+/// on Linux; tests pass an isolated host with fake tools on any Unix.
+#[must_use]
+pub fn command_text_clipboard(
+    host: Arc<dyn crate::desktop_commands::DesktopHost>,
+) -> Arc<dyn TextClipboard> {
+    Arc::new(CommandTextClipboard(
+        crate::desktop_commands::CommandClipboard::new(host),
+    ))
+}
+
 struct CommandTextClipboard(crate::desktop_commands::CommandClipboard);
 
-#[cfg(target_os = "linux")]
 impl TextClipboard for CommandTextClipboard {
     fn copy(&self, text: &str) -> Result<(), String> {
         use crate::Clipboard;

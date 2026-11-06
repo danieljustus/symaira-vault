@@ -1,0 +1,26 @@
+{
+  "direction": "Go test drives the Rust binary through re-encrypt journal crash recovery",
+  "go_verdict": {
+    "accepted": true,
+    "command": [
+      "go",
+      "test",
+      "./internal/vault",
+      "-run",
+      "^TestReencryptJournalGoRustIntegration$",
+      "-count=1"
+    ],
+    "exit_code": 0,
+    "output_sha256": "18e99ee272e755df9054beb68246e9b5f38279cdc32bb6007d8bc3d7498ce475"
+  },
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "darwin",
+  "name": "reencrypt-journal-differential",
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "rust_artifacts_sha256": {
+    "symvault": "5d52506d2b2dea353c093ecfdee08ca0ad007f78d3a0479bff59da4985fbf4d5"
+  },
+  "rust_commit": "7fc881eb0951287aa113bf82ab774fda0acf2408",
+  "schema": 1
+}

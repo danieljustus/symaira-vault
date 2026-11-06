@@ -1,0 +1,54 @@
+# Native Linux (arm64 on Apple Silicon) image for scripts/rust-port/local-gate.sh.
+# Mirrors the ubuntu jobs "Rust", "Rust Miri" and "Rust port contract" in
+# .github/workflows/ci.yml. Keep the pins in sync with that workflow.
+# ponytail: same Ubuntu 24.04 as ubuntu-latest, but arm64 instead of x86_64;
+# the final hosted CI run on the closing PR remains the x86_64 evidence.
+FROM ubuntu:24.04
+
+ARG NIGHTLY=nightly-2026-09-03
+
+# Git from the git-core PPA: worktrees of this repository use the
+# `relativeworktrees` extension, which needs git >= 2.48.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends software-properties-common gpg-agent \
+ && add-apt-repository -y ppa:git-core/ppa \
+ && apt-get install -y --no-install-recommends git gnupg2 perl python3 sudo ca-certificates curl \
+      build-essential pkg-config \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN userdel -r ubuntu 2>/dev/null; useradd -m -u 1000 -s /bin/bash dev \
+ && echo 'dev ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/dev
+
+USER dev
+ENV PATH=/home/dev/.cargo/bin:$PATH \
+    CARGO_HOME=/home/dev/.cargo \
+    RUSTUP_HOME=/home/dev/.rustup
+
+RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.98.0 \
+      --component clippy,rustfmt,llvm-tools-preview \
+ && rustup toolchain install "${NIGHTLY}" --profile minimal --component miri,rust-src \
+ && curl -fsSL https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash \
+ && cargo binstall --no-confirm --locked \
+      cargo-nextest@0.9.143 cargo-deny@0.20.2 cargo-audit@0.22.2 \
+      cargo-hack@0.6.45 cargo-llvm-cov@0.9.0 cargo-fuzz@0.13.2 \
+ && git config --global safe.directory '*' \
+ && git --version \
+ && mkdir -p /home/dev/.cargo/registry /home/dev/target
+
+# Area process contracts (make local-area, Linux lane): the workflows' own
+# setup -- rust-cli-artifacts.yml (zsh, fish; bash ships with the base),
+# rust-tui.yml (xvfb, xclip) and setup-python 3.13 (tui_contract.py asserts
+# it; Ubuntu 24.04 ships 3.12, so python3.13 comes from deadsnakes). pyte goes
+# into a venv under the target volume at run time. Appended last so the layers
+# above stay cached.
+RUN sudo add-apt-repository -y ppa:deadsnakes/ppa \
+ && sudo apt-get update \
+ && sudo apt-get install -y --no-install-recommends python3.13 python3.13-venv zsh fish xvfb xclip \
+ && sudo rm -rf /var/lib/apt/lists/*
+
+# Container git never auto-prunes worktrees: the repository's common dir is
+# mounted read-write, host worktree paths do not exist in here, and a prune
+# (explicit or via `git gc --auto`) would delete the host worktrees' admin dirs.
+RUN sudo git config --system gc.auto 0 \
+ && sudo git config --system gc.worktreePruneExpire never \
+ && sudo git config --system maintenance.auto false

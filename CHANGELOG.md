@@ -16,6 +16,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- Go implementation, Go CI/release jobs; Rust-only. CI, release, packaging and
+  developer tooling no longer need a Go toolchain: the `setup-go`, golangci-lint,
+  gosec, govulncheck, Go fuzz/coverage and Go test jobs, the `gomod` Dependabot
+  ecosystem, the `deferred-deps-check`, `mcp-http-shutdown`,
+  `rust-store-observations` and `rust-sync-observations` workflows, the
+  Windows/FreeBSD CI legs and scripts (`install.ps1`), `run_go_tests.py`,
+  `check-go-coverage.sh`, `go-fuzz-target.sh`, `test_go_toolchains.py` and the
+  gomobile Vaultcore mode of `scripts/build-vaultcore.sh` are gone.
+  Binaries are built with `cargo build --release --locked -p symvault-cli --bin symvault`;
+  osv-scanner scans `Cargo.lock`; `scripts/setup-dev.sh` installs rustup and the
+  pinned cargo tools.
+  The last Go tree is archived at tag `legacy/go-oracle`; frozen fixtures and
+  recordings stay and are verified by `make fixtures-verify`. Reverse oracles
+  (Go verifying Rust-written data), the Go backend test volume, the Go
+  fuzzers, Windows/FreeBSD and the capture mode of the Rust differential helpers
+  are no longer verified, see [ADR 0036](docs/adr/0036-go-removal.md). Flake
+  packaging uses `rustPlatform.buildRustPackage`.
+
 ## [v0.23.2] - 2026-10-21
 
 ### Security

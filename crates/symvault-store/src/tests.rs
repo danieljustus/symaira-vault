@@ -764,6 +764,86 @@ fn fresh_layout_writes_a_new_entry_atomically_and_reads_it_back() {
     assert!(matches!(error, StoreError::Config(message) if message.contains("replacement")));
 }
 
+/// Crafted `entries/**/*.age` files (they can arrive by git pull or rsync) whose
+/// age header is cheap to write and minutes of work for the `age` crate's header
+/// parser (debug build: a 64 KiB X25519 line about a minute, 2000 tiny stanzas
+/// 67 s, one stanza of 200 body lines 21 s, 32 stanzas of 1 KiB lines 15 s, a
+/// 2 MiB header over 100 s; Go needs 0.1-0.5 s for any of them). Opening the
+/// store (which reconciles the manifest), listing, reading and verifying must
+/// stay fast and fail the read with an ordinary envelope error.
+#[test]
+fn hostile_entry_headers_never_reach_the_age_parser() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    materialize(root, &value.vaults[0]);
+    let crafted = |stanzas: &[u8]| {
+        let mut raw = b"age-encryption.org/v1\n".to_vec();
+        raw.extend_from_slice(stanzas);
+        raw.extend_from_slice(b"--- ");
+        raw.extend(std::iter::repeat_n(b'A', 43));
+        raw.push(b'\n');
+        raw.extend_from_slice(&[0; 64]);
+        raw
+    };
+    let mut body_lines = b"-> X25519 ".to_vec();
+    body_lines.extend(std::iter::repeat_n(b'A', 43));
+    body_lines.push(b'\n');
+    for _ in 0..200 {
+        body_lines.extend(std::iter::repeat_n(b'A', 64));
+        body_lines.push(b'\n');
+    }
+    body_lines.push(b'\n');
+    let mut kilo_lines = Vec::new();
+    for _ in 0..32 {
+        kilo_lines.extend_from_slice(b"-> X25519 ");
+        kilo_lines.extend(std::iter::repeat_n(b'z', 1000));
+        kilo_lines.extend_from_slice(b"\nAAAA\n");
+    }
+    let mut huge_line = b"-> X25519 ".to_vec();
+    huge_line.extend(std::iter::repeat_n(b'z', 64 * 1024));
+    huge_line.extend_from_slice(b"\nAAAA\n");
+    let mut two_mib = Vec::new();
+    while two_mib.len() < (2 << 20) - 2000 {
+        two_mib.extend_from_slice(b"-> a\n\n");
+    }
+    let shapes = [
+        ("zz-line", crafted(&huge_line)),
+        ("zz-tiny", crafted(&b"-> a\n\n".repeat(2000))),
+        ("zz-body", crafted(&body_lines)),
+        ("zz-kilo", crafted(&kilo_lines)),
+        ("zz-two-mib", crafted(&two_mib)),
+    ];
+    fs::create_dir_all(root.join("entries/w")).unwrap();
+    for (name, bytes) in &shapes {
+        fs::write(root.join(format!("entries/w/{name}.age")), bytes).unwrap();
+    }
+
+    let started = std::time::Instant::now();
+    let store = Store::open(root, &identity).unwrap();
+    store.reconcile_manifest_on_open(&identity);
+    let listed = store.list(&identity).unwrap();
+    for (name, _) in &shapes {
+        assert!(listed.contains(&format!("w/{name}")), "{name}");
+        let error = store.get(&format!("w/{name}"), &identity).unwrap_err();
+        assert!(
+            error.to_string().contains("malformed age envelope"),
+            "{name}: {error}"
+        );
+    }
+    store.verify_manifest(&identity).unwrap();
+    store.rebuild_manifest(&identity).unwrap();
+    let elapsed = started.elapsed();
+    assert!(
+        elapsed < std::time::Duration::from_secs(10),
+        "{} hostile headers took {elapsed:?}; the unguarded age parser needs minutes each",
+        shapes.len()
+    );
+    // A legitimate entry next to them is untouched.
+    assert!(store.get("minimal", &identity).is_ok());
+}
+
 #[test]
 fn entry_shape_budget_is_checked_before_entry_deserialization() {
     let too_many =
@@ -1284,7 +1364,7 @@ fn write_new_entry_and_write_entry_at_reject_symlinked_entry_parent() {
         .write_new_entry("safe/second", &Entry::default(), &identity)
         .unwrap_err();
     assert!(
-        matches!(new_entry_error, StoreError::Read { .. }),
+        matches!(new_entry_error, StoreError::Symlink(_)),
         "write_new_entry followed a symlinked parent: {new_entry_error:?}"
     );
 
@@ -1299,7 +1379,7 @@ fn write_new_entry_and_write_entry_at_reject_symlinked_entry_parent() {
         )
         .unwrap_err();
     assert!(
-        matches!(write_at_error, StoreError::Read { .. }),
+        matches!(write_at_error, StoreError::Symlink(_)),
         "write_entry_at followed a symlinked parent: {write_at_error:?}"
     );
 
@@ -1560,21 +1640,25 @@ fn root_acquisition_rejects_replaced_root_before_parsing_invalid_config() {
     fs::write(root.join("identity.age"), b"presence fixture").unwrap();
     let canonical_root = root.canonicalize().unwrap();
     let hook_ran = Arc::new(AtomicBool::new(false));
-    let error = Store::open_with_root_acquisition(&root, {
-        let root = root.clone();
-        let canonical_root = canonical_root.clone();
-        let moved = moved.clone();
-        let replacement = replacement.clone();
-        let hook_ran = hook_ran.clone();
-        move |canonical| {
-            assert_eq!(canonical, canonical_root);
-            fs::rename(&root, &moved).unwrap();
-            fs::rename(&replacement, &root).unwrap();
-            fs::write(root.join("config.yaml"), b"vault: invalid\n").unwrap();
-            fs::write(root.join("identity.age"), b"outsider identity").unwrap();
-            hook_ran.store(true, Ordering::SeqCst);
-        }
-    })
+    let error = Store::open_with_root_acquisition(
+        &root,
+        {
+            let root = root.clone();
+            let canonical_root = canonical_root.clone();
+            let moved = moved.clone();
+            let replacement = replacement.clone();
+            let hook_ran = hook_ran.clone();
+            move |canonical| {
+                assert_eq!(canonical, canonical_root);
+                fs::rename(&root, &moved).unwrap();
+                fs::rename(&replacement, &root).unwrap();
+                fs::write(root.join("config.yaml"), b"vault: invalid\n").unwrap();
+                fs::write(root.join("identity.age"), b"outsider identity").unwrap();
+                hook_ran.store(true, Ordering::SeqCst);
+            }
+        },
+        false,
+    )
     .unwrap_err();
     assert!(hook_ran.load(Ordering::SeqCst));
     assert!(matches!(error, StoreError::RootChanged(path) if path == root));
@@ -1828,7 +1912,9 @@ impl ManifestTestChild {
                 Err(error) => return Err(error),
             }
         }
-        self.wait_for_exit(Duration::from_secs(5))?;
+        // Setup bound, not the behavior under test: generous so load and coverage
+        // instrumentation cannot win the race (#1564-#1567).
+        self.wait_for_exit(Duration::from_secs(30))?;
         Ok(())
     }
 }
@@ -2230,6 +2316,57 @@ fn rooted_walk_rejects_entry_count_overflow() {
         Err(StoreError::ValueLimit(_))
     ));
 }
+#[cfg(unix)]
+#[test]
+fn vault_root_walk_skips_git_like_go_legacy_scan() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    // A `.git` object directory the walker cannot read stands in for one that
+    // `git gc --auto` removes while the walk runs; Go never descends into it.
+    fs::create_dir_all(temp.path().join(".git/objects/42")).unwrap();
+    fs::write(temp.path().join(".git/objects/42/obj"), b"x").unwrap();
+    fs::set_permissions(
+        temp.path().join(".git/objects"),
+        fs::Permissions::from_mode(0o000),
+    )
+    .unwrap();
+    fs::create_dir_all(temp.path().join("entries/.git")).unwrap();
+    fs::write(temp.path().join("entries/.git/kept.age"), b"1").unwrap();
+    fs::write(temp.path().join("legacy.age"), b"2").unwrap();
+    let root = fs::File::open(temp.path()).unwrap();
+    let walked = rooted::walk_vault_root_with_limits(&root, temp.path(), None, None);
+    fs::set_permissions(
+        temp.path().join(".git/objects"),
+        fs::Permissions::from_mode(0o700),
+    )
+    .unwrap();
+    let mut relative = walked
+        .unwrap()
+        .into_iter()
+        .map(|entry| entry.relative)
+        .collect::<Vec<_>>();
+    relative.sort();
+    let expected: Vec<PathBuf> = [
+        ".git",
+        "entries",
+        "entries/.git",
+        "entries/.git/kept.age",
+        "legacy.age",
+    ]
+    .iter()
+    .map(PathBuf::from)
+    .collect();
+    assert_eq!(relative, expected);
+    // The plain walk still reports everything (and fails on the unreadable dir).
+    let root = fs::File::open(temp.path()).unwrap();
+    assert!(
+        rooted::walk_with_limits(&root, temp.path(), None, None)
+            .unwrap()
+            .iter()
+            .any(|entry| entry.relative == Path::new(".git/objects/42/obj"))
+    );
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 struct Store004Fixture {
     schema_version: u32,
@@ -2257,45 +2394,13 @@ struct Store004Case {
     manifest_load: String,
 }
 
-fn store004_digest(root: &Path, names: &[String], oracle: bool) -> String {
-    let mut sorted = names.to_vec();
-    sorted.sort();
-    let mut hasher = Sha256::new();
-    for name in sorted {
-        let bytes = if oracle {
-            let output = Command::new("git")
-                .args([
-                    "-C",
-                    root.to_str().unwrap(),
-                    "show",
-                    &format!("caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44:{name}"),
-                ])
-                .output()
-                .expect("git show oracle source");
-            // Without this the digest is silently taken over empty output when
-            // the oracle commit is absent -- a shallow checkout then looks like
-            // a provenance mismatch instead of a missing object.
-            assert!(
-                output.status.success(),
-                "git show of pinned oracle source {name} failed: {}; \
-                 the oracle commit must be present (fetch-depth: 0)",
-                String::from_utf8_lossy(&output.stderr).trim()
-            );
-            output.stdout
-        } else {
-            fs::read(root.join(&name)).expect("read current generator source")
-        };
-        hasher.update(name.as_bytes());
-        hasher.update([0]);
-        hasher.update(bytes);
-        hasher.update([0]);
-    }
-    hasher
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
-}
+/// Frozen digests of the STORE-004 oracle (sha256 over `name\0bytes\0` of the sorted
+/// source files at the pinned commit, and of the generator files): the check no
+/// longer needs the Go tree or the git history.
+const STORE004_SOURCE_DIGEST: &str =
+    "ce11654f548221307d12fdfdca54654abdad28eec207df765cca73f6b67ea008";
+const STORE004_GENERATOR_DIGEST: &str =
+    "81b44be714ba8026ff8e2b2cd3ade27079d022dc59a02062f7ec7a757b4c9011";
 
 type Store004Mutation = (&'static str, fn(&mut Store004Fixture));
 
@@ -2308,8 +2413,8 @@ fn flip_first_hex_char(digest: &mut String) {
     digest.replace_range(..1, &replacement.to_string());
 }
 
-fn validate_store004_provenance(value: &Store004Fixture, root: &Path) -> Result<(), String> {
-    let source_files = vec![
+fn validate_store004_provenance(value: &Store004Fixture) -> Result<(), String> {
+    let source_files: Vec<String> = vec![
         "internal/config/config.go".into(),
         "internal/config/config_load.go".into(),
         "internal/config/schema.go".into(),
@@ -2317,7 +2422,7 @@ fn validate_store004_provenance(value: &Store004Fixture, root: &Path) -> Result<
         "internal/vault/entry_readwrite.go".into(),
         "internal/vault/manifest.go".into(),
     ];
-    let generator_files = vec![
+    let generator_files: Vec<String> = vec![
         "scripts/rust-port/cmd/store004gen/archive_extract.go".into(),
         "scripts/rust-port/cmd/store004gen/archive_extract_test.go".into(),
         "scripts/rust-port/cmd/store004gen/main.go".into(),
@@ -2333,10 +2438,10 @@ fn validate_store004_provenance(value: &Store004Fixture, root: &Path) -> Result<
     {
         return Err("STORE-004 oracle identity/file inventory mismatch".into());
     }
-    if value.oracle.source_digest != store004_digest(root, &source_files, true) {
+    if value.oracle.source_digest != STORE004_SOURCE_DIGEST {
         return Err("STORE-004 pinned source digest mismatch".into());
     }
-    if value.oracle.generator_digest != store004_digest(root, &generator_files, false) {
+    if value.oracle.generator_digest != STORE004_GENERATOR_DIGEST {
         return Err("STORE-004 generator digest mismatch".into());
     }
     Ok(())
@@ -2350,8 +2455,7 @@ fn store004_fixture_provenance_is_bound_and_mutations_fail_closed() {
     ))
     .unwrap();
     let mut value: Store004Fixture = serde_json::from_str(&raw).unwrap();
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    validate_store004_provenance(&value, &root).unwrap();
+    validate_store004_provenance(&value).unwrap();
 
     let mutations: Vec<Store004Mutation> = vec![
         ("commit", |v: &mut Store004Fixture| {
@@ -2374,7 +2478,7 @@ fn store004_fixture_provenance_is_bound_and_mutations_fail_closed() {
         let original = serde_json::to_value(&value).unwrap();
         mutate(&mut value);
         assert!(
-            validate_store004_provenance(&value, &root).is_err(),
+            validate_store004_provenance(&value).is_err(),
             "provenance validator accepted {name} mutation"
         );
         value = serde_json::from_value(original).unwrap();
@@ -2855,4 +2959,93 @@ fn recovery_resource_failures_preserve_journal_and_originals() {
     );
     assert_eq!(fs::read(&backup).unwrap(), original);
     assert!(journal.is_file());
+}
+
+#[test]
+fn recovery_without_backup_rolls_back_only_with_staged_provenance() {
+    let (_, fixture) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &fixture.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let target = temp.path().join("entries/minimal.age");
+    let original = fs::read(&target).unwrap();
+    let staged = temp
+        .path()
+        .join("entries/.minimal.age.reencrypt-0123456789abcdef01234567");
+    let journal = temp.path().join(".reencrypt.journal");
+    let digest = "0".repeat(64);
+
+    // Replacement staged, backup not yet journaled (the Go crash window): the target is still the
+    // original, so recovery keeps it, drops the staged file and the journal, and the vault opens.
+    fs::write(&staged, b"staged replacement").unwrap();
+    fs::write(
+        &journal,
+        serde_json::to_vec(&serde_json::json!({
+            "version":1,
+            "entries":[{"path":target,"temp":staged,"digest":digest,"installed":false}]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    store.recover_reencrypt_journal_locked(&identity).unwrap();
+    assert_eq!(fs::read(&target).unwrap(), original);
+    assert!(!staged.exists() && !journal.exists());
+
+    // The same state after cleanup already removed the staged file (crash before the journal went).
+    fs::write(
+        &journal,
+        serde_json::to_vec(&serde_json::json!({
+            "version":1,
+            "entries":[{"path":target,"temp":staged,"digest":digest}]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    store.recover_reencrypt_journal_locked(&identity).unwrap();
+    assert_eq!(fs::read(&target).unwrap(), original);
+    assert!(!journal.exists());
+
+    // A changed target with no staged replacement and no backup has no provenance: refuse, change nothing.
+    fs::write(&staged, b"unrelated file").unwrap();
+    fs::write(
+        &journal,
+        serde_json::to_vec(&serde_json::json!({
+            "version":1,
+            "entries":[{"path":target,"digest":digest}]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let error = store
+        .recover_reencrypt_journal_locked(&identity)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("re-encryption target changed without an original backup"),
+        "{error}"
+    );
+    assert_eq!(fs::read(&target).unwrap(), original);
+    assert_eq!(fs::read(&staged).unwrap(), b"unrelated file");
+    assert!(journal.is_file());
+}
+
+#[test]
+fn keep_negative_zero_rewrites_only_a_leading_minus_zero() {
+    let rewrite = |text: &str| {
+        super::keep_negative_zero(text.as_bytes())
+            .map(|out| String::from_utf8(out.to_vec()).unwrap())
+    };
+    // Exponents keep their sign: `1e-0` is valid JSON and must stay so.
+    assert_eq!(rewrite(r#"{"a":1e-0,"b":[1E-0,2]}"#), None);
+    assert_eq!(
+        rewrite(r#"{"a":-0,"b":[-0,1e-0],"c":"-0"}"#).as_deref(),
+        Some(r#"{"a":-0.0,"b":[-0.0,1e-0],"c":"-0"}"#)
+    );
+    assert_eq!(rewrite("-0"), Some("-0.0".to_owned()));
+    for text in [r#"{"a":1e-0}"#, r#"[1E-0,-0]"#] {
+        let bytes = super::keep_negative_zero(text.as_bytes())
+            .map_or_else(|| text.as_bytes().to_vec(), |out| out.to_vec());
+        serde_json::from_slice::<serde_json::Value>(&bytes).expect("still valid JSON");
+    }
 }

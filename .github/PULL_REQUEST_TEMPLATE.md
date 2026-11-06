@@ -8,10 +8,9 @@ Explain the problem, user need, or maintenance reason.
 
 ## Testing
 
-- [ ] `make fmt`
-- [ ] `make vet`
-- [ ] `make lint`
-- [ ] `GOWORK=off go test ./...`
+- [ ] `cargo fmt --all --check`
+- [ ] `make rust-lint`
+- [ ] `make rust-test`
 - [ ] Added or updated tests where needed
 
 ## Safety

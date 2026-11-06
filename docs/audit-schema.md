@@ -120,7 +120,7 @@ following actions are used in the public self-hosted core:
 | `policy_biometry_unavailable` | Biometric verification unavailable | — (always false) |
 | `tool_scope_denied` | Tool outside agent scope | — (always false) |
 | `agent_tool_denied` | Tool blocked by agent tier | — (always false) |
-| `tool_registry_drift` | Tool registered but no handler | — (always false) |
+| `tool_registry_drift` | Token was issued against a different tool-registry hash; path is the tool name | — (always false) |
 | `post_call_hook_error` | Post-call hook failed | — (always false) |
 | `approval.<action>.denied` | Approval explicitly denied | — (always false) |
 | `approval.<action>.granted` | Approval granted | Approved |

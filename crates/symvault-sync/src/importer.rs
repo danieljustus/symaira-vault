@@ -1,12 +1,14 @@
 mod cxf;
 mod gojson;
+mod gourl;
 mod onepux;
 pub use cxf::parse as parse_cxf;
 mod pass;
 mod totp;
+pub use gourl::quote_bytes as go_quote_bytes;
 pub use onepux::parse_1pux;
-pub use pass::{import_pass, import_pass_with_gpg, parse_pass_entry};
-pub use totp::parse_totp;
+pub use pass::{import_pass, import_pass_with_gpg, parse_pass_entry, parse_pass_entry_bytes};
+pub use totp::{parse_totp, parse_totp_bytes};
 
 use gojson::{Context, GoDecode, GoStruct, Reader, decode_struct};
 use serde::{Deserialize, Serialize};
@@ -28,11 +30,19 @@ pub enum ImportError {
     /// `encoding/json` errors of the Bitwarden parser).
     #[error("{0}")]
     Decode(String),
-    #[error("distinct CSV paths collapse to the same UTF-8 path: {0}")]
-    PathCollision(String),
     #[error("import I/O failed: {0}")]
     Io(#[from] std::io::Error),
 }
+/// One entry the importer produced.
+///
+/// Go strings carry arbitrary bytes, so the Go importer can return a path or a
+/// value that is not valid UTF-8, and the command then echoes the path as raw
+/// bytes and counts value lengths in raw bytes. `path` and the string values
+/// hold the text `encoding/json` would emit (one U+FFFD per invalid byte),
+/// which is also what the vault stores for a value. The two `raw_*` fields
+/// keep what that text cannot: the exact path bytes and the exact byte length
+/// of a value. They are empty for every UTF-8 entry, so existing consumers and
+/// the serialized form are unchanged.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ImportedEntry {
     pub path: String,
@@ -42,6 +52,54 @@ pub struct ImportedEntry {
     pub warnings: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub secret_type: Option<String>,
+    /// The exact bytes of the Go path, set only when they are not valid UTF-8
+    /// (then `path` is their `encoding/json` text).
+    #[serde(skip)]
+    pub raw_path: Option<Vec<u8>>,
+    /// The exact byte length of a string value in `data`, set only when it
+    /// differs from the length of the stored text.
+    #[serde(skip)]
+    pub raw_value_len: BTreeMap<String, usize>,
+}
+
+impl ImportedEntry {
+    /// The exact bytes of the Go path.
+    #[must_use]
+    pub fn path_bytes(&self) -> &[u8] {
+        self.raw_path.as_deref().unwrap_or(self.path.as_bytes())
+    }
+
+    /// The Go byte length of the top-level string value `key`, which is what
+    /// Go's field-length limit counts.
+    #[must_use]
+    pub fn value_len(&self, key: &str) -> Option<usize> {
+        match self.data.get(key) {
+            Some(Value::String(text)) => {
+                Some(self.raw_value_len.get(key).copied().unwrap_or(text.len()))
+            }
+            _ => None,
+        }
+    }
+
+    /// Sets the path from the exact bytes Go produced.
+    pub(crate) fn set_path_bytes(&mut self, bytes: Vec<u8>) {
+        self.path = go_string_from_bytes(&bytes);
+        self.raw_path = match String::from_utf8(bytes) {
+            Ok(_) => None,
+            Err(error) => Some(error.into_bytes()),
+        };
+    }
+
+    /// Stores a string value taken from exact Go bytes.
+    pub(crate) fn set_string_bytes(&mut self, key: &str, bytes: &[u8]) {
+        let text = go_string_from_bytes(bytes);
+        if text.len() == bytes.len() {
+            self.raw_value_len.remove(key);
+        } else {
+            self.raw_value_len.insert(key.to_owned(), bytes.len());
+        }
+        self.data.insert(key.to_owned(), Value::String(text));
+    }
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Format {
@@ -175,7 +233,6 @@ pub fn parse_csv_profile(
     }
     let mut result = Vec::new();
     let mut used = std::collections::BTreeSet::new();
-    let mut emitted_paths = BTreeMap::<String, Vec<u8>>::new();
     let mut row = csv::ByteRecord::new();
     while reader
         .read_byte_record(&mut row)
@@ -198,66 +255,55 @@ pub fn parse_csv_profile(
                 .or_else(|| columns.get(&lower_go_bytes(column.as_bytes())))
                 .and_then(|i| raw_row.get(*i))
         };
-        let mut path = String::new();
-        let mut path_key = None;
-        let mut data = BTreeMap::new();
+        // The path is kept as the exact Go bytes: Go normalizes and compares
+        // raw strings, so two titles that differ only in an invalid byte are
+        // two paths even though their text is the same.
+        let mut path_key: Vec<u8> = Vec::new();
+        let mut entry = ImportedEntry::default();
         let mut warnings = None;
         for (field, col) in mapping {
             let Some(val) = get(col) else { continue };
             match field.as_str() {
                 "title" | "path" => {
-                    if path.is_empty() && !val.is_empty() {
-                        path = normalize_path(val);
-                        path_key = get_raw(col).map(|raw| normalize_path_key(raw));
+                    if path_key.is_empty() && !val.is_empty() {
+                        path_key = match get_raw(col) {
+                            Some(raw) => normalize_path_key(raw),
+                            None => normalize_path_key(val.as_bytes()),
+                        };
                     }
                 }
                 "otp" | "totp.secret" => {
                     if !val.is_empty() {
-                        insert_totp(&mut data, &mut warnings, val);
+                        insert_totp(&mut entry.data, &mut warnings, val);
                     }
                 }
-                _ => {
-                    data.insert(field.clone(), Value::String(val.into()));
-                }
+                _ => match get_raw(col) {
+                    Some(raw) => entry.set_string_bytes(field, raw),
+                    None => {
+                        entry.data.insert(field.clone(), Value::String(val.into()));
+                    }
+                },
             }
         }
-        if path.is_empty()
+        if path_key.is_empty()
             && matches!(format, Format::Chrome | Format::Firefox)
             && let Some(url) = get("url")
         {
-            path = normalize_path(&host_from_url(url).to_lowercase());
-            path_key = Some(normalize_path_key(path.as_bytes()));
+            path_key =
+                normalize_path_key(normalize_path(&host_from_url(url).to_lowercase()).as_bytes());
         }
-        let raw_path_key = path_key
-            .clone()
-            .unwrap_or_else(|| normalize_path_key(path.as_bytes()));
-        if format != Format::Csv && !path.is_empty() {
-            let base = path.clone();
-            let base_key = raw_path_key.clone();
-            let mut candidate_key = base_key.clone();
+        if format != Format::Csv && !path_key.is_empty() {
+            let base_key = path_key.clone();
             let mut suffix = 2;
-            while used.contains(&candidate_key) {
-                path = format!("{base}-{suffix}");
-                candidate_key = path_key_with_suffix(&base_key, suffix);
+            while used.contains(&path_key) {
+                path_key = path_key_with_suffix(&base_key, suffix);
                 suffix += 1;
             }
-            used.insert(candidate_key);
+            used.insert(path_key.clone());
         }
-        if !path.is_empty() {
-            if let Some(previous_key) = emitted_paths.get(&path) {
-                if previous_key != &raw_path_key {
-                    return Err(ImportError::PathCollision(path));
-                }
-            } else {
-                emitted_paths.insert(path.clone(), raw_path_key);
-            }
-        }
-        result.push(ImportedEntry {
-            path,
-            data,
-            warnings,
-            secret_type: None,
-        });
+        entry.set_path_bytes(path_key);
+        entry.warnings = warnings;
+        result.push(entry);
     }
     Ok(result)
 }
@@ -343,6 +389,13 @@ fn path_key_with_suffix(base: &[u8], suffix: usize) -> Vec<u8> {
     key
 }
 
+/// Go's `strings.TrimSpace` over exact Go string bytes: an invalid sequence
+/// decodes as one non-space `RuneError` per byte, so it ends the trim.
+#[must_use]
+pub fn go_trim_space(bytes: &[u8]) -> &[u8] {
+    trim_go_space_bytes(bytes)
+}
+
 fn trim_go_space_bytes(mut bytes: &[u8]) -> &[u8] {
     while let Some((character, width)) = first_utf8_char(bytes) {
         if !character.is_whitespace() {
@@ -394,45 +447,261 @@ fn lower_go_bytes(bytes: &[u8]) -> Vec<u8> {
     go_string_from_bytes(bytes).to_lowercase().into_bytes()
 }
 
-// csv intentionally accepts malformed quoting; Go's default encoding/csv
-// rejects it. Validate quote structure before passing bytes to that reader.
-fn validate_csv_quotes(bytes: &[u8]) -> Result<(), ImportError> {
-    enum State {
-        Start,
-        Bare,
-        Quoted,
-        Closed,
-    }
-    let mut state = State::Start;
-    for (index, &byte) in bytes.iter().enumerate() {
-        if byte == b'\r' && (bytes.get(index + 1).is_none() || bytes.get(index + 1) == Some(&b'\n'))
-        {
-            continue;
-        }
-        state = match (&state, byte) {
-            (State::Start, b'"') => State::Quoted,
-            (State::Start | State::Bare, b',' | b'\n') => State::Start,
-            (State::Bare, b'"') => {
-                return Err(ImportError::Parse("bare quote in non-quoted-field".into()));
-            }
-            (State::Start | State::Bare, _) => State::Bare,
-            (State::Quoted, b'"') => State::Closed,
-            (State::Quoted, _) => State::Quoted,
-            (State::Closed, b'"') => State::Quoted,
-            (State::Closed, b',' | b'\n') => State::Start,
-            (State::Closed, _) => {
-                return Err(ImportError::Parse(
-                    "extraneous or missing quote in quoted-field".into(),
-                ));
-            }
+/// A port of the record scanner of Go's `encoding/csv` (`Reader.readRecord`
+/// with `Comma=','`, no comments, `LazyQuotes=false`, `FieldsPerRecord=-1`).
+///
+/// The `csv` crate accepts malformed quoting, so quote structure is validated
+/// by this scanner first. It reproduces Go's record/line/column bookkeeping so
+/// a rejected source reports Go's exact diagnostic
+/// (`parse error on line 2, column 18: extraneous or missing " in quoted-field`).
+struct GoCsvScanner<'a> {
+    data: &'a [u8],
+    offset: usize,
+    num_line: usize,
+}
+
+#[derive(Debug)]
+struct GoCsvError {
+    start_line: usize,
+    line: usize,
+    column: usize,
+    bare_quote: bool,
+}
+
+impl std::fmt::Display for GoCsvError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let reason = if self.bare_quote {
+            "bare \" in non-quoted-field"
+        } else {
+            "extraneous or missing \" in quoted-field"
         };
+        if self.start_line == self.line {
+            write!(
+                f,
+                "parse error on line {}, column {}: {reason}",
+                self.line, self.column
+            )
+        } else {
+            write!(
+                f,
+                "record on line {}; parse error on line {}, column {}: {reason}",
+                self.start_line, self.line, self.column
+            )
+        }
     }
-    if matches!(state, State::Quoted) {
-        return Err(ImportError::Parse(
-            "extraneous or missing quote in quoted-field".into(),
-        ));
+}
+
+fn length_nl(line: &[u8]) -> usize {
+    usize::from(line.last() == Some(&b'\n'))
+}
+
+impl<'a> GoCsvScanner<'a> {
+    fn new(data: &'a [u8]) -> Self {
+        Self {
+            data,
+            offset: 0,
+            num_line: 0,
+        }
     }
-    Ok(())
+
+    /// `Reader.readLine`: one line with `\r\n` folded to `\n`, a trailing `\r`
+    /// dropped before EOF, and `true` once the input is exhausted.
+    fn read_line(&mut self) -> (Vec<u8>, bool) {
+        let rest = &self.data[self.offset..];
+        let (raw, eof) = match rest.iter().position(|byte| *byte == b'\n') {
+            Some(end) => (&rest[..=end], false),
+            None => (rest, true),
+        };
+        self.offset += raw.len();
+        self.num_line += 1;
+        let mut line = raw.to_vec();
+        let mut at_eof = eof;
+        if !raw.is_empty() && eof {
+            at_eof = false;
+            if line.last() == Some(&b'\r') {
+                line.pop();
+            }
+        }
+        let n = line.len();
+        if n >= 2 && line[n - 2] == b'\r' && line[n - 1] == b'\n' {
+            line[n - 2] = b'\n';
+            line.pop();
+        }
+        (line, at_eof)
+    }
+
+    /// `Reader.readRecord`: `Ok(None)` at end of input.
+    fn read_record(&mut self) -> Result<Option<Vec<Vec<u8>>>, GoCsvError> {
+        let (mut line, eof) = loop {
+            let (line, eof) = self.read_line();
+            if !eof && line.len() == length_nl(&line) {
+                continue;
+            }
+            break (line, eof);
+        };
+        if eof {
+            return Ok(None);
+        }
+        let rec_line = self.num_line;
+        let (mut pos_line, mut pos_col) = (self.num_line, 1_usize);
+        let mut fields: Vec<Vec<u8>> = Vec::new();
+        'field: loop {
+            if line.first() != Some(&b'"') {
+                let comma = line.iter().position(|byte| *byte == b',');
+                let field_len = comma.unwrap_or_else(|| line.len() - length_nl(&line));
+                if let Some(quote) = line[..field_len].iter().position(|byte| *byte == b'"') {
+                    return Err(GoCsvError {
+                        start_line: rec_line,
+                        line: self.num_line,
+                        column: pos_col + quote,
+                        bare_quote: true,
+                    });
+                }
+                fields.push(line[..field_len].to_vec());
+                if let Some(comma) = comma {
+                    line.drain(..=comma);
+                    pos_col += comma + 1;
+                    continue 'field;
+                }
+                break 'field;
+            }
+            line.remove(0);
+            pos_col += 1;
+            let mut field: Vec<u8> = Vec::new();
+            loop {
+                if let Some(quote) = line.iter().position(|byte| *byte == b'"') {
+                    field.extend_from_slice(&line[..quote]);
+                    line.drain(..=quote);
+                    pos_col += quote + 1;
+                    match line.first() {
+                        Some(b'"') => {
+                            field.push(b'"');
+                            line.remove(0);
+                            pos_col += 1;
+                        }
+                        Some(b',') => {
+                            line.remove(0);
+                            pos_col += 1;
+                            fields.push(field);
+                            continue 'field;
+                        }
+                        _ if length_nl(&line) == line.len() => {
+                            fields.push(field);
+                            break 'field;
+                        }
+                        _ => {
+                            return Err(GoCsvError {
+                                start_line: rec_line,
+                                line: self.num_line,
+                                column: pos_col - 1,
+                                bare_quote: false,
+                            });
+                        }
+                    }
+                } else if !line.is_empty() {
+                    pos_col += line.len();
+                    field.extend_from_slice(&line);
+                    (line, _) = self.read_line();
+                    if !line.is_empty() {
+                        pos_line += 1;
+                        pos_col = 1;
+                    }
+                } else {
+                    return Err(GoCsvError {
+                        start_line: rec_line,
+                        line: pos_line,
+                        column: pos_col,
+                        bare_quote: false,
+                    });
+                }
+            }
+        }
+        Ok(Some(fields))
+    }
+}
+
+/// Rejects a source Go's CSV reader rejects, with Go's text: the first record
+/// is the header (`read csv header`), every later one a row (`read csv row`).
+fn validate_csv_quotes(bytes: &[u8]) -> Result<(), ImportError> {
+    let mut scanner = GoCsvScanner::new(bytes);
+    let mut first = true;
+    loop {
+        match scanner.read_record() {
+            Ok(Some(_)) => first = false,
+            Ok(None) => return Ok(()),
+            Err(error) => {
+                let stage = if first { "header" } else { "row" };
+                return Err(ImportError::Decode(format!("read csv {stage}: {error}")));
+            }
+        }
+    }
+}
+
+/// The reason text of a Go `*os.PathError` for `error` (`no such file or
+/// directory`, `permission denied`, `is a directory`, ...), without Rust's
+/// ` (os error N)` suffix.
+#[must_use]
+pub fn go_io_reason(error: &std::io::Error) -> String {
+    #[cfg(windows)]
+    match error.raw_os_error() {
+        Some(2) => return "The system cannot find the file specified.".to_owned(),
+        Some(3) => return "The system cannot find the path specified.".to_owned(),
+        Some(5) => return "Access is denied.".to_owned(),
+        _ => {}
+    }
+    use std::io::ErrorKind;
+    match error.kind() {
+        ErrorKind::NotFound => "no such file or directory".to_owned(),
+        ErrorKind::PermissionDenied => "permission denied".to_owned(),
+        ErrorKind::IsADirectory => "is a directory".to_owned(),
+        ErrorKind::NotADirectory => "not a directory".to_owned(),
+        ErrorKind::AlreadyExists => "file exists".to_owned(),
+        _ => {
+            let text = error.to_string();
+            match text.rfind(" (os error ") {
+                Some(end) => text[..end].to_lowercase(),
+                None => text,
+            }
+        }
+    }
+}
+
+/// The header record of a CSV source as Go's `csv.Reader.Read` returns it, or
+/// `None` when the source is empty or its first record is malformed. The
+/// command sniffs this record to pick a built-in profile.
+#[must_use]
+pub fn csv_header_record(bytes: &[u8]) -> Option<Vec<String>> {
+    match GoCsvScanner::new(bytes).read_record() {
+        Ok(Some(fields)) => Some(
+            fields
+                .iter()
+                .map(|field| go_string_from_bytes(field))
+                .collect(),
+        ),
+        _ => None,
+    }
+}
+
+/// The human-readable source name of a built-in CSV profile (`Detected <name>
+/// CSV export from header row`).
+#[must_use]
+pub fn csv_profile_name(format: Format) -> Option<&'static str> {
+    match format {
+        Format::Apple => Some("Apple Passwords (iCloud Keychain)"),
+        Format::Chrome => Some("Chrome / Chromium"),
+        Format::Firefox => Some("Firefox"),
+        _ => None,
+    }
+}
+
+/// The field to column mapping in effect for a CSV import: the user mapping
+/// when given, otherwise the profile (or generic) default.
+#[must_use]
+pub fn csv_effective_mapping(
+    format: Format,
+    user: Option<&BTreeMap<String, String>>,
+) -> BTreeMap<String, String> {
+    user.cloned().unwrap_or_else(|| default_csv_mapping(format))
 }
 
 fn host_from_url(raw: &str) -> &str {
@@ -593,6 +862,7 @@ pub fn parse_bitwarden(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> 
             data: d,
             warnings,
             secret_type: (item.kind == 2).then(|| "payment".into()),
+            ..ImportedEntry::default()
         });
     }
     Ok(out)
@@ -613,14 +883,6 @@ fn insert_totp(
 }
 mod xhash {
     pub type HashMap<K, V> = std::collections::HashMap<K, V>;
-}
-
-fn null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: Deserialize<'de> + Default,
-{
-    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 fn default_csv_mapping(format: Format) -> BTreeMap<String, String> {
@@ -684,17 +946,4 @@ pub fn detect_csv_profile(header: &[String]) -> Format {
         }
     }
     Format::Csv
-}
-
-// Go unmarshals JSON null array elements into the element type's zero value.
-fn null_default_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: Deserialize<'de> + Default,
-{
-    Ok(Option::<Vec<Option<T>>>::deserialize(deserializer)?
-        .unwrap_or_default()
-        .into_iter()
-        .map(Option::unwrap_or_default)
-        .collect())
 }

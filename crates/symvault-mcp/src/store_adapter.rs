@@ -1,10 +1,17 @@
+use crate::anomaly::{
+    AnomalyAlert, AnomalyClock, AnomalyMonitor, DetectorConfig, ToolCallEvent, WarnSink,
+};
 use crate::approval::ApprovalQueue;
+use crate::authguard::{
+    AuthMethodBackend, Challenger, OperationType, UnavailableAuthMethodBackend,
+};
 use crate::broker::{self, ApiSubstitution, ApiTemplate, ApiTemplateDefinition};
 use crate::call::{
     CommandExecutor, ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore,
     ReadOnlyUnavailableTool, SecureInputPreflightError, ToolCallResult, ToolCallRuntime,
     WriteApprovalDecision, normalize_scope_path, write_approval_decision,
 };
+use crate::policy_context::build_context;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use serde_json::{Value, json};
 use std::{
@@ -16,7 +23,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use symvault_core::policy::{Action, Engine, EvalContext};
+use symvault_core::policy::{Action, Engine};
 use symvault_core::secret_ref::SecretHandle;
 use symvault_crypto::{Identity, SecretBytes};
 use symvault_platform::approval::{
@@ -113,25 +120,25 @@ pub fn load_api_template_definition(
 }
 
 fn load_builtin_api_template(name: &str) -> Result<ApiTemplateDefinition, String> {
-    // Share the authoritative Go assets; custom files always take precedence.
+    // Crate-local copies of the built-in templates; custom files always take precedence.
     let yaml = match name {
-        "anthropic" => include_str!("../../../internal/mcp/apitemplates/builtin/anthropic.yaml"),
-        "cloudflare" => include_str!("../../../internal/mcp/apitemplates/builtin/cloudflare.yaml"),
-        "gemini" => include_str!("../../../internal/mcp/apitemplates/builtin/gemini.yaml"),
-        "github" => include_str!("../../../internal/mcp/apitemplates/builtin/github.yaml"),
-        "gitlab" => include_str!("../../../internal/mcp/apitemplates/builtin/gitlab.yaml"),
-        "linear" => include_str!("../../../internal/mcp/apitemplates/builtin/linear.yaml"),
-        "notion" => include_str!("../../../internal/mcp/apitemplates/builtin/notion.yaml"),
-        "npm" => include_str!("../../../internal/mcp/apitemplates/builtin/npm.yaml"),
-        "openai" => include_str!("../../../internal/mcp/apitemplates/builtin/openai.yaml"),
-        "openrouter" => include_str!("../../../internal/mcp/apitemplates/builtin/openrouter.yaml"),
-        "perplexity" => include_str!("../../../internal/mcp/apitemplates/builtin/perplexity.yaml"),
-        "resend" => include_str!("../../../internal/mcp/apitemplates/builtin/resend.yaml"),
-        "sentry" => include_str!("../../../internal/mcp/apitemplates/builtin/sentry.yaml"),
-        "slack" => include_str!("../../../internal/mcp/apitemplates/builtin/slack.yaml"),
-        "stripe" => include_str!("../../../internal/mcp/apitemplates/builtin/stripe.yaml"),
-        "telegram" => include_str!("../../../internal/mcp/apitemplates/builtin/telegram.yaml"),
-        "vercel" => include_str!("../../../internal/mcp/apitemplates/builtin/vercel.yaml"),
+        "anthropic" => include_str!("../assets/apitemplates/anthropic.yaml"),
+        "cloudflare" => include_str!("../assets/apitemplates/cloudflare.yaml"),
+        "gemini" => include_str!("../assets/apitemplates/gemini.yaml"),
+        "github" => include_str!("../assets/apitemplates/github.yaml"),
+        "gitlab" => include_str!("../assets/apitemplates/gitlab.yaml"),
+        "linear" => include_str!("../assets/apitemplates/linear.yaml"),
+        "notion" => include_str!("../assets/apitemplates/notion.yaml"),
+        "npm" => include_str!("../assets/apitemplates/npm.yaml"),
+        "openai" => include_str!("../assets/apitemplates/openai.yaml"),
+        "openrouter" => include_str!("../assets/apitemplates/openrouter.yaml"),
+        "perplexity" => include_str!("../assets/apitemplates/perplexity.yaml"),
+        "resend" => include_str!("../assets/apitemplates/resend.yaml"),
+        "sentry" => include_str!("../assets/apitemplates/sentry.yaml"),
+        "slack" => include_str!("../assets/apitemplates/slack.yaml"),
+        "stripe" => include_str!("../assets/apitemplates/stripe.yaml"),
+        "telegram" => include_str!("../assets/apitemplates/telegram.yaml"),
+        "vercel" => include_str!("../assets/apitemplates/vercel.yaml"),
         _ => return Err(format!("template {name:?} not found")),
     };
     serde_yaml_ng::from_str(yaml).map_err(|error| format!("parse template: {error}"))
@@ -245,6 +252,7 @@ pub struct StoreReadOnlyAdapter {
 
 impl StoreReadOnlyAdapter {
     pub fn open(root: impl AsRef<Path>, identity: Identity) -> Result<Self, String> {
+        symvault_sync::data_safety::install();
         let store = Store::open(root, &identity).map_err(store_error)?;
         Ok(Self { store, identity })
     }
@@ -347,6 +355,13 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
             Err(StoreError::EntryNotFound(_)) => Ok(None),
             Err(error) => Err(store_error(error)),
         }
+    }
+
+    fn is_canary(&self, path: &str) -> bool {
+        // Not `get`: this lookup is not a tool read and must not be counted as one.
+        self.store
+            .get(path, &self.identity)
+            .is_ok_and(|entry| entry.canary)
     }
 
     fn resolve_secret_ref_at_path(
@@ -462,6 +477,17 @@ fn merge_json_objects(
     }
 }
 
+impl AuthStatusSnapshot {
+    fn of(config: &ReadOnlyRuntimeConfig) -> Self {
+        Self {
+            cache_backend: config.cache_backend.clone(),
+            cache_persistent: config.cache_persistent,
+            cache_message: config.cache_message.clone(),
+            touch_id_available: config.touch_id_available,
+        }
+    }
+}
+
 /// A concrete `tools/call` runtime over the encrypted Rust store.
 pub struct StoreReadOnlyRuntime {
     inner: ReadOnlyRuntime<StoreReadOnlyAdapter>,
@@ -471,6 +497,8 @@ pub struct StoreReadOnlyRuntime {
     policy: Option<Engine>,
     audit: Option<SharedAuditLogger>,
     rate_limiter: Mutex<Option<MinuteRateLimiter>>,
+    /// Go `Server.sessionID`: minted once per runtime and stamped on every row.
+    session_id: String,
     agent_name: String,
     transport: String,
     unavailable_tools: Vec<String>,
@@ -478,6 +506,9 @@ pub struct StoreReadOnlyRuntime {
     approval: Arc<dyn ApprovalSeam>,
     secure_input: Arc<dyn SecureInputSeam>,
     approval_cache: Mutex<HashSet<String>>,
+    /// PLATFORM-002: Go's `anomalyDetector` (rate, off-hours, canary, sweep,
+    /// tool chain), run after each dispatched tool call.
+    anomaly: AnomalyMonitor,
     approval_key_counter: std::sync::atomic::AtomicI64,
     approval_mode: String,
     require_approval: bool,
@@ -487,8 +518,48 @@ pub struct StoreReadOnlyRuntime {
     allowed_executables: Vec<String>,
     clipboard: Arc<dyn symvault_core::platform::Clipboard>,
     clipboard_clear_cancel: Mutex<Option<mpsc::Sender<()>>>,
-    clipboard_auto_clear_duration: Duration,
+    /// Go reads `clipboard.auto_clear_duration` verbatim: a value <= 0 starts no
+    /// timer and `generate_totp` reports it unchanged, negative included.
+    clipboard_auto_clear_seconds: i64,
     api_transport_options: broker::ApiTransportOptions,
+    payment: Option<crate::payment::Enforcer>,
+    autotype: Option<Arc<dyn symvault_core::platform::Autotype>>,
+    perplexity: Option<crate::perplexity::PerplexityRuntimeConfig>,
+    /// Go `Server.biometricChallenger`; unavailable until the application
+    /// injects a platform authenticator (`with_touch_id`).
+    challenger: Challenger,
+    auth_backend: Arc<dyn AuthMethodBackend>,
+    /// Go `Server.canManageConfig()` for this agent's profile.
+    can_manage_config: bool,
+    /// The vault directory spelling Go keys sessions and the Touch ID item by.
+    vault_dir: String,
+    /// Go mutates the in-memory config on `set_auth_method`, so
+    /// `get_auth_status` reflects the new method for the rest of the session.
+    auth_method_override: Mutex<Option<String>>,
+    auth_status_snapshot: AuthStatusSnapshot,
+}
+
+/// Go `config.NormalizeAuthMethod` with Go's error text (the quoted argument
+/// is the caller's original spelling, not the lower-cased one).
+fn normalize_auth_method(method: &str) -> Result<&'static str, String> {
+    match symvault_core::go_to_lower(method.trim()).as_str() {
+        "" | "passphrase" => Ok("passphrase"),
+        "touchid" | "touch-id" | "touch_id" | "biometric" | "biometrics" => Ok("touchid"),
+        _ => Err(format!(
+            "invalid authMethod {} (valid: passphrase, touchid)",
+            symvault_core::go_quote(method)
+        )),
+    }
+}
+
+/// The `get_auth_status` inputs captured at construction so the status can be
+/// re-rendered after `set_auth_method` without reaching into the inner runtime.
+#[derive(Clone)]
+struct AuthStatusSnapshot {
+    cache_backend: String,
+    cache_persistent: bool,
+    cache_message: String,
+    touch_id_available: bool,
 }
 
 impl StoreReadOnlyRuntime {
@@ -536,6 +607,8 @@ impl StoreReadOnlyRuntime {
         config
             .available_tools
             .retain(|name| !unavailable_tools.iter().any(|blocked| blocked == name));
+        let vault_dir = config.vault_dir.clone();
+        let auth_status_snapshot = AuthStatusSnapshot::of(&config);
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
             share_store: Mutex::new(share_store),
@@ -544,6 +617,7 @@ impl StoreReadOnlyRuntime {
             policy,
             audit,
             rate_limiter: Mutex::new(None),
+            session_id: crate::audit_identity::generate_session_id(),
             agent_name,
             transport,
             unavailable_tools,
@@ -551,6 +625,7 @@ impl StoreReadOnlyRuntime {
             approval: Arc::new(PlatformApproval),
             secure_input: Arc::new(PlatformSecureInput),
             approval_cache: Mutex::new(HashSet::new()),
+            anomaly: AnomalyMonitor::new(),
             approval_key_counter: std::sync::atomic::AtomicI64::new(0),
             approval_mode,
             require_approval,
@@ -560,8 +635,17 @@ impl StoreReadOnlyRuntime {
             allowed_executables,
             clipboard: Arc::new(symvault_core::platform::UnavailablePlatform),
             clipboard_clear_cancel: Mutex::new(None),
-            clipboard_auto_clear_duration: Duration::from_secs(30),
+            clipboard_auto_clear_seconds: 30,
             api_transport_options: broker::ApiTransportOptions::default(),
+            payment: None,
+            autotype: None,
+            perplexity: None,
+            challenger: Challenger::unavailable(),
+            auth_backend: Arc::new(UnavailableAuthMethodBackend),
+            can_manage_config: false,
+            vault_dir,
+            auth_method_override: Mutex::new(None),
+            auth_status_snapshot,
         })
     }
 
@@ -606,6 +690,8 @@ impl StoreReadOnlyRuntime {
         config
             .available_tools
             .retain(|name| !unavailable_tools.iter().any(|blocked| blocked == name));
+        let vault_dir = config.vault_dir.clone();
+        let auth_status_snapshot = AuthStatusSnapshot::of(&config);
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
             share_store: Mutex::new(share_store),
@@ -614,6 +700,7 @@ impl StoreReadOnlyRuntime {
             policy,
             audit,
             rate_limiter: Mutex::new(None),
+            session_id: crate::audit_identity::generate_session_id(),
             agent_name,
             transport,
             unavailable_tools,
@@ -621,6 +708,7 @@ impl StoreReadOnlyRuntime {
             approval: Arc::new(PlatformApproval),
             secure_input: Arc::new(PlatformSecureInput),
             approval_cache: Mutex::new(HashSet::new()),
+            anomaly: AnomalyMonitor::new(),
             approval_key_counter: std::sync::atomic::AtomicI64::new(0),
             approval_mode,
             require_approval,
@@ -630,9 +718,71 @@ impl StoreReadOnlyRuntime {
             allowed_executables,
             clipboard: Arc::new(symvault_core::platform::UnavailablePlatform),
             clipboard_clear_cancel: Mutex::new(None),
-            clipboard_auto_clear_duration: Duration::from_secs(30),
+            clipboard_auto_clear_seconds: 30,
             api_transport_options: broker::ApiTransportOptions::default(),
+            payment: None,
+            autotype: None,
+            perplexity: None,
+            challenger: Challenger::unavailable(),
+            auth_backend: Arc::new(UnavailableAuthMethodBackend),
+            can_manage_config: false,
+            vault_dir,
+            auth_method_override: Mutex::new(None),
+            auth_status_snapshot,
         })
+    }
+
+    /// Installs the biometric authenticator behind Go's `authguard.Challenger`
+    /// (`require_biometry` policies and `set_auth_method`). The default is
+    /// unavailable, so constructing a runtime never raises a Touch ID prompt.
+    #[must_use]
+    pub fn with_touch_id(mut self, touch_id: Arc<dyn symvault_core::platform::TouchId>) -> Self {
+        self.challenger = Challenger::new(touch_id);
+        self
+    }
+
+    /// Installs the session/keychain seam used by `set_auth_method`.
+    #[must_use]
+    pub fn with_auth_method_backend(mut self, backend: Arc<dyn AuthMethodBackend>) -> Self {
+        self.auth_backend = backend;
+        self
+    }
+
+    /// Go `Server.canManageConfig()`: whether this agent's profile may call
+    /// `set_auth_method`.
+    #[must_use]
+    pub fn with_can_manage_config(mut self, allowed: bool) -> Self {
+        self.can_manage_config = allowed;
+        self
+    }
+
+    /// Replaces the anomaly detector's clock (default: the local wall clock).
+    /// Tests inject a fixed clock so off-hours and window rules are exact.
+    #[must_use]
+    pub fn with_anomaly_clock(mut self, clock: Arc<dyn AnomalyClock>) -> Self {
+        self.anomaly = self.anomaly.with_clock(clock);
+        self
+    }
+
+    /// Replaces where anomaly warning lines go (default: stderr, like Go's
+    /// default `slog` logger).
+    #[must_use]
+    pub fn with_anomaly_log(mut self, sink: WarnSink) -> Self {
+        self.anomaly = self.anomaly.with_sink(sink);
+        self
+    }
+
+    /// Replaces the detector thresholds (default: Go's defaults).
+    #[must_use]
+    pub fn with_anomaly_config(mut self, config: DetectorConfig) -> Self {
+        self.anomaly = self.anomaly.with_config(config);
+        self
+    }
+
+    /// Number of tool-call events in the detector's sliding window.
+    #[must_use]
+    pub fn anomaly_window_len(&self) -> usize {
+        self.anomaly.window_len()
     }
 
     /// Replaces the controlling-terminal approval seam. Production callers keep
@@ -648,6 +798,34 @@ impl StoreReadOnlyRuntime {
     #[must_use]
     pub fn with_api_transport_options(mut self, options: broker::ApiTransportOptions) -> Self {
         self.api_transport_options = options;
+        self
+    }
+
+    /// Attaches the `prepare_payment` policy enforcer (`server.New` attaches
+    /// one when the agent references a known `paymentPolicy`).
+    #[must_use]
+    pub fn with_payment_enforcer(mut self, enforcer: Option<crate::payment::Enforcer>) -> Self {
+        self.payment = enforcer;
+        self
+    }
+
+    /// Installs the application-owned autotype backend used by
+    /// `prepare_payment`. Without one the tool reports Go's
+    /// "autotype not available on this platform" and types nothing.
+    #[must_use]
+    pub fn with_autotype(mut self, autotype: Arc<dyn symvault_core::platform::Autotype>) -> Self {
+        self.autotype = Some(autotype);
+        self
+    }
+
+    /// Supplies `mcp.perplexity` (API key, base URL, rate limit). Tests may
+    /// also set `allow_private`, which Go's config loader never does.
+    #[must_use]
+    pub fn with_perplexity_config(
+        mut self,
+        config: Option<crate::perplexity::PerplexityRuntimeConfig>,
+    ) -> Self {
+        self.perplexity = config;
         self
     }
 
@@ -669,8 +847,17 @@ impl StoreReadOnlyRuntime {
     }
 
     #[must_use]
-    pub fn with_clipboard_auto_clear_duration(mut self, duration: Duration) -> Self {
-        self.clipboard_auto_clear_duration = duration;
+    pub fn with_clipboard_auto_clear_duration(self, duration: Duration) -> Self {
+        self.with_clipboard_auto_clear_seconds(
+            i64::try_from(duration.as_secs()).unwrap_or(i64::MAX),
+        )
+    }
+
+    /// The configured `clipboard.auto_clear_duration` in seconds, unclamped
+    /// (see the field).
+    #[must_use]
+    pub fn with_clipboard_auto_clear_seconds(mut self, seconds: i64) -> Self {
+        self.clipboard_auto_clear_seconds = seconds;
         self
     }
 
@@ -713,6 +900,7 @@ impl StoreReadOnlyRuntime {
         let timestamp = OffsetDateTime::now_utc()
             .format(&Rfc3339)
             .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into());
+        let call = crate::audit_identity::current();
         let entry = symvault_store::audit::LogEntry {
             timestamp,
             agent: self.agent_name.clone(),
@@ -721,6 +909,9 @@ impl StoreReadOnlyRuntime {
             transport: self.transport.clone(),
             reason: if !ok { action.into() } else { String::new() },
             ok,
+            session_id: self.session_id.clone(),
+            request_id: call.request_id,
+            token_id: call.token_id,
             ..symvault_store::audit::LogEntry::default()
         };
         if let Ok(mut logger) = audit.lock() {
@@ -941,13 +1132,8 @@ impl StoreReadOnlyRuntime {
                 ));
             }
             if let Some(policy) = &self.policy {
-                let result = policy.evaluate(EvalContext {
-                    agent_id: self.agent_name.clone(),
-                    path: candidate_path.clone(),
-                    action_type: "run".into(),
-                    tool_name: "run_command".into(),
-                    ..EvalContext::default()
-                });
+                let result =
+                    policy.evaluate(build_context(&self.agent_name, &candidate_path, "run"));
                 if !result.matched || result.action != Action::Allow {
                     self.append_audit("policy_denied", &candidate_path, false);
                     return Err(if !result.matched {
@@ -967,13 +1153,7 @@ impl StoreReadOnlyRuntime {
                 ));
             }
             if let Some(policy) = &self.policy {
-                let result = policy.evaluate(EvalContext {
-                    agent_id: self.agent_name.clone(),
-                    path: path.clone(),
-                    action_type: "run".into(),
-                    tool_name: "run_command".into(),
-                    ..EvalContext::default()
-                });
+                let result = policy.evaluate(build_context(&self.agent_name, &path, "run"));
                 if !result.matched || result.action != Action::Allow {
                     self.append_audit("policy_denied", &path, false);
                     return Err(if !result.matched {
@@ -1282,7 +1462,7 @@ impl StoreReadOnlyRuntime {
                     }
                 };
                 let generated_name = generate_env_var_name(&entry_path, &field);
-                self.authorize_run_secret_path(&entry_path, "execute_with_secret")
+                self.authorize_run_secret_path(&entry_path)
                     .map_err(run_files_error)?;
                 let resolver_ref = if field.is_empty() {
                     entry_path.clone()
@@ -1291,7 +1471,7 @@ impl StoreReadOnlyRuntime {
                 };
                 let resolved_path = StoreReadOnlyAdapter::ref_path(&reader, &resolver_ref)
                     .map_err(|error| format!("cannot resolve secret ref {reference:?}: {error}"))?;
-                self.authorize_run_secret_path(&resolved_path, "execute_with_secret")
+                self.authorize_run_secret_path(&resolved_path)
                     .map_err(run_files_error)?;
                 let value =
                     StoreReadOnlyAdapter::ref_at_path(&reader, &resolver_ref, &resolved_path)
@@ -1563,8 +1743,7 @@ impl StoreReadOnlyRuntime {
 
         // Authorize the template's credential entry for the run action before
         // reading it, matching the retained Go handler's policy boundary.
-        self.authorize_run_secret_path(&entry_path, "execute_api_request")
-            .map_err(run_files_error)?;
+        self.check_api_entry_policy(&entry_path)?;
 
         // Resolve only after scope, policy and approval. The accessor returns
         // the authorized entry projection and response-redaction strings.
@@ -1869,11 +2048,11 @@ impl StoreReadOnlyRuntime {
             let (reference, encoding) = parse_run_file_spec(spec)
                 .map_err(|message| RunFilesError::Tool(format!("files.{name}: {message}")))?;
             let candidate_path = extract_path_from_secret_ref(&reference);
-            self.authorize_run_secret_path(&candidate_path, "run_command")?;
+            self.authorize_run_secret_path(&candidate_path)?;
             let path = StoreReadOnlyAdapter::ref_path(reader, &reference).map_err(|error| {
                 RunFilesError::Tool(format!("cannot resolve secret ref {reference:?}: {error}"))
             })?;
-            self.authorize_run_secret_path(&path, "run_command")?;
+            self.authorize_run_secret_path(&path)?;
             let source =
                 StoreReadOnlyAdapter::ref_at_path(reader, &reference, &path).map_err(|error| {
                     RunFilesError::Tool(format!("cannot resolve secret ref {reference:?}: {error}"))
@@ -1901,7 +2080,7 @@ impl StoreReadOnlyRuntime {
         Ok(files)
     }
 
-    fn authorize_run_secret_path(&self, path: &str, tool_name: &str) -> Result<(), RunFilesError> {
+    fn authorize_run_secret_path(&self, path: &str) -> Result<(), RunFilesError> {
         if !self.inner.scope_allows(path) {
             self.append_audit("scope_denied", path, false);
             return Err(RunFilesError::Denied(format!(
@@ -1909,13 +2088,7 @@ impl StoreReadOnlyRuntime {
             )));
         }
         if let Some(policy) = &self.policy {
-            let result = policy.evaluate(EvalContext {
-                agent_id: self.agent_name.clone(),
-                path: path.to_owned(),
-                action_type: "run".into(),
-                tool_name: tool_name.into(),
-                ..EvalContext::default()
-            });
+            let result = policy.evaluate(build_context(&self.agent_name, path, "run"));
             if !result.matched || result.action != Action::Allow {
                 self.append_audit("policy_denied", path, false);
                 return Err(RunFilesError::Denied(if !result.matched {
@@ -1926,6 +2099,44 @@ impl StoreReadOnlyRuntime {
             }
         }
         Ok(())
+    }
+
+    /// Go `checkPolicy(ctx, entryPath, "run")` as `execute_api_request` calls
+    /// it for the template's credential entry: scope was checked by the caller;
+    /// the four outcomes carry Go's audit action and error text
+    /// (`policy_denied`, `policy_prompt`, `policy_biometry`). Unlike the tool
+    /// middleware, this helper only reports the biometry requirement, it never
+    /// challenges. The tool name is not part of the evaluation context: Go's
+    /// `BuildContext` leaves it empty, so `allowed_tools` conditions match every
+    /// tool there, and so they do here (see `policy_context`).
+    /// An unrecognised action is denied (Go returns nil and proceeds).
+    fn check_api_entry_policy(&self, path: &str) -> Result<(), String> {
+        let Some(policy) = &self.policy else {
+            return Ok(());
+        };
+        let result = policy.evaluate(build_context(&self.agent_name, path, "run"));
+        let rule = symvault_core::go_quote(&result.rule_name);
+        if !result.matched {
+            self.append_audit("policy_denied", path, false);
+            return Err("policy: no matching rule (default deny)".into());
+        }
+        match result.action {
+            Action::Allow => Ok(()),
+            Action::Prompt => {
+                self.append_audit("policy_prompt", path, false);
+                Err(format!("policy requires approval by rule {rule}"))
+            }
+            Action::RequireBiometry => {
+                self.append_audit("policy_biometry", path, false);
+                Err(format!(
+                    "biometric verification required by policy by rule {rule}"
+                ))
+            }
+            _ => {
+                self.append_audit("policy_denied", path, false);
+                Err(format!("policy denied by rule {rule}"))
+            }
+        }
     }
 
     /// Supplies the caller-owned key without copying it into public runtime config.
@@ -2071,7 +2282,10 @@ impl StoreReadOnlyRuntime {
             ));
         }
 
-        let short_id: String = grant.id.chars().take(8).collect();
+        // Go slices `grant.ID[:8]` by bytes: a multi-byte character cut in half
+        // renders as U+FFFD (a shorter id would panic in Go; Rust shows it whole).
+        let short_id =
+            String::from_utf8_lossy(&grant.id.as_bytes()[..grant.id.len().min(8)]).into_owned();
         let mut details = format!(
             "Share {short_id}: {} → {}, path: {}\nAgent requesting approval: {}",
             grant.from_agent, grant.to_agent, grant.secret_path, self.agent_name
@@ -2399,15 +2613,12 @@ impl StoreReadOnlyRuntime {
             "generate_password" | "generate_totp" | "generate_template" => "generate",
             _ => "read",
         };
-        let result = policy.evaluate(EvalContext {
-            agent_id: self.agent_name.clone(),
-            path: path.to_owned(),
-            action_type: action_type.to_owned(),
-            tool_name: name.to_owned(),
-            ..EvalContext::default()
-        });
+        let result = policy.evaluate(build_context(&self.agent_name, path, action_type));
         if result.matched && result.action == Action::Allow {
             return Ok(());
+        }
+        if result.matched && result.action == Action::RequireBiometry {
+            return self.policy_biometry_challenge(name, path);
         }
         self.append_audit("policy_denied", path, false);
         Err(ToolCallResult::error(format!(
@@ -2418,6 +2629,164 @@ impl StoreReadOnlyRuntime {
                 format!(" by rule {:?}", result.rule_name)
             }
         )))
+    }
+
+    /// Go `validateToolAccess` + `challengeBiometric` for a `require_biometry`
+    /// policy rule: audit `policy_biometry`, then challenge. Audit actions and
+    /// error texts are Go's (`policy_biometry_unavailable` /
+    /// `policy_biometry_failed` / `policy_biometry_passed`; the first two are
+    /// recorded against the tool name, the last against the entry path).
+    ///
+    /// Deliberate stricter divergence: Go's `validateToolAccess` returns `nil`
+    /// (the tool proceeds!) when `challengeBiometric` fails or when
+    /// `checkPolicy` returns any non-biometry error; the Rust runtime has
+    /// always denied instead (see `authorize_policy`). A failed or unavailable
+    /// challenge therefore denies the call with Go's challenge error text as
+    /// the tool error, and only a successful challenge allows it.
+    fn policy_biometry_challenge(&self, name: &str, path: &str) -> Result<(), ToolCallResult> {
+        let agent = symvault_core::go_quote(&self.agent_name);
+        let tool = symvault_core::go_quote(name);
+        self.append_audit("policy_biometry", path, false);
+        if !self.challenger.available() {
+            self.append_audit("policy_biometry_unavailable", name, false);
+            return Err(ToolCallResult::error(format!(
+                "policy requires biometric verification for tool {tool}, but biometric authentication is not available on this platform. Agent {agent} cannot execute this tool"
+            )));
+        }
+        let reason = format!("Symaira Vault agent {agent} is requesting tool {tool}");
+        if let Err(error) = self
+            .challenger
+            .challenge(&OperationType::tool(name), &reason)
+        {
+            self.append_audit("policy_biometry_failed", name, false);
+            return Err(ToolCallResult::error(format!(
+                "biometric verification failed for tool {tool}: {error}"
+            )));
+        }
+        self.append_audit("policy_biometry_passed", path, true);
+        Ok(())
+    }
+
+    /// Go `handleSetAuthMethod` (`internal/mcp/server/tools_auth.go`).
+    ///
+    /// Parity notes: the in-memory Go config is replaced by a fresh load of
+    /// `config.yaml` (Go would write back its startup snapshot); when no
+    /// biometric challenger is available the change proceeds unchallenged, as
+    /// in Go (the touchid branch already requires an available store). The
+    /// Touch ID item is written only after the challenge (Go writes it first).
+    fn set_auth_method(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        if !self.can_manage_config {
+            self.append_audit("auth_config_denied", "<config>", false);
+            return Err(format!(
+                "agent {} cannot manage Symaira Vault configuration",
+                symvault_core::go_quote(&self.agent_name)
+            ));
+        }
+        let method_arg = match crate::call::required_string(arguments, "method") {
+            Ok(value) => value,
+            Err(result) => return Ok(result),
+        };
+        let method = match normalize_auth_method(method_arg) {
+            Ok(method) => method,
+            Err(message) => return Ok(ToolCallResult::error(message)),
+        };
+
+        // Go checks availability and the session, saves the Touch ID item and
+        // only then challenges, so a rejected challenge leaves an unverified
+        // item behind. The Rust port keeps Go's error order but saves after
+        // a successful challenge (deliberately stricter: no keychain write
+        // without user verification).
+        let mut touch_id_passphrase = None;
+        if method == "touchid" {
+            if !self.auth_backend.biometric_available() {
+                return Ok(ToolCallResult::error(
+                    "Touch ID is not available in this Symaira Vault build or on this Mac",
+                ));
+            }
+            let Some(passphrase) = self
+                .auth_backend
+                .load_session_passphrase(&self.vault_dir)
+                .filter(|passphrase| !passphrase.is_empty())
+            else {
+                return Ok(ToolCallResult::error(
+                    "Touch ID setup requires an active Symaira Vault session; run symvault unlock first",
+                ));
+            };
+            touch_id_passphrase = Some(passphrase);
+        }
+
+        if self.challenger.available() {
+            let reason = format!("Change Symaira Vault auth method to {method}");
+            if let Err(error) = self
+                .challenger
+                .challenge(&OperationType::AUTH_METHOD_SET, &reason)
+            {
+                self.append_audit("auth_method_biometric_failed", "<config>", false);
+                return Ok(ToolCallResult::error(format!(
+                    "biometric verification required: {error}"
+                )));
+            }
+        }
+
+        if let Some(passphrase) = touch_id_passphrase {
+            self.auth_backend
+                .save_biometric_passphrase(Path::new(&self.vault_dir), &passphrase)
+                .map_err(|error| format!("save Touch ID unlock item: {error}"))?;
+        }
+
+        if method != "touchid" {
+            self.auth_backend
+                .clear_biometric_passphrase(Path::new(&self.vault_dir))
+                .map_err(|error| format!("clear Touch ID unlock item: {error}"))?;
+        }
+
+        let config_path = self.share_root.join("config.yaml");
+        let mut config = symvault_core::config::Config::load(&config_path)
+            .map_err(|error| format!("load config: {error}"))?;
+        if let Err(error) = config.set_auth_method(method) {
+            return Ok(ToolCallResult::error(error.to_string()));
+        }
+        config
+            .save_to(&config_path)
+            .map_err(|error| format!("save config: {error}"))?;
+        if let Ok(mut current) = self.auth_method_override.lock() {
+            *current = Some(method.to_owned());
+        }
+        self.append_audit("auth_config", "<config>", true);
+        Ok(ToolCallResult::text(format!("Auth method set to {method}")))
+    }
+
+    /// `get_auth_status` after an in-session `set_auth_method`: Go reads the
+    /// (mutated) in-memory config, so the new method shows immediately.
+    fn auth_status_after_change(&self) -> Option<Result<ToolCallResult, String>> {
+        let method = self.auth_method_override.lock().ok()?.clone()?;
+        #[derive(serde::Serialize)]
+        struct Cache<'a> {
+            backend: &'a str,
+            persistent: bool,
+            message: &'a str,
+        }
+        #[derive(serde::Serialize)]
+        struct Status<'a> {
+            cache: Cache<'a>,
+            method: &'a str,
+            #[serde(rename = "touchIDAvailable")]
+            touch_id_available: bool,
+        }
+        let snapshot = &self.auth_status_snapshot;
+        Some(
+            serde_json::to_string(&Status {
+                cache: Cache {
+                    backend: &snapshot.cache_backend,
+                    persistent: snapshot.cache_persistent,
+                    message: &snapshot.cache_message,
+                },
+                method: &method,
+                touch_id_available: snapshot.touch_id_available,
+            })
+            .map(ToolCallResult::text)
+            .map_err(|error| error.to_string()),
+        )
     }
 
     fn audit_self(&self, arguments: &Value) -> Result<ToolCallResult, String> {
@@ -2658,14 +3027,52 @@ fn read_scan_line<R: BufRead>(reader: &mut R, line: &mut Vec<u8>) -> std::io::Re
 
 impl ToolCallRuntime for StoreReadOnlyRuntime {
     fn authorize(&self, name: &str, arguments: &Value) -> Result<(), ToolCallResult> {
-        if let Err(error) = self.inner.authorize(name, arguments) {
+        self.authorize_with_registry_drift(name, arguments, false)
+    }
+
+    fn registry_drift_agent(&self) -> String {
+        self.agent_name.clone()
+    }
+
+    fn authorize_with_registry_drift(
+        &self,
+        name: &str,
+        arguments: &Value,
+        drift: bool,
+    ) -> Result<(), ToolCallResult> {
+        self.authorize_with_token_scope(name, arguments, false, drift)
+    }
+
+    /// Go `validateToolAccess` order: availability and tier, scoped-token tool
+    /// scope, registry drift, entry policy; the handler's capability checks
+    /// (command execution) follow, as they do inside Go's handlers.
+    fn authorize_with_token_scope(
+        &self,
+        name: &str,
+        arguments: &Value,
+        token_denied: bool,
+        drift: bool,
+    ) -> Result<(), ToolCallResult> {
+        let deny = |error: ToolCallResult| {
             let path = Self::audit_target(name, arguments);
             if !self.unavailable_tools.iter().any(|tool| tool == name) {
                 self.append_audit("tool_denied", &path, false);
             }
-            return Err(error);
+            error
+        };
+        self.inner.authorize_access(name).map_err(deny)?;
+        if token_denied {
+            // Go: `s.logAudit(ctx, "tool_denied", name, false)`.
+            return Err(deny(crate::call::token_scope_refusal(name)));
+        }
+        if drift {
+            // Go: `s.logAudit(ctx, "tool_registry_drift", name, false)`, the
+            // tool name (not the entry path) is the audit target.
+            self.append_audit("tool_registry_drift", name, false);
+            return Err(crate::call::registry_drift_refusal(&self.agent_name));
         }
         self.authorize_policy(name, arguments)?;
+        self.inner.authorize_dispatch(name).map_err(deny)?;
         Ok(())
     }
 
@@ -2679,7 +3086,12 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
         arguments: &Value,
         context: &crate::RequestContext,
     ) -> Result<ToolCallResult, String> {
-        context.check()?;
+        let started = Instant::now();
+        if let Err(error) = context.check() {
+            // Go's handlers observe the cancelled context: a failed call.
+            self.observe_anomaly(name, arguments, false, started, &Err(error.clone()));
+            return Err(error);
+        }
         // Go registers rate limiting as a pre-call hook. It runs only after
         // tool availability, argument decoding, and authorization have
         // succeeded, and hook failures are returned as handler errors so the
@@ -2691,6 +3103,26 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                 "rate limit exceeded: max {limit} requests per minute"
             ));
         }
+        // Go computes the canary flag when the completion event is built; here
+        // it is read before the handler so a call that deletes the entry is
+        // still attributed to the canary.
+        let is_canary = self.canary_target(arguments);
+        let result = self.dispatch_tool(name, arguments, context);
+        self.observe_anomaly(name, arguments, is_canary, started, &result);
+        result
+    }
+}
+
+impl StoreReadOnlyRuntime {
+    /// The handler dispatch and the per-tool audit rows of `call_with_context`,
+    /// i.e. everything Go's `executeTool` runs between the pre-call hooks and
+    /// `detectAnomalyAsync`.
+    fn dispatch_tool(
+        &self,
+        name: &str,
+        arguments: &Value,
+        context: &crate::RequestContext,
+    ) -> Result<ToolCallResult, String> {
         let mut approval_failed = false;
         let result = if matches!(name, "set_entry_field" | "delete_entry" | "symaira_delete")
             && !self.approval_queue_attached
@@ -2706,6 +3138,12 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             self.secure_input_tool(name, arguments)
         } else if name == "symaira_audit_self" {
             self.audit_self(arguments)
+        } else if name == "set_auth_method" {
+            self.set_auth_method(arguments)
+        } else if name == "get_auth_status"
+            && let Some(status) = self.auth_status_after_change()
+        {
+            status
         } else if name == "list_shares" {
             self.list_shares(arguments)
         } else if name == "request_share" {
@@ -2720,8 +3158,18 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             self.execute_with_secret(arguments)
         } else if name == "execute_api_request" {
             self.execute_api_request(arguments, context)
+        } else if name == "prepare_payment" {
+            self.prepare_payment(arguments, context)
+        } else if name == "perplexity_search" {
+            self.perplexity_search(arguments, context)
+        } else if name == "perplexity_ask" {
+            self.perplexity_ask(arguments, context)
         } else if name == "copy_to_clipboard" {
             self.copy_to_clipboard(arguments)
+        } else if name == "autotype" {
+            self.autotype(arguments)
+        } else if name == "generate_totp" {
+            self.generate_totp(arguments)
         } else if name == "run_command" {
             self.run_command(arguments)
         } else {
@@ -2764,8 +3212,9 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                     .get("path")
                     .and_then(Value::as_str)
                     .unwrap_or("<invalid>");
-                let ok = result.as_ref().is_ok_and(|value| !value.is_error);
-                self.append_audit("generate_totp", path, ok);
+                if let Some((action, ok)) = generate_totp_audit(result.as_ref()) {
+                    self.append_audit(&action, path, ok);
+                }
             }
             "set_entry_field" if !approval_failed => {
                 let path = arguments
@@ -2848,6 +3297,541 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
         }
         result
     }
+
+    /// Go `req.RequireString("path")`: the entry path of the call, or empty.
+    fn call_path(arguments: &Value) -> &str {
+        arguments
+            .get("path")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+    }
+
+    fn canary_target(&self, arguments: &Value) -> bool {
+        let path = Self::call_path(arguments);
+        !self.agent_name.is_empty() && !path.is_empty() && self.inner.store().is_canary(path)
+    }
+
+    /// Go `detectAnomalyAsync` (`server_dispatch.go`), run synchronously after
+    /// the handler so the audit rows and the cache invalidation are ordered
+    /// before the response. Only the first alert of a call is audited and
+    /// invalidates the cache; every alert is logged by the monitor.
+    /// Desktop notifications are not ported (ADR 0034 item 28).
+    fn observe_anomaly(
+        &self,
+        name: &str,
+        arguments: &Value,
+        is_canary: bool,
+        started: Instant,
+        result: &Result<ToolCallResult, String>,
+    ) {
+        if self.agent_name.is_empty() {
+            return;
+        }
+        let (ok, field_length) = match result {
+            Err(_) => (false, 0),
+            Ok(value) => (
+                true,
+                if !value.is_error && matches!(name, "get_entry" | "get_entry_value") {
+                    value.text.len()
+                } else {
+                    0
+                },
+            ),
+        };
+        let path = Self::call_path(arguments);
+        let event = ToolCallEvent {
+            timestamp: self.anomaly.now(),
+            agent: self.agent_name.clone(),
+            tool: name.to_owned(),
+            path: path.to_owned(),
+            duration: started.elapsed(),
+            ok,
+            is_canary: is_canary && !path.is_empty(),
+            request_id: crate::audit_identity::current().request_id,
+            field_length,
+        };
+        let alerts = self.anomaly.check(event);
+        if let Some(alert) = alerts.first() {
+            // Durable effects first: the log sink may block or fail, and it
+            // must not be able to delay or suppress the audit row or the
+            // approval-cache invalidation.
+            self.record_anomaly(alert);
+        }
+        // Go order: every detector-hook line, then the dispatch line.
+        self.anomaly.log_alerts(&alerts);
+        if let Some(alert) = alerts.first() {
+            self.anomaly.warn_dispatched(alert);
+        }
+    }
+
+    fn record_anomaly(&self, alert: &AnomalyAlert) {
+        {
+            // Go logs with `context.Background()`: the row carries the session
+            // id only, never the request or token id of the triggering call.
+            let _scope = crate::audit_identity::CallAuditScope::enter(
+                crate::audit_identity::CallAuditIdentity::default(),
+            );
+            self.append_audit(
+                &format!("anomaly_{}", alert.alert_type.as_str()),
+                &alert.path,
+                false,
+            );
+        }
+        self.invalidate_approval_cache();
+    }
+
+    /// Go `invalidateApprovalCache`: forget every remembered approval so the
+    /// next call is approved again. A poisoned lock is cleared too (fail
+    /// closed).
+    fn invalidate_approval_cache(&self) {
+        match self.approval_cache.lock() {
+            Ok(mut cache) => cache.clear(),
+            Err(poisoned) => poisoned.into_inner().clear(),
+        }
+    }
+}
+
+/// `prepare_payment` and the Perplexity tools, ported from
+/// `tools_prepare_payment.go` and `tools_perplexity.go`.
+impl StoreReadOnlyRuntime {
+    /// `requireApproval` for `Intent{Action: "prepare_payment"}`. Critical
+    /// risk is never remembered, so no approval cache is consulted or filled.
+    /// The error text is what Go wraps as `payment denied: <err>`.
+    fn require_payment_approval(
+        &self,
+        path: &str,
+        summary: &str,
+        context: &crate::RequestContext,
+    ) -> Result<(), String> {
+        // `requireApproval` returns `ctx.Err()` first: a cancelled or expired
+        // call never reaches the prompt or the autotype.
+        if let Some(error) = context.go_err() {
+            return Err(error.into());
+        }
+        let mode = if self.approval_mode.is_empty() {
+            if self.require_approval {
+                "prompt"
+            } else {
+                "none"
+            }
+        } else {
+            self.approval_mode.as_str()
+        };
+        match mode {
+            "none" | "auto" => return Ok(()),
+            "deny" => {
+                self.append_audit("approval.prepare_payment.denied", path, false);
+                return Err("prepare_payment denied: approval mode is 'deny'".into());
+            }
+            "prompt" => {}
+            // Go lets an unknown mode through; RuntimeConfig is public and
+            // unvalidated here, and this tool moves money, so fail closed.
+            _ => {
+                self.append_audit("approval.prepare_payment.denied", path, false);
+                return Err(format!(
+                    "prepare_payment denied: unknown approval mode {mode:?}"
+                ));
+            }
+        }
+        if !self.approval.is_tty_present() {
+            self.append_audit("approval.prepare_payment.denied", path, false);
+            return Err(
+                "prepare_payment requires approval but no TTY or GUI dialog available".into(),
+            );
+        }
+        self.append_audit("approval.prepare_payment.requested", path, true);
+        let working_dir = std::env::current_dir()
+            .ok()
+            .map(|dir| dir.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let approval = self.approval.request(&ApprovalRequest {
+            operation: "prepare_payment".into(),
+            // Agent-supplied merchant/description text is terminal text,
+            // never escape sequences.
+            details: sanitize_approval_summary(summary),
+            timeout: if self.approval_timeout.is_zero() {
+                Duration::from_secs(30)
+            } else {
+                self.approval_timeout
+            },
+            agent_name: self.agent_name.clone(),
+            working_dir,
+            risk_level: RiskLevel::Critical,
+            secrets_accessed: self
+                .approval_key_counter
+                .load(std::sync::atomic::Ordering::Acquire),
+            can_remember: false,
+            ..ApprovalRequest::default()
+        });
+        if let Some(error) = &approval.error {
+            return Err(format!("prepare_payment approval failed: {error}"));
+        }
+        if !approval.approved {
+            self.append_audit("approval.prepare_payment.denied", path, false);
+            return Err("prepare_payment denied: user did not approve".into());
+        }
+        self.approval_key_counter
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        self.append_audit("approval.prepare_payment.granted", path, true);
+        Ok(())
+    }
+
+    fn prepare_payment(
+        &self,
+        arguments: &Value,
+        context: &crate::RequestContext,
+    ) -> Result<ToolCallResult, String> {
+        use crate::call::required_string;
+        let path = match required_string(arguments, "entry_path") {
+            Ok(path) => path,
+            Err(result) => {
+                self.append_audit("payment.requested", "<invalid>", false);
+                return Ok(result);
+            }
+        };
+        let required = |name: &str| match required_string(arguments, name) {
+            Ok(value) => Ok(value),
+            Err(result) => {
+                self.append_audit("payment.requested", path, false);
+                Err(result)
+            }
+        };
+        let merchant = match required("merchant") {
+            Ok(value) => value,
+            Err(result) => return Ok(result),
+        };
+        let amount = match required("amount") {
+            Ok(value) => value,
+            Err(result) => return Ok(result),
+        };
+        let currency = match required("currency") {
+            Ok(value) => value,
+            Err(result) => return Ok(result),
+        };
+        let description = arguments
+            .get("description")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+
+        if !self.inner.scope_allows(path) {
+            self.append_audit("payment.denied", path, false);
+            return Err(format!(
+                "access denied: path {} outside allowed scope",
+                symvault_core::go_quote(path)
+            ));
+        }
+
+        if let Err(error) = crate::payment::validate_entry_path(path) {
+            self.append_audit("payment.requested", path, false);
+            return Err(error);
+        }
+        let entry = match self.inner.store().get(path) {
+            Ok(Some(entry)) => entry,
+            Ok(None) => {
+                self.append_audit("payment.requested", path, false);
+                return Ok(ToolCallResult::error("Entry \"\" not found"));
+            }
+            Err(error) => {
+                self.append_audit("payment.requested", path, false);
+                return Err(error);
+            }
+        };
+        if entry.secret_type != "payment" {
+            self.append_audit("payment.denied", path, false);
+            return Ok(ToolCallResult::error(format!(
+                "entry {path} is not a payment entry (type: {})",
+                entry.secret_type
+            )));
+        }
+
+        let mut summary = format!("Allow payment of {currency} {amount} to {merchant}?");
+        if !description.is_empty() {
+            summary.push_str(&format!("\nDescription: {description}"));
+        }
+
+        let request = crate::payment::PaymentRequest {
+            entry_path: path,
+            merchant,
+            amount,
+            currency,
+        };
+        if let Some(enforcer) = &self.payment
+            && let Err(error) = enforcer.check(&request)
+        {
+            self.append_audit("payment.policy_denied", path, false);
+            return Ok(ToolCallResult::error(error));
+        }
+
+        if let Err(error) = self.require_payment_approval(path, &summary, context) {
+            self.append_audit("payment.denied", path, false);
+            return Err(format!("payment denied: {error}"));
+        }
+        self.append_audit("payment.approved", path, true);
+
+        if let Some(enforcer) = &self.payment
+            && let Err(error) = enforcer.record_approved(&request)
+        {
+            eprintln!("WARN failed to record payment total err={error:?}");
+        }
+
+        let bank_account = entry
+            .fields
+            .get("subtype")
+            .is_some_and(|subtype| subtype.as_str() == Some("bank_account"));
+        let fields: &[&str] = if bank_account {
+            &["iban"]
+        } else {
+            &["card_number", "expiry_month", "expiry_year", "cvc"]
+        };
+        for field in fields {
+            let Some(value) = entry.fields.get(*field) else {
+                self.append_audit("payment.denied", path, false);
+                return Ok(ToolCallResult::error(format!(
+                    "payment field {} not found in entry {path}",
+                    symvault_core::go_quote(field)
+                )));
+            };
+            let Some(text) = value.as_str() else {
+                self.append_audit("payment.denied", path, false);
+                return Ok(ToolCallResult::error(format!(
+                    "payment field {} is not a string",
+                    symvault_core::go_quote(field)
+                )));
+            };
+            let typed = match &self.autotype {
+                Some(autotype) => autotype.type_text(text).map_err(|error| error.to_string()),
+                None => Err("autotype not available on this platform".to_owned()),
+            };
+            if let Err(error) = typed {
+                self.append_audit("payment.denied", path, false);
+                return Ok(ToolCallResult::error(format!(
+                    "autotype failed on field {}: {error}",
+                    symvault_core::go_quote(field)
+                )));
+            }
+        }
+
+        self.append_audit("payment.typed", path, true);
+        Ok(ToolCallResult::text("{\"success\": true}"))
+    }
+
+    /// `resolvePerplexityAPIKey`: config first, then the `perplexity` entry.
+    fn resolve_perplexity_api_key(&self) -> Result<String, String> {
+        if let Some(config) = &self.perplexity
+            && !config.api_key.is_empty()
+        {
+            return Ok(config.api_key.clone());
+        }
+        let missing = || {
+            format!(
+                "perplexity API key not found: try adding a vault entry {} with a credential field, or set mcp.perplexity.api_key in config",
+                symvault_core::go_quote(crate::perplexity::API_KEY_ENTRY)
+            )
+        };
+        let Ok(Some(entry)) = self.inner.store().get(crate::perplexity::API_KEY_ENTRY) else {
+            return Err(missing());
+        };
+        for key in ["credential", "token", "password", "api_key"] {
+            if let Some(Value::String(value)) = entry.fields.get(key)
+                && !value.is_empty()
+            {
+                return Ok(value.clone());
+            }
+        }
+        Err(format!(
+            "perplexity vault entry {} exists but no credential field found (expected: credential, token, password, or api_key)",
+            symvault_core::go_quote(crate::perplexity::API_KEY_ENTRY)
+        ))
+    }
+
+    fn perplexity_chat(
+        &self,
+        api_key: &str,
+        messages: &[(&str, &str)],
+        context: &crate::RequestContext,
+    ) -> Result<crate::perplexity::ChatResponse, String> {
+        let config = self.perplexity.as_ref();
+        let base_url = config
+            .map(|config| config.base_url.as_str())
+            .filter(|base_url| !base_url.is_empty())
+            .unwrap_or(crate::perplexity::DEFAULT_BASE_URL);
+        let allow_private = config.is_some_and(|config| config.allow_private);
+        let rate_limit = config
+            .map(|config| config.rate_limit_per_min)
+            .filter(|limit| *limit > 0)
+            .unwrap_or(crate::perplexity::DEFAULT_RATE_LIMIT);
+        crate::perplexity::call_chat(
+            api_key,
+            base_url,
+            messages,
+            allow_private,
+            rate_limit,
+            &self.api_transport_options,
+            context,
+        )
+    }
+
+    fn perplexity_search(
+        &self,
+        arguments: &Value,
+        context: &crate::RequestContext,
+    ) -> Result<ToolCallResult, String> {
+        context.check()?;
+        let query = match crate::call::required_string(arguments, "query") {
+            Ok(query) => query,
+            Err(result) => {
+                self.append_audit("perplexity_search", "<invalid>", false);
+                return Ok(result);
+            }
+        };
+        let api_key = match self.resolve_perplexity_api_key() {
+            Ok(key) => key,
+            Err(error) => {
+                self.append_audit("perplexity_search", "<api-key-error>", false);
+                return Ok(ToolCallResult::error(error));
+            }
+        };
+        let messages = [
+            ("system", crate::perplexity::SEARCH_SYSTEM_PROMPT),
+            ("user", query),
+        ];
+        let response = match self.perplexity_chat(&api_key, &messages, context) {
+            Ok(response) => response,
+            Err(error) => {
+                self.append_audit(
+                    "perplexity_search",
+                    &format!("query={}, error={error}", symvault_core::go_quote(query)),
+                    false,
+                );
+                return Ok(ToolCallResult::error(format!(
+                    "Perplexity search failed: {error}"
+                )));
+            }
+        };
+        let Some(answer) = response.first_answer.as_deref() else {
+            self.append_audit(
+                "perplexity_search",
+                &format!(
+                    "query={}, error=empty-response",
+                    symvault_core::go_quote(query)
+                ),
+                false,
+            );
+            return Ok(ToolCallResult::error(
+                "Perplexity returned an empty response",
+            ));
+        };
+        self.append_audit(
+            "perplexity_search",
+            &format!(
+                "query={}, model={}, citations={}",
+                symvault_core::go_quote(query),
+                response.model,
+                response.citations.len()
+            ),
+            true,
+        );
+        symvault_gojson::to_string(&crate::perplexity::SearchResult {
+            query,
+            answer,
+            model: &response.model,
+            citations: &response.citations,
+        })
+        .map(ToolCallResult::text)
+        .map_err(|error| error.to_string())
+    }
+
+    fn perplexity_ask(
+        &self,
+        arguments: &Value,
+        context: &crate::RequestContext,
+    ) -> Result<ToolCallResult, String> {
+        context.check()?;
+        let question = match crate::call::required_string(arguments, "question") {
+            Ok(question) => question,
+            Err(result) => {
+                self.append_audit("perplexity_ask", "<invalid>", false);
+                return Ok(result);
+            }
+        };
+        let api_key = match self.resolve_perplexity_api_key() {
+            Ok(key) => key,
+            Err(error) => {
+                self.append_audit("perplexity_ask", "<api-key-error>", false);
+                return Ok(ToolCallResult::error(error));
+            }
+        };
+        let context_entries = arguments
+            .get("context")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let (system_prompt, context_parts, user_message) = if context_entries.is_empty() {
+            (
+                crate::perplexity::ASK_SYSTEM_PROMPT,
+                Vec::new(),
+                question.to_owned(),
+            )
+        } else {
+            (
+                crate::perplexity::ASK_CONTEXT_SYSTEM_PROMPT,
+                context_entries
+                    .split('\n')
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>(),
+                format!("Context from vault entries:\n{context_entries}\n\nQuestion: {question}"),
+            )
+        };
+        let messages = [("system", system_prompt), ("user", user_message.as_str())];
+        let response = match self.perplexity_chat(&api_key, &messages, context) {
+            Ok(response) => response,
+            Err(error) => {
+                self.append_audit(
+                    "perplexity_ask",
+                    &format!(
+                        "question={}, error={error}",
+                        symvault_core::go_quote(question)
+                    ),
+                    false,
+                );
+                return Ok(ToolCallResult::error(format!(
+                    "Perplexity ask failed: {error}"
+                )));
+            }
+        };
+        let Some(answer) = response.first_answer.as_deref() else {
+            self.append_audit(
+                "perplexity_ask",
+                &format!(
+                    "question={}, error=empty-response",
+                    symvault_core::go_quote(question)
+                ),
+                false,
+            );
+            return Ok(ToolCallResult::error(
+                "Perplexity returned an empty response",
+            ));
+        };
+        self.append_audit(
+            "perplexity_ask",
+            &format!(
+                "question={}, model={}, citations={}, context={}",
+                symvault_core::go_quote(question),
+                response.model,
+                response.citations.len(),
+                !context_entries.is_empty()
+            ),
+            true,
+        );
+        symvault_gojson::to_string(&crate::perplexity::AskResult {
+            question,
+            answer,
+            model: &response.model,
+            citations: &response.citations,
+            context: &context_parts,
+        })
+        .map(ToolCallResult::text)
+        .map_err(|error| error.to_string())
+    }
 }
 
 impl StoreReadOnlyRuntime {
@@ -2921,8 +3905,70 @@ impl StoreReadOnlyRuntime {
         Ok(ToolCallResult::text(r#"{"success": true}"#))
     }
 
+    /// Go `handleAutotype`: type one string field through the application-owned
+    /// backend. Every failure writes Go's `autotype` audit row; the typed text
+    /// never becomes a protocol result.
+    fn autotype(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let preflight = match self.inner.autotype_preflight(arguments) {
+            Ok(preflight) => preflight,
+            Err(SecureInputPreflightError::Tool(result)) => {
+                self.append_audit("autotype", "<invalid>", false);
+                return Ok(result);
+            }
+            Err(SecureInputPreflightError::Handler(error)) => {
+                let path = if error == "autotype operations not permitted for this agent" {
+                    "<autotype-denied>"
+                } else {
+                    arguments
+                        .get("path")
+                        .and_then(Value::as_str)
+                        .unwrap_or("<invalid>")
+                };
+                self.append_audit("autotype", path, false);
+                return Err(error);
+            }
+        };
+        let value = match self.inner.autotype_value(&preflight.path, &preflight.field) {
+            Ok(value) => value,
+            Err(error) => {
+                self.append_audit("autotype", &preflight.path, false);
+                return Err(error);
+            }
+        };
+        if value.is_error {
+            self.append_audit("autotype", &preflight.path, false);
+            return Ok(value);
+        }
+        let Some(autotype) = &self.autotype else {
+            return Ok(ToolCallResult::error(
+                "autotype not available on this platform",
+            ));
+        };
+        if let Err(error) = autotype.type_text(&value.text) {
+            self.append_audit("autotype", &preflight.path, false);
+            return Ok(ToolCallResult::error(format!("autotype failed: {error}")));
+        }
+        self.append_audit("autotype", &preflight.path, true);
+        Ok(ToolCallResult::text(r#"{"success": true}"#))
+    }
+
+    /// `generate_totp` with the same clipboard backend and auto-clear as
+    /// `copy_to_clipboard` (Go `totpClipboard` uses `clipboard.DefaultClipboard()`
+    /// and `startClipboardAutoClear`); approval is not prompted for here, Go
+    /// refuses it, which `generate_totp_with` reproduces.
+    fn generate_totp(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let copy = |code: &str| -> Result<i64, String> {
+            self.clipboard
+                .set(code.as_bytes())
+                .map_err(|error| format!("clipboard copy failed: {error}"))?;
+            self.start_clipboard_auto_clear();
+            Ok(self.clipboard_auto_clear_seconds)
+        };
+        self.inner.generate_totp_with(arguments, Some(&copy))
+    }
+
     fn start_clipboard_auto_clear(&self) {
-        if self.clipboard_auto_clear_duration.is_zero() {
+        if self.clipboard_auto_clear_seconds <= 0 {
             return;
         }
         let (cancel, receiver) = mpsc::channel();
@@ -2934,16 +3980,26 @@ impl StoreReadOnlyRuntime {
             return;
         }
         let clipboard = Arc::clone(&self.clipboard);
-        let delay = self.clipboard_auto_clear_duration;
+        let delay = Duration::from_secs(self.clipboard_auto_clear_seconds.unsigned_abs());
         let clear_claimed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        // stdio `mcp` owns the router slot; every other embedding (HTTP `mcp`)
+        // registers with the process list the HTTP shutdown clears.
         #[cfg(unix)]
         let signal_registration = approval_prompt::register_stdio_clipboard_auto_clear(
             cancel.clone(),
             Arc::clone(&clear_claimed),
         );
+        #[cfg(unix)]
+        let process_registration = signal_registration.is_none().then(|| {
+            approval_prompt::register_process_clipboard_auto_clear(
+                cancel.clone(),
+                Arc::clone(&clear_claimed),
+                Arc::clone(&clipboard),
+            )
+        });
         thread::spawn(move || {
             #[cfg(unix)]
-            let _signal_registration = signal_registration;
+            let _signal_registration = (signal_registration, process_registration);
             if matches!(
                 receiver.recv_timeout(delay),
                 Err(mpsc::RecvTimeoutError::Timeout)
@@ -3161,6 +4217,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "fetch",
         "sanitize_output",
         "get_auth_status",
+        "set_auth_method",
         "symaira_audit_self",
         "health",
         "symaira_whoami",
@@ -3168,6 +4225,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "generate_password",
         "generate_totp",
         "copy_to_clipboard",
+        "autotype",
         "set_entry_field",
         "delete_entry",
         "find_entries",
@@ -4165,18 +5223,21 @@ mod tests {
         fs::write(directory.path().join("identity.age"), b"fixture marker")
             .expect("identity marker");
         let identity = symvault_crypto::generate_identity();
-        Store::open(directory.path(), &identity)
-            .expect("open temporary vault")
-            .write_new_entry(
-                "github",
-                &Entry {
-                    path: "github".into(),
-                    data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
-                    ..Entry::default()
-                },
-                &identity,
-            )
-            .expect("write source-shaped secret entry");
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(directory.path()),
+            &identity,
+        )
+        .expect("open temporary vault")
+        .write_new_entry(
+            "github",
+            &Entry {
+                path: "github".into(),
+                data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
+                ..Entry::default()
+            },
+            &identity,
+        )
+        .expect("write source-shaped secret entry");
         let config = ReadOnlyRuntimeConfig {
             available_tools: vec!["execute_with_secret".into()],
             can_run_commands: true,
@@ -4221,18 +5282,21 @@ mod tests {
         fs::write(directory.path().join("identity.age"), b"fixture marker")
             .expect("identity marker");
         let identity = symvault_crypto::generate_identity();
-        Store::open(directory.path(), &identity)
-            .expect("open temporary vault")
-            .write_new_entry(
-                "github",
-                &Entry {
-                    path: "github".into(),
-                    data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
-                    ..Entry::default()
-                },
-                &identity,
-            )
-            .expect("write source-shaped secret entry");
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(directory.path()),
+            &identity,
+        )
+        .expect("open temporary vault")
+        .write_new_entry(
+            "github",
+            &Entry {
+                path: "github".into(),
+                data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
+                ..Entry::default()
+            },
+            &identity,
+        )
+        .expect("write source-shaped secret entry");
         let base_config = ReadOnlyRuntimeConfig {
             available_tools: vec!["execute_with_secret".into()],
             can_run_commands: true,
@@ -4269,18 +5333,21 @@ mod tests {
         )
         .expect("identity marker");
         let prompt_identity = symvault_crypto::generate_identity();
-        Store::open(prompt_directory.path(), &prompt_identity)
-            .expect("open prompt vault")
-            .write_new_entry(
-                "github",
-                &Entry {
-                    path: "github".into(),
-                    data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
-                    ..Entry::default()
-                },
-                &prompt_identity,
-            )
-            .expect("write source-shaped secret entry");
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(prompt_directory.path()),
+            &prompt_identity,
+        )
+        .expect("open prompt vault")
+        .write_new_entry(
+            "github",
+            &Entry {
+                path: "github".into(),
+                data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
+                ..Entry::default()
+            },
+            &prompt_identity,
+        )
+        .expect("write source-shaped secret entry");
         let prompt_config = ReadOnlyRuntimeConfig {
             approval_mode: "prompt".into(),
             ..base_config
@@ -4356,7 +5423,13 @@ mod tests {
             .expect("vault config");
         fs::write(root.join("identity.age"), b"fixture marker").expect("identity marker");
         let identity = symvault_crypto::generate_identity();
-        Store::open(root, &identity).expect("open temporary vault");
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(
+                symvault_store::data_safety::test_support_pre_marked(root),
+            ),
+            &identity,
+        )
+        .expect("open temporary vault");
         StoreReadOnlyRuntime::open(root, identity, config, None, None)
             .expect("runtime")
             .with_approval_seam(approval)
@@ -4536,7 +5609,13 @@ mod tests {
         )
         .expect("write synthetic API template");
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(root, &identity).expect("open temporary API vault");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(
+                symvault_store::data_safety::test_support_pre_marked(root),
+            ),
+            &identity,
+        )
+        .expect("open temporary API vault");
         if include_entry {
             store
                 .write_new_entry(
@@ -4637,7 +5716,9 @@ mod tests {
         let server = std::thread::spawn(move || {
             let (mut stream, _) = listener.accept().expect("accept approved API request");
             stream
-                .set_read_timeout(Some(Duration::from_secs(2)))
+                // Setup bound, not the behavior under test: generous so load and coverage
+                // instrumentation cannot win the race (#1564-#1567).
+                .set_read_timeout(Some(Duration::from_secs(30)))
                 .expect("bounded API read");
             let mut reader = std::io::BufReader::new(stream.try_clone().expect("clone stream"));
             use std::io::BufRead as _;
@@ -4737,7 +5818,7 @@ mod tests {
                 &json!({"template":"fixture","endpoint":"/v1/status"}),
             )
         });
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         let pending = loop {
             if let Some(entry) = queue.pending().expect("read pending approvals").first() {
                 break entry.clone();
@@ -4846,18 +5927,21 @@ mod tests {
         fs::write(directory.path().join("identity.age"), b"fixture marker")
             .expect("identity marker");
         let identity = symvault_crypto::generate_identity();
-        Store::open(directory.path(), &identity)
-            .expect("open temporary vault")
-            .write_new_entry(
-                "service",
-                &Entry {
-                    path: "service".into(),
-                    data: BTreeMap::from([("token".into(), json!("synthetic-secret"))]),
-                    ..Entry::default()
-                },
-                &identity,
-            )
-            .expect("write source-shaped secret entry");
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(directory.path()),
+            &identity,
+        )
+        .expect("open temporary vault")
+        .write_new_entry(
+            "service",
+            &Entry {
+                path: "service".into(),
+                data: BTreeMap::from([("token".into(), json!("synthetic-secret"))]),
+                ..Entry::default()
+            },
+            &identity,
+        )
+        .expect("write source-shaped secret entry");
         let config = ReadOnlyRuntimeConfig {
             available_tools: vec!["run_command".into()],
             can_run_commands: true,
@@ -4896,21 +5980,24 @@ mod tests {
         let identity = symvault_crypto::generate_identity();
         let binary = vec![0x50, 0x4b, 0x03, 0x04, 0x00, 0xff, 0x10];
         let encoded = base64::engine::general_purpose::STANDARD.encode(&binary);
-        Store::open(directory.path(), &identity)
-            .expect("open store")
-            .write_new_entry(
-                "service",
-                &Entry {
-                    path: "service".into(),
-                    data: BTreeMap::from([
-                        ("pin".into(), json!("synthetic-file-pin")),
-                        ("certificate".into(), json!(encoded)),
-                    ]),
-                    ..Entry::default()
-                },
-                &identity,
-            )
-            .expect("write source entry");
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(directory.path()),
+            &identity,
+        )
+        .expect("open store")
+        .write_new_entry(
+            "service",
+            &Entry {
+                path: "service".into(),
+                data: BTreeMap::from([
+                    ("pin".into(), json!("synthetic-file-pin")),
+                    ("certificate".into(), json!(encoded)),
+                ]),
+                ..Entry::default()
+            },
+            &identity,
+        )
+        .expect("write source entry");
         let expected_files = BTreeMap::from([
             ("CERT".into(), binary.clone()),
             ("PIN".into(), b"synthetic-file-pin".to_vec()),
@@ -4966,7 +6053,11 @@ mod tests {
         fs::write(directory.path().join("identity.age"), b"fixture marker")
             .expect("identity marker");
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(directory.path(), &identity).expect("open store");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(directory.path()),
+            &identity,
+        )
+        .expect("open store");
         store
             .write_new_entry(
                 "allowed/foo",
@@ -5033,7 +6124,11 @@ mod tests {
         fs::write(directory.path().join("identity.age"), b"fixture marker")
             .expect("identity marker");
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(directory.path(), &identity).expect("open store");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(directory.path()),
+            &identity,
+        )
+        .expect("open store");
         store
             .write_new_entry(
                 "allowed/foo",
@@ -5255,17 +6350,20 @@ mod tests {
                 json!("public-fixture".repeat((1024 * 1024) / 14)),
             )
         });
-        Store::open(directory.path(), &identity)
-            .unwrap()
-            .write_new_entry(
-                "control",
-                &Entry {
-                    data: BTreeMap::from(data),
-                    ..Default::default()
-                },
-                &identity,
-            )
-            .unwrap();
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(directory.path()),
+            &identity,
+        )
+        .unwrap()
+        .write_new_entry(
+            "control",
+            &Entry {
+                data: BTreeMap::from(data),
+                ..Default::default()
+            },
+            &identity,
+        )
+        .unwrap();
         let runtime = StoreReadOnlyRuntime::open(
             directory.path(),
             identity,
@@ -5295,4 +6393,101 @@ mod tests {
     }
 
     include!("api_review_tests.rs");
+}
+
+/// The audit row Go `handleGenerateTOTP` writes for a finished call, or `None`
+/// where Go writes none. Success rows name the destination
+/// (`generate_totp.clipboard|autotype|return`); a missing clipboard/autotype
+/// backend, an invalid destination and `return_code: false` are not audited;
+/// a return-path approval refusal is audited by Go's `requireApproval` as
+/// `approval.generate_totp_return.denied`; every other failure is
+/// `generate_totp` with `ok = false`.
+fn generate_totp_audit(result: Result<&ToolCallResult, &String>) -> Option<(String, bool)> {
+    let Ok(value) = result else {
+        return Some(("generate_totp".into(), false));
+    };
+    let text = value.text.as_str();
+    if value.is_error {
+        if text == "clipboard not available"
+            || text == "autotype not available on this platform"
+            || text.starts_with("invalid destination ")
+            || text.starts_with("return_code must be true")
+        {
+            return None;
+        }
+        if text == "generate_totp_return denied: approval mode is 'deny'"
+            || text == "generate_totp_return requires approval but no TTY or GUI dialog available"
+        {
+            return Some(("approval.generate_totp_return.denied".into(), false));
+        }
+        return Some(("generate_totp".into(), false));
+    }
+    let parsed: Value = serde_json::from_str(text).unwrap_or(Value::Null);
+    let destination = if parsed.get("destination").and_then(Value::as_str) == Some("clipboard") {
+        "clipboard"
+    } else if parsed.get("code").is_some() {
+        "return"
+    } else {
+        "autotype"
+    };
+    Some((format!("generate_totp.{destination}"), true))
+}
+
+#[cfg(test)]
+mod generate_totp_audit_tests {
+    use super::*;
+
+    fn ok(text: &str) -> ToolCallResult {
+        ToolCallResult::text(text)
+    }
+
+    #[test]
+    fn success_rows_name_the_destination_like_go() {
+        let clip = ok(r#"{"clipboard_clears_in":30,"destination":"clipboard","success":true}"#);
+        let ret = ok(r#"{"code":"123456","expires_at":"2026-01-01T00:00:00Z","period":30}"#);
+        let auto = ok(r#"{"success": true}"#);
+        assert_eq!(
+            generate_totp_audit(Ok(&clip)),
+            Some(("generate_totp.clipboard".into(), true))
+        );
+        assert_eq!(
+            generate_totp_audit(Ok(&ret)),
+            Some(("generate_totp.return".into(), true))
+        );
+        assert_eq!(
+            generate_totp_audit(Ok(&auto)),
+            Some(("generate_totp.autotype".into(), true))
+        );
+    }
+
+    #[test]
+    fn failures_follow_go_audit_rules() {
+        for silent in [
+            "clipboard not available",
+            "autotype not available on this platform",
+            "invalid destination \"x\": must be clipboard, autotype, or return",
+            "return_code must be true when destination is \"return\"",
+        ] {
+            assert_eq!(
+                generate_totp_audit(Ok(&ToolCallResult::error(silent))),
+                None,
+                "{silent}"
+            );
+        }
+        assert_eq!(
+            generate_totp_audit(Ok(&ToolCallResult::error(
+                "generate_totp_return denied: approval mode is 'deny'"
+            ))),
+            Some(("approval.generate_totp_return.denied".into(), false))
+        );
+        assert_eq!(
+            generate_totp_audit(Ok(&ToolCallResult::error("clipboard copy failed: boom"))),
+            Some(("generate_totp".into(), false))
+        );
+        let denied = String::from("clipboard operations not permitted for this agent");
+        assert_eq!(
+            generate_totp_audit(Err(&denied)),
+            Some(("generate_totp".into(), false))
+        );
+    }
 }

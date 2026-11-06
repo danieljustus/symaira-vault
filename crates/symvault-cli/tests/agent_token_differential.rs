@@ -1,11 +1,15 @@
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
+
 use std::{
-    env, fs,
+    fs,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
 
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
-    Command::new(binary)
+    let mut command = Command::new(binary);
+    command
         .args(args)
         .env("HOME", home)
         .env("XDG_CONFIG_HOME", home.join("config"))
@@ -13,9 +17,8 @@ fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
         .env("XDG_CACHE_HOME", home.join("cache"))
         .env("SYMVAULT_VAULT", root)
         .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .output()
-        .expect("run agent token list")
+        .env("NO_COLOR", "1");
+    go_oracle::output(&mut command).expect("run agent token list")
 }
 
 fn normalized_rows(output: &[u8]) -> Vec<u8> {
@@ -58,12 +61,17 @@ fn assert_same(go: &Output, rust: &Output, case: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_token_list_matches_go_plaintext_registry() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "agent_token_differential",
+        "agent_token_list_matches_go_plaintext_registry",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let root = tempfile::tempdir().expect("vault root");
     let home = tempfile::tempdir().expect("home");
@@ -182,15 +190,21 @@ fn agent_token_list_matches_go_plaintext_registry() {
         let rust = run(&rust_binary, &actual_args, root.path(), home.path());
         assert_same(&go, &rust, &format!("agent token list {actual_args:?}"));
     }
+    assert_eq!(oracle.calls(), 5);
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_token_list_rejects_malformed_registry_like_go() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "agent_token_differential",
+        "agent_token_list_rejects_malformed_registry_like_go",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let root = tempfile::tempdir().expect("vault root");
     let home = tempfile::tempdir().expect("home");
@@ -217,4 +231,5 @@ fn agent_token_list_rejects_malformed_registry_like_go() {
         "Rust diagnostic: {:?}",
         String::from_utf8_lossy(&rust.stderr)
     );
+    assert_eq!(oracle.calls(), 1);
 }

@@ -42,6 +42,21 @@ def go_records():
                orphaned_child_alive=True),
         record("run-ignored-sigquit", "run", "SIGQUIT", ["exit", 2], ignored=True, survived=False,
                orphaned_child_alive=True),
+        # `mcp --stdio --allow-locked` (indices 13-15) and `ui` on a pseudo-terminal (16-19).
+        record("mcp-locked-sigint", "mcp-locked", "SIGINT", ["exit", 0], stderr=contract.LOCKED_WARNING,
+               state=["tmp", "vault"]),
+        record("mcp-locked-sighup", "mcp-locked", "SIGHUP", ["signal", signal.SIGHUP], stderr=contract.LOCKED_WARNING,
+               state=["tmp", "vault", "vault/.runtime-port"]),
+        record("mcp-locked-sigquit", "mcp-locked", "SIGQUIT", ["exit", 0],
+               stderr=contract.LOCKED_WARNING + "Received SIGQUIT, shutting down gracefully...\n", state=["tmp", "vault"]),
+        record("ui-sigint", "ui", "SIGINT", ["exit", 1], stderr=contract.UI_INTERRUPTED * 2, terminal_restored=True,
+               alt_screen_left=True, state=["tmp", "vault"]),
+        record("ui-sigterm", "ui", "SIGTERM", ["exit", 0], terminal_restored=True, alt_screen_left=True,
+               state=["tmp", "vault"]),
+        record("ui-sighup", "ui", "SIGHUP", ["signal", signal.SIGHUP], terminal_restored=False,
+               alt_screen_left=False, state=["tmp", "vault"]),
+        record("ui-sigquit", "ui", "SIGQUIT", ["exit", 2], stderr="<not compared: Go SIGQUIT goroutine dump>",
+               terminal_restored=False, alt_screen_left=False, state=["tmp", "vault"]),
     ]
 
 
@@ -49,7 +64,6 @@ def rust_records():
     rows = copy.deepcopy(go_records())
     for row in rows:
         row["state"] = [n for n in row["state"] if n != "vault/broker-ca.pem"]
-    rows[6]["orphaned_child_alive"] = True  # documented bounded-run divergence
     return rows
 
 
@@ -104,8 +118,11 @@ class SignalContractControls(unittest.TestCase):
     def test_case_lists_must_match(self):
         self.rejects(lambda r: r.pop(), "different case lists")
 
-    def test_known_divergence_cannot_go_stale(self):
-        self.rejects(lambda r: r[6].update(orphaned_child_alive=False), "remove the exemption")
+    def test_bounded_run_child_surviving_group_sigint_is_rejected(self):
+        # ADR 0034 item 12: `run --timeout` must not leave the secret-bearing
+        # child running after a terminal Ctrl-C (Go: the child dies with it).
+        self.assertEqual(go_records()[6]["case"], "run-timeout-group-sigint")
+        self.rejects(lambda r: r[6].update(orphaned_child_alive=True), "orphaned_child_alive")
 
     def test_oracle_drift_is_detected(self):
         go = go_records()[:6]
@@ -193,6 +210,144 @@ class SignalContractControls(unittest.TestCase):
         self.assertTrue(contract.survived_signal(survivor, lambda sig: None, "SIGHUP"))
         self.assertEqual(survivor.timeouts, [contract.SURVIVE_WINDOW])
         self.assertLess(contract.SURVIVE_WINDOW, contract.DIE_WINDOW)
+
+    # --- `mcp --stdio --allow-locked` (CLI-007 residual 2) ---
+    def test_locked_server_keeping_os_default_is_rejected(self):  # the pre-fix behavior
+        self.rejects(lambda r: r[13].update(ending=["signal", signal.SIGINT]), "ending")
+        self.rejects(lambda r: r[15].update(ending=["signal", signal.SIGQUIT]), "ending")
+
+    def test_locked_sigquit_warning_and_runtime_record_are_compared(self):
+        self.rejects(lambda r: r[15].update(stderr=contract.LOCKED_WARNING), "stderr")
+        self.rejects(lambda r: r[13].update(state=["tmp", "vault", "vault/.runtime-port"]), "on-disk state")
+
+    def test_locked_sighup_must_keep_its_default_action(self):
+        self.rejects(lambda r: r[14].update(ending=["exit", 0]), "ending")
+
+    def test_locked_oracle_drift_is_detected(self):
+        go = go_records()
+        go[13]["ending"] = ["signal", signal.SIGINT]
+        with self.assertRaisesRegex(AssertionError, "oracle drifted"):
+            contract.check_oracle_expectations(go)
+        go = go_records()
+        go[13]["state"] = ["tmp", "vault", "vault/.runtime-port"]
+        with self.assertRaisesRegex(AssertionError, "runtime port record"):
+            contract.check_oracle_expectations(go)
+        go = go_records()
+        go[15]["stderr"] = contract.LOCKED_WARNING
+        with self.assertRaisesRegex(AssertionError, "locked stderr"):
+            contract.check_oracle_expectations(go)
+
+    # --- `ui` under a pseudo-terminal (CLI-007 residual 3) ---
+    def test_ui_interrupt_must_fail_like_bubbletea(self):  # the pre-fix behavior: clean exit 0
+        self.rejects(lambda r: r[16].update(ending=["exit", 0], stderr=""), "ending")
+        self.rejects(lambda r: r[16].update(stderr=contract.UI_INTERRUPTED), "stderr")
+
+    def test_ui_sighup_and_sigquit_must_end_the_process_like_go(self):  # the pre-fix SIGHUP: clean exit
+        self.rejects(lambda r: r[18].update(ending=["exit", 0], terminal_restored=True, alt_screen_left=True), "ending")
+        self.rejects(lambda r: r[19].update(ending=["signal", signal.SIGQUIT]), "ending")
+
+    def test_ui_terminal_state_is_compared(self):
+        self.rejects(lambda r: r[17].update(terminal_restored=False), "terminal_restored")
+        self.rejects(lambda r: r[17].update(alt_screen_left=False), "alt_screen_left")
+        self.rejects(lambda r: r[18].update(terminal_restored=True), "terminal_restored")
+
+    def test_ui_oracle_drift_is_detected(self):
+        go = go_records()
+        go[17]["terminal_restored"] = False
+        with self.assertRaisesRegex(AssertionError, "oracle drifted: terminal"):
+            contract.check_oracle_expectations(go)
+        go = go_records()
+        go[16]["stderr"] = contract.UI_INTERRUPTED
+        with self.assertRaisesRegex(AssertionError, "ui interrupt message"):
+            contract.check_oracle_expectations(go)
+        go = go_records()
+        go[17]["stderr"] = "noise"
+        with self.assertRaisesRegex(AssertionError, "ui stderr"):
+            contract.check_oracle_expectations(go)
+
+    def test_every_new_killing_case_is_expected(self):
+        for command in ("mcp-locked", "ui"):
+            for sig in contract.KILLING:
+                self.assertIn((command, sig), contract.GO_EXPECTED)
+
+    # --- Go-only armed-clipboard observation (CLI-007 residual 1) ---
+    @staticmethod
+    def clipboard_records():
+        mcp = [dict(case=f"mcp-clipboard-armed-{sig.lower()}", command="mcp-clipboard-armed", signal=sig,
+                    serving_after_signal=serving, ending=final, clipboard_events=["secret", "clear"])
+               for sig, (serving, final) in contract.GO_EXPECTED_CLIPBOARD.items()]
+        ui = [dict(case=f"ui-clipboard-armed-{sig.lower()}", command="ui-clipboard-armed", signal=sig,
+                   serving_after_signal=serving, ending=final, second_ending=second, clipboard_events=list(events))
+              for sig, (serving, final, second, events) in contract.GO_EXPECTED_UI_CLIPBOARD.items()]
+        http = [dict(case=f"mcp-http-clipboard-{'armed' if armed else 'idle'}-{sig.lower()}", command="mcp-http-clipboard",
+                     armed=armed, signal=sig, ignored=ignored, serving_after_signal=serving, ending=final,
+                     second_ending=second, final_ending=after, clipboard_events=list(events[-1]))
+                for (armed, sig, ignored), (serving, final, second, after, events)
+                in contract.GO_EXPECTED_HTTP_CLIPBOARD.items()]
+        return mcp + ui + http
+
+    def test_go_only_clipboard_expectations_hold_and_detect_drift(self):
+        contract.check_go_only(self.clipboard_records())
+        for index, change in ((0, dict(serving_after_signal=True, ending=None)),  # SIGINT must shut down
+                              (1, dict(ending=["exit", 1])),
+                              (2, dict(serving_after_signal=False, ending=["signal", signal.SIGHUP])),
+                              (0, dict(clipboard_events=["secret"])),  # the clear must happen
+                              (1, dict(clipboard_events=["clear", "secret"])),
+                              (5, dict(serving_after_signal=False, ending=["signal", signal.SIGHUP],
+                                       second_ending=None)),  # ui SIGHUP must clear and keep running
+                              (5, dict(second_ending=["exit", 0])),  # ... and the next SIGHUP kills it
+                              (5, dict(clipboard_events=["secret"])),
+                              (6, dict(clipboard_events=["secret", "clear"])),  # Go's SIGQUIT does not clear
+                              (6, dict(ending=["exit", 0])),
+                              (3, dict(ending=["exit", 0]))):  # ui SIGINT fails with status 1
+            records = self.clipboard_records()
+            records[index].update(change)
+            with self.assertRaisesRegex(AssertionError, "oracle drifted"):
+                contract.check_go_only(records)
+        with self.assertRaises(AssertionError):
+            contract.check_go_only(self.clipboard_records()[:2])
+        with self.assertRaises(AssertionError):
+            contract.check_go_only(self.clipboard_records()[:6])
+        with self.assertRaises(AssertionError):  # the HTTP cases are required
+            contract.check_go_only(self.clipboard_records()[:7])
+
+    def test_go_only_http_clipboard_expectations_detect_drift(self):
+        records = self.clipboard_records()
+        self.assertEqual(len(records), 13)
+        contract.check_go_only(records)
+        # Go's SIGINT/SIGTERM usually exit before the clear reaches the tool: both logs are fine.
+        for index in (7, 8):
+            relaxed = self.clipboard_records()
+            relaxed[index]["clipboard_events"] = ["secret"]
+            contract.check_go_only(relaxed)
+        for index, change in ((7, dict(serving_after_signal=True, ending=None)),  # SIGINT shuts down
+                              (7, dict(ending=["exit", 1])),
+                              (7, dict(clipboard_events=["clear"])),
+                              (9, dict(serving_after_signal=False, ending=["signal", signal.SIGHUP])),  # armed SIGHUP serves
+                              (9, dict(second_ending=None)),  # ... and the next SIGHUP kills
+                              (9, dict(second_ending=["exit", 0])),
+                              (9, dict(clipboard_events=["secret"])),  # armed SIGHUP must clear
+                              (10, dict(serving_after_signal=True, ending=None)),  # idle SIGHUP kills by the signal
+                              (10, dict(ending=["exit", 0])),
+                              (10, dict(clipboard_events=["secret", "clear"])),  # ... and touches no clipboard
+                              (11, dict(second_ending=["signal", signal.SIGHUP])),  # SIG_IGN is back after the clear
+                              (11, dict(final_ending=["signal", signal.SIGTERM])),
+                              (11, dict(clipboard_events=["secret"])),
+                              (12, dict(serving_after_signal=False, ending=["signal", signal.SIGHUP])),  # ignored stays
+                              (12, dict(clipboard_events=["secret", "clear"]))):
+            records = self.clipboard_records()
+            records[index].update(change)
+            with self.assertRaisesRegex(AssertionError, "oracle drifted"):
+                contract.check_go_only(records)
+        records = self.clipboard_records()
+        records[11]["ignored"] = False  # the case list itself is pinned
+        with self.assertRaisesRegex(AssertionError, "go_only http cases"):
+            contract.check_go_only(records)
+
+    def test_http_clipboard_cases_cover_armed_idle_and_ignored_sighup(self):
+        self.assertEqual(list(contract.GO_EXPECTED_HTTP_CLIPBOARD), list(contract.HTTP_CLIPBOARD_CASES))
+        self.assertEqual({(armed, ignored) for armed, sig, ignored in contract.HTTP_CLIPBOARD_CASES if sig == "SIGHUP"},
+                         {(True, False), (False, False), (True, True), (False, True)})
 
     def test_ending_and_normalization(self):
         self.assertEqual(contract.ending(-1), ["signal", 1])

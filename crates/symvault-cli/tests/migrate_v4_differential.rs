@@ -7,19 +7,21 @@
 //! (plus the stable surrounding lines verbatim). The assignment itself — which
 //! profile gets which tier, the backup, and idempotence — must match exactly.
 
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
+
 use std::{
     collections::BTreeSet,
-    env, fs,
+    fs,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
 
-use tempfile::TempDir;
-
 const PASSPHRASE: &str = "migrate-v4-differential";
 
 fn run(binary: &Path, args: &[&str], vault: &Path) -> Output {
-    Command::new(binary)
+    let mut command = Command::new(binary);
+    command
         .args(args)
         .arg("--vault")
         .arg(vault)
@@ -27,16 +29,13 @@ fn run(binary: &Path, args: &[&str], vault: &Path) -> Output {
         .env("SYMVAULT_PASSPHRASE", PASSPHRASE)
         .env("SYMVAULT_TEST_KEYRING", "memory")
         .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .output()
-        .expect("run migrate v4")
+        .env("NO_COLOR", "1");
+    go_oracle::output(&mut command).expect("run migrate v4")
 }
 
 /// Creates a vault and strips every `tier:` line so the migration has work.
-fn fixture(rust: &Path, name: &str) -> (TempDir, PathBuf) {
-    let root = tempfile::tempdir().expect("fixture root");
-    let vault = root.path().join(name);
-    let init = run(rust, &["init"], &vault);
+fn populate(rust: &Path, vault: &Path) {
+    let init = run(rust, &["init"], vault);
     assert!(
         init.status.success(),
         "init failed: stdout={:?} stderr={:?}",
@@ -51,7 +50,6 @@ fn fixture(rust: &Path, name: &str) -> (TempDir, PathBuf) {
         .collect::<Vec<_>>()
         .join("\n");
     fs::write(&config, format!("{stripped}\n")).expect("write config");
-    (root, vault)
 }
 
 fn lines(output: &Output) -> Vec<String> {
@@ -97,16 +95,28 @@ fn tier_of(config: &str, profile: &str) -> Option<String> {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn migrate_v4_matches_go_assignments_and_stays_idempotent() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "migrate_v4_differential",
+        "migrate_v4_matches_go_assignments_and_stays_idempotent",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
 
-    let (_go_root, go_vault) = fixture(&rust_binary, "go");
-    let (_rust_root, rust_vault) = fixture(&rust_binary, "rust");
+    // `init` generates random keys: the Go vault is frozen as a seed.
+    let go_root = tempfile::tempdir().expect("fixture root");
+    let go_vault = go_root.path().join("go");
+    oracle.seed("fixture-go", &[go_root.path()], || {
+        populate(&rust_binary, &go_vault)
+    });
+    let rust_root = tempfile::tempdir().expect("fixture root");
+    let rust_vault = rust_root.path().join("rust");
+    populate(&rust_binary, &rust_vault);
 
     // Dry-run must report the same pending set and write nothing.
     let go_dry = run(&go_binary, &["migrate", "v4", "--dry-run"], &go_vault);
@@ -198,4 +208,5 @@ fn migrate_v4_matches_go_assignments_and_stays_idempotent() {
         rust_config,
         "second run changed the config"
     );
+    assert_eq!(oracle.calls(), 3);
 }

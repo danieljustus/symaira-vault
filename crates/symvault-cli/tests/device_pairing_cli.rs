@@ -48,6 +48,8 @@ impl TestVault {
         // Lower fixture cost only; production joins retain the Go work factor.
         let enc_id = encrypt_identity_scrypt(&identity, &sec_pass, 10).unwrap();
         fs::write(path.join("identity.age"), enc_id).unwrap();
+        // A vault Rust created itself: no pre-migration backup (D1).
+        symvault_store::data_safety::mark_created(&path).unwrap();
 
         // Write recipients.txt
         let pubkey = recipient_string(&identity);

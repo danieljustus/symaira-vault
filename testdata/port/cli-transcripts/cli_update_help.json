@@ -1,0 +1,1502 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
+  "tests": {
+    "update_help_matches_frozen_and_actual_go_without_accessing_vault_or_updater": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "e73607bd1ffffd5a998c997ea36686667941add891d7ab68bb064894bc27a30b",
+          "request": {
+            "args": [
+              "update",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check for Symaira Vault updates\n\nUsage:\n  symvault update [flags]\n  symvault update [command]\n\nExamples:\n  symvault update check\n\nAvailable Commands:\n  apply       Apply the latest Symaira Vault self-update\n  check       Check GitHub for a newer Symaira Vault release\n  info        Show Symaira Vault installation method info\n\nFlags:\n  -h, --help   help for update\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault update [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "c695f2bc9e2ce6a989039021449cf0bfe2d7b6855ac30a4e9c74f38c7ef731f5",
+          "request": {
+            "args": [
+              "update",
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check for Symaira Vault updates\n\nUsage:\n  symvault update [flags]\n  symvault update [command]\n\nExamples:\n  symvault update check\n\nAvailable Commands:\n  apply       Apply the latest Symaira Vault self-update\n  check       Check GitHub for a newer Symaira Vault release\n  info        Show Symaira Vault installation method info\n\nFlags:\n  -h, --help   help for update\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault update [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "682261cf2cdeacf67167feff32fcf4334a0e70a53739587f7e388bf1b368e1fb",
+          "request": {
+            "args": [
+              "update",
+              "--help=true"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check for Symaira Vault updates\n\nUsage:\n  symvault update [flags]\n  symvault update [command]\n\nExamples:\n  symvault update check\n\nAvailable Commands:\n  apply       Apply the latest Symaira Vault self-update\n  check       Check GitHub for a newer Symaira Vault release\n  info        Show Symaira Vault installation method info\n\nFlags:\n  -h, --help   help for update\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault update [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b8b21e81250c0d96160740ac1244f7152ef59c6e73fba5b7044acdcb3afa3296",
+          "request": {
+            "args": [
+              "help",
+              "update"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check for Symaira Vault updates\n\nUsage:\n  symvault update [flags]\n  symvault update [command]\n\nExamples:\n  symvault update check\n\nAvailable Commands:\n  apply       Apply the latest Symaira Vault self-update\n  check       Check GitHub for a newer Symaira Vault release\n  info        Show Symaira Vault installation method info\n\nFlags:\n  -h, --help   help for update\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault update [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "acb02f3703b9065bced8c4c9a3106e167352def8f03841149901ef9c2ac93a2c",
+          "request": {
+            "args": [
+              "--quiet",
+              "--output=json",
+              "--vault",
+              "missing-vault",
+              "--profile",
+              "missing-profile",
+              "update",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check for Symaira Vault updates\n\nUsage:\n  symvault update [flags]\n  symvault update [command]\n\nExamples:\n  symvault update check\n\nAvailable Commands:\n  apply       Apply the latest Symaira Vault self-update\n  check       Check GitHub for a newer Symaira Vault release\n  info        Show Symaira Vault installation method info\n\nFlags:\n  -h, --help   help for update\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault update [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "c8ae530d97c1ca765584dadb7c3638f166bee1d4c6e78c37479cb67aaddc286c",
+          "request": {
+            "args": [
+              "update",
+              "--vault",
+              "missing-vault",
+              "--output",
+              "yaml",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check for Symaira Vault updates\n\nUsage:\n  symvault update [flags]\n  symvault update [command]\n\nExamples:\n  symvault update check\n\nAvailable Commands:\n  apply       Apply the latest Symaira Vault self-update\n  check       Check GitHub for a newer Symaira Vault release\n  info        Show Symaira Vault installation method info\n\nFlags:\n  -h, --help   help for update\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault update [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "e9b550bfe25a23e9902a2787869daaca2fb0908455f8f30bd31cc0e778ac160f",
+          "request": {
+            "args": [
+              "update",
+              "--help=false",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check for Symaira Vault updates\n\nUsage:\n  symvault update [flags]\n  symvault update [command]\n\nExamples:\n  symvault update check\n\nAvailable Commands:\n  apply       Apply the latest Symaira Vault self-update\n  check       Check GitHub for a newer Symaira Vault release\n  info        Show Symaira Vault installation method info\n\nFlags:\n  -h, --help   help for update\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault update [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f1c3fce6af4ab567b08358d670f35ad9a8355dd531f286c9ce7e5bc589330b7f",
+          "request": {
+            "args": [
+              "update"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check for Symaira Vault updates\n\nUsage:\n  symvault update [flags]\n  symvault update [command]\n\nExamples:\n  symvault update check\n\nAvailable Commands:\n  apply       Apply the latest Symaira Vault self-update\n  check       Check GitHub for a newer Symaira Vault release\n  info        Show Symaira Vault installation method info\n\nFlags:\n  -h, --help   help for update\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault update [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "20b315ff72365b97dee53d424e7fe3ecc8ce6008d63a6290632bdc23fba946ca",
+          "request": {
+            "args": [
+              "update",
+              "--json",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check for Symaira Vault updates\n\nUsage:\n  symvault update [flags]\n  symvault update [command]\n\nExamples:\n  symvault update check\n\nAvailable Commands:\n  apply       Apply the latest Symaira Vault self-update\n  check       Check GitHub for a newer Symaira Vault release\n  info        Show Symaira Vault installation method info\n\nFlags:\n  -h, --help   help for update\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault update [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "2efeebba702dbf7134a5b08baac6d7136e481a6d846ad55c2329e0bd3f5ca951",
+          "request": {
+            "args": [
+              "update",
+              "unknown-topic",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check for Symaira Vault updates\n\nUsage:\n  symvault update [flags]\n  symvault update [command]\n\nExamples:\n  symvault update check\n\nAvailable Commands:\n  apply       Apply the latest Symaira Vault self-update\n  check       Check GitHub for a newer Symaira Vault release\n  info        Show Symaira Vault installation method info\n\nFlags:\n  -h, --help   help for update\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault update [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "a29df3c36c953fd96d45cef45ca6338b0d57af7f9b1d41b056ce843f0778405f",
+          "request": {
+            "args": [
+              "help",
+              "update",
+              "unknown-topic"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check for Symaira Vault updates\n\nUsage:\n  symvault update [flags]\n  symvault update [command]\n\nExamples:\n  symvault update check\n\nAvailable Commands:\n  apply       Apply the latest Symaira Vault self-update\n  check       Check GitHub for a newer Symaira Vault release\n  info        Show Symaira Vault installation method info\n\nFlags:\n  -h, --help   help for update\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault update [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f19a2b62270af6ebf9a818fa388fce68a271a3ac1b6d3d1cd1e935cd89985e2e",
+          "request": {
+            "args": [
+              "update",
+              "check",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check GitHub for a newer Symaira Vault release\n\nUsage:\n  symvault update check [flags]\n\nFlags:\n      --force   bypass cache and force a fresh check\n  -h, --help    help for check\n      --json    output update check result as JSON (deprecated: use --output=json)\n      --quiet   suppress non-essential output (exit code 1 if update available)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "563698e95dc0f59e5299fb8ef4b1dcb8f7cfe4ec7da40aaea20ca6138fd2d600",
+          "request": {
+            "args": [
+              "update",
+              "check",
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check GitHub for a newer Symaira Vault release\n\nUsage:\n  symvault update check [flags]\n\nFlags:\n      --force   bypass cache and force a fresh check\n  -h, --help    help for check\n      --json    output update check result as JSON (deprecated: use --output=json)\n      --quiet   suppress non-essential output (exit code 1 if update available)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b7cfc81ba6a959ba4d0ebe2fa15fd7497fbcf7fb4b6fac54223327ae4a94ab6c",
+          "request": {
+            "args": [
+              "update",
+              "check",
+              "--help=true"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check GitHub for a newer Symaira Vault release\n\nUsage:\n  symvault update check [flags]\n\nFlags:\n      --force   bypass cache and force a fresh check\n  -h, --help    help for check\n      --json    output update check result as JSON (deprecated: use --output=json)\n      --quiet   suppress non-essential output (exit code 1 if update available)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "11b228f2837bdae85ff93802053576a81374ce6c493974414ea95a475131a641",
+          "request": {
+            "args": [
+              "help",
+              "update",
+              "check"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check GitHub for a newer Symaira Vault release\n\nUsage:\n  symvault update check [flags]\n\nFlags:\n      --force   bypass cache and force a fresh check\n  -h, --help    help for check\n      --json    output update check result as JSON (deprecated: use --output=json)\n      --quiet   suppress non-essential output (exit code 1 if update available)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "48a8e64ed3b367fa678b80d50459ec6fb4874f5d723eb38076e6fad8ad0d7eb8",
+          "request": {
+            "args": [
+              "--quiet",
+              "--output=json",
+              "--vault",
+              "missing-vault",
+              "--profile",
+              "missing-profile",
+              "update",
+              "check",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check GitHub for a newer Symaira Vault release\n\nUsage:\n  symvault update check [flags]\n\nFlags:\n      --force   bypass cache and force a fresh check\n  -h, --help    help for check\n      --json    output update check result as JSON (deprecated: use --output=json)\n      --quiet   suppress non-essential output (exit code 1 if update available)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "9a9e9a9dea36a420c22f104d9d7ad02cb44c6a698333694da82096414f2367b6",
+          "request": {
+            "args": [
+              "update",
+              "check",
+              "--vault",
+              "missing-vault",
+              "--output",
+              "yaml",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check GitHub for a newer Symaira Vault release\n\nUsage:\n  symvault update check [flags]\n\nFlags:\n      --force   bypass cache and force a fresh check\n  -h, --help    help for check\n      --json    output update check result as JSON (deprecated: use --output=json)\n      --quiet   suppress non-essential output (exit code 1 if update available)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "200a7299c4281565cd26ae205b114e9aebf0cceadd4777781215818a4626af1a",
+          "request": {
+            "args": [
+              "update",
+              "check",
+              "--help=false",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check GitHub for a newer Symaira Vault release\n\nUsage:\n  symvault update check [flags]\n\nFlags:\n      --force   bypass cache and force a fresh check\n  -h, --help    help for check\n      --json    output update check result as JSON (deprecated: use --output=json)\n      --quiet   suppress non-essential output (exit code 1 if update available)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "7b8c4eb8f17a8d7fecf7a6fbaffdaef878a6536c02b35689b60605c7501fda9a",
+          "request": {
+            "args": [
+              "update",
+              "check",
+              "extra",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check GitHub for a newer Symaira Vault release\n\nUsage:\n  symvault update check [flags]\n\nFlags:\n      --force   bypass cache and force a fresh check\n  -h, --help    help for check\n      --json    output update check result as JSON (deprecated: use --output=json)\n      --quiet   suppress non-essential output (exit code 1 if update available)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0b08f0691752e7104fcef4b5d94ac3e68591c6e5afadc16dd180d9651ba50957",
+          "request": {
+            "args": [
+              "update",
+              "check",
+              "--json",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check GitHub for a newer Symaira Vault release\n\nUsage:\n  symvault update check [flags]\n\nFlags:\n      --force   bypass cache and force a fresh check\n  -h, --help    help for check\n      --json    output update check result as JSON (deprecated: use --output=json)\n      --quiet   suppress non-essential output (exit code 1 if update available)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "4648c943f2905342c0d75975d2c33c83dbd405ce291875c21ac7908322dc143b",
+          "request": {
+            "args": [
+              "update",
+              "check",
+              "--force",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Check GitHub for a newer Symaira Vault release\n\nUsage:\n  symvault update check [flags]\n\nFlags:\n      --force   bypass cache and force a fresh check\n  -h, --help    help for check\n      --json    output update check result as JSON (deprecated: use --output=json)\n      --quiet   suppress non-essential output (exit code 1 if update available)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "42c604ce6a773b5cdb36afff7c0a62457818fbb9af76b507f019e796dd314107",
+          "request": {
+            "args": [
+              "update",
+              "apply",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Downloads, verifies, and applies the latest Symaira Vault release.\n\nSupports direct-download installations only. When run via Homebrew, go install,\nor a package manager, self-update is disabled and guidance is shown instead.\n\nUsage:\n  symvault update apply [flags]\n\nFlags:\n      --dry-run   preview update without applying\n      --force     bypass cache and force a fresh check\n  -h, --help      help for apply\n      --json      output apply result as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "9f87f8f5b14b715eacb28e87537276820351f168c9571f232f883d8b1d4eb5af",
+          "request": {
+            "args": [
+              "update",
+              "apply",
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Downloads, verifies, and applies the latest Symaira Vault release.\n\nSupports direct-download installations only. When run via Homebrew, go install,\nor a package manager, self-update is disabled and guidance is shown instead.\n\nUsage:\n  symvault update apply [flags]\n\nFlags:\n      --dry-run   preview update without applying\n      --force     bypass cache and force a fresh check\n  -h, --help      help for apply\n      --json      output apply result as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "4566fec19b7a1d4a95489c2d4a44f3fcacdd79c0308a28806090485f58aab303",
+          "request": {
+            "args": [
+              "update",
+              "apply",
+              "--help=true"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Downloads, verifies, and applies the latest Symaira Vault release.\n\nSupports direct-download installations only. When run via Homebrew, go install,\nor a package manager, self-update is disabled and guidance is shown instead.\n\nUsage:\n  symvault update apply [flags]\n\nFlags:\n      --dry-run   preview update without applying\n      --force     bypass cache and force a fresh check\n  -h, --help      help for apply\n      --json      output apply result as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "fe9f0f6535db90766c6ac0bcf51c49c7229265b93fcffac3d94483586bcfc51d",
+          "request": {
+            "args": [
+              "help",
+              "update",
+              "apply"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Downloads, verifies, and applies the latest Symaira Vault release.\n\nSupports direct-download installations only. When run via Homebrew, go install,\nor a package manager, self-update is disabled and guidance is shown instead.\n\nUsage:\n  symvault update apply [flags]\n\nFlags:\n      --dry-run   preview update without applying\n      --force     bypass cache and force a fresh check\n  -h, --help      help for apply\n      --json      output apply result as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "8d6d172e521d6b985b6bd5d2a6740b566345402739b52a0b7f6608bb6598b13a",
+          "request": {
+            "args": [
+              "--quiet",
+              "--output=json",
+              "--vault",
+              "missing-vault",
+              "--profile",
+              "missing-profile",
+              "update",
+              "apply",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Downloads, verifies, and applies the latest Symaira Vault release.\n\nSupports direct-download installations only. When run via Homebrew, go install,\nor a package manager, self-update is disabled and guidance is shown instead.\n\nUsage:\n  symvault update apply [flags]\n\nFlags:\n      --dry-run   preview update without applying\n      --force     bypass cache and force a fresh check\n  -h, --help      help for apply\n      --json      output apply result as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "4b4a60ed809614e861a3338ff899ea8c402f093b640e8aa76bb945afbbd266af",
+          "request": {
+            "args": [
+              "update",
+              "apply",
+              "--vault",
+              "missing-vault",
+              "--output",
+              "yaml",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Downloads, verifies, and applies the latest Symaira Vault release.\n\nSupports direct-download installations only. When run via Homebrew, go install,\nor a package manager, self-update is disabled and guidance is shown instead.\n\nUsage:\n  symvault update apply [flags]\n\nFlags:\n      --dry-run   preview update without applying\n      --force     bypass cache and force a fresh check\n  -h, --help      help for apply\n      --json      output apply result as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "62e25c815cee4cd2b41c3ed6661b79793403e076acaab6b58f1cd269aa3770df",
+          "request": {
+            "args": [
+              "update",
+              "apply",
+              "--help=false",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Downloads, verifies, and applies the latest Symaira Vault release.\n\nSupports direct-download installations only. When run via Homebrew, go install,\nor a package manager, self-update is disabled and guidance is shown instead.\n\nUsage:\n  symvault update apply [flags]\n\nFlags:\n      --dry-run   preview update without applying\n      --force     bypass cache and force a fresh check\n  -h, --help      help for apply\n      --json      output apply result as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "8acc07221cc4f0fa2d1f8f0c6c54bd57cf8b6fc9fa3b4cf88594deb1443b7cba",
+          "request": {
+            "args": [
+              "update",
+              "apply",
+              "extra",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Downloads, verifies, and applies the latest Symaira Vault release.\n\nSupports direct-download installations only. When run via Homebrew, go install,\nor a package manager, self-update is disabled and guidance is shown instead.\n\nUsage:\n  symvault update apply [flags]\n\nFlags:\n      --dry-run   preview update without applying\n      --force     bypass cache and force a fresh check\n  -h, --help      help for apply\n      --json      output apply result as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "46bc6039c3d1554389ae5cc5376041302bc9bd938714fe6f0d8bd04df055bd3e",
+          "request": {
+            "args": [
+              "update",
+              "apply",
+              "--json",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Downloads, verifies, and applies the latest Symaira Vault release.\n\nSupports direct-download installations only. When run via Homebrew, go install,\nor a package manager, self-update is disabled and guidance is shown instead.\n\nUsage:\n  symvault update apply [flags]\n\nFlags:\n      --dry-run   preview update without applying\n      --force     bypass cache and force a fresh check\n  -h, --help      help for apply\n      --json      output apply result as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "7140ebeb3c8f0104e2c8f79a211f727a6aa7ca51722a5dea1049a3a601dd1fa4",
+          "request": {
+            "args": [
+              "update",
+              "apply",
+              "--force",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Downloads, verifies, and applies the latest Symaira Vault release.\n\nSupports direct-download installations only. When run via Homebrew, go install,\nor a package manager, self-update is disabled and guidance is shown instead.\n\nUsage:\n  symvault update apply [flags]\n\nFlags:\n      --dry-run   preview update without applying\n      --force     bypass cache and force a fresh check\n  -h, --help      help for apply\n      --json      output apply result as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "8d37c11bb5dbef97a53847ccdd5ca54cc30301f2012e4878b10b1c8183f6fd82",
+          "request": {
+            "args": [
+              "update",
+              "apply",
+              "--dry-run",
+              "--force",
+              "--json",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Downloads, verifies, and applies the latest Symaira Vault release.\n\nSupports direct-download installations only. When run via Homebrew, go install,\nor a package manager, self-update is disabled and guidance is shown instead.\n\nUsage:\n  symvault update apply [flags]\n\nFlags:\n      --dry-run   preview update without applying\n      --force     bypass cache and force a fresh check\n  -h, --help      help for apply\n      --json      output apply result as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b0e02fb9877f2ba4d8526ae0c365160c005d8b2f1a1de5fa26cd9cb9163a4415",
+          "request": {
+            "args": [
+              "update",
+              "info",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Detects how Symaira Vault was installed and shows whether self-update\nis supported, along with upgrade guidance for the detected method.\n\nUsage:\n  symvault update info [flags]\n\nFlags:\n  -h, --help   help for info\n      --json   output info as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "967ce66c8567c916667f77d18b2c1a1becdb9e9e067f36173267e93302500cce",
+          "request": {
+            "args": [
+              "update",
+              "info",
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Detects how Symaira Vault was installed and shows whether self-update\nis supported, along with upgrade guidance for the detected method.\n\nUsage:\n  symvault update info [flags]\n\nFlags:\n  -h, --help   help for info\n      --json   output info as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "17f59172a2f86dfa8f7e682496f4bdbc94187332ff475d34baae14bb40fa284b",
+          "request": {
+            "args": [
+              "update",
+              "info",
+              "--help=true"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Detects how Symaira Vault was installed and shows whether self-update\nis supported, along with upgrade guidance for the detected method.\n\nUsage:\n  symvault update info [flags]\n\nFlags:\n  -h, --help   help for info\n      --json   output info as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "3cebafb0836228b495db63c554bf3f623711807b6aef41c158fb0ccbd1aa9573",
+          "request": {
+            "args": [
+              "help",
+              "update",
+              "info"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Detects how Symaira Vault was installed and shows whether self-update\nis supported, along with upgrade guidance for the detected method.\n\nUsage:\n  symvault update info [flags]\n\nFlags:\n  -h, --help   help for info\n      --json   output info as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "2abe261acf5f071983bf356d891c6976096053f921d6e933f0992d71bc7954a3",
+          "request": {
+            "args": [
+              "--quiet",
+              "--output=json",
+              "--vault",
+              "missing-vault",
+              "--profile",
+              "missing-profile",
+              "update",
+              "info",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Detects how Symaira Vault was installed and shows whether self-update\nis supported, along with upgrade guidance for the detected method.\n\nUsage:\n  symvault update info [flags]\n\nFlags:\n  -h, --help   help for info\n      --json   output info as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "3031d617febe8ff6625ea57b76e48247e2979916b33a8e44ff52bd33283a27a5",
+          "request": {
+            "args": [
+              "update",
+              "info",
+              "--vault",
+              "missing-vault",
+              "--output",
+              "yaml",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Detects how Symaira Vault was installed and shows whether self-update\nis supported, along with upgrade guidance for the detected method.\n\nUsage:\n  symvault update info [flags]\n\nFlags:\n  -h, --help   help for info\n      --json   output info as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "4c4851e3ab072554033419461c6e6578e592fdc7e661e280940bd823b7f167a5",
+          "request": {
+            "args": [
+              "update",
+              "info",
+              "--help=false",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Detects how Symaira Vault was installed and shows whether self-update\nis supported, along with upgrade guidance for the detected method.\n\nUsage:\n  symvault update info [flags]\n\nFlags:\n  -h, --help   help for info\n      --json   output info as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "3dd8341fe4676b3d8944cda74085b59647e97525613639ce602e8b6d74feb21c",
+          "request": {
+            "args": [
+              "update",
+              "info",
+              "extra",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Detects how Symaira Vault was installed and shows whether self-update\nis supported, along with upgrade guidance for the detected method.\n\nUsage:\n  symvault update info [flags]\n\nFlags:\n  -h, --help   help for info\n      --json   output info as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "e7722dce7bb67acc06132f72b7276492bb4173f79c0b045ad3e250f911168078",
+          "request": {
+            "args": [
+              "update",
+              "info",
+              "--json",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Detects how Symaira Vault was installed and shows whether self-update\nis supported, along with upgrade guidance for the detected method.\n\nUsage:\n  symvault update info [flags]\n\nFlags:\n  -h, --help   help for info\n      --json   output info as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

@@ -122,7 +122,11 @@ fn copy_to_clipboard_replays_source_bound_go_dispatcher() {
         .expect("write synthetic identity marker");
         fs::create_dir(root.path().join("entries")).expect("create entries");
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(root.path(), &identity).expect("open synthetic store");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root.path()),
+            &identity,
+        )
+        .expect("open synthetic store");
         store
             .write_new_entry(
                 "github",
@@ -193,7 +197,9 @@ fn copy_to_clipboard_replays_source_bound_go_dispatcher() {
         .expect("construct synthetic runtime")
         .with_clipboard(clipboard.clone())
         .with_clipboard_auto_clear_duration(Duration::from_secs(case.auto_clear_duration))
-        .with_approval_seam(approval.clone());
+        .with_approval_seam(approval.clone())
+        // The recording ran by day; a night run must not raise off-hours alerts.
+        .with_anomaly_clock(Arc::new(symvault_mcp::anomaly::FixedAnomalyClock::midday()));
         let mut handler = ProtocolHandler::with_tool_call_runtime(
             &fixture.server_name,
             &fixture.server_version,
@@ -218,7 +224,9 @@ fn copy_to_clipboard_replays_source_bound_go_dispatcher() {
         );
 
         if case.auto_clear_duration > 0 && case.clipboard_events.contains(&"clear".into()) {
-            let deadline = Instant::now() + Duration::from_secs(3);
+            // Setup bound, not the behavior under test: generous so load and coverage
+            // instrumentation cannot win the race (#1564-#1567).
+            let deadline = Instant::now() + Duration::from_secs(30);
             while clipboard.writes.lock().unwrap().len() < case.clipboard_events.len()
                 && Instant::now() < deadline
             {
@@ -338,7 +346,7 @@ fn copy_to_clipboard_signal_clears_active_timer_and_continues() {
     fn signal_child(pid: &str, signal: &str) {
         let mut command = Command::new("kill");
         command.args([signal, pid]);
-        let output = bounded_output(command, Duration::from_secs(2));
+        let output = bounded_output(command, Duration::from_secs(30));
         assert!(
             output.status.success(),
             "signal {signal} failed: {output:?}"
@@ -370,7 +378,11 @@ fn copy_to_clipboard_signal_clears_active_timer_and_continues() {
         .expect("write synthetic identity marker");
         fs::create_dir(root.path().join("entries")).expect("create entries");
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(root.path(), &identity).expect("open synthetic store");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root.path()),
+            &identity,
+        )
+        .expect("open synthetic store");
         store
             .write_new_entry(
                 "github",
@@ -427,7 +439,7 @@ fn copy_to_clipboard_signal_clears_active_timer_and_continues() {
 
         let pid = id().to_string();
         signal_child(&pid, "-TERM");
-        let deadline = Instant::now() + Duration::from_secs(3);
+        let deadline = Instant::now() + Duration::from_secs(30);
         while clipboard.writes.lock().unwrap().len() < 2 && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(5));
         }

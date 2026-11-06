@@ -168,7 +168,9 @@ mod tests {
                     })
                 })
                 .collect::<Vec<_>>();
-            let deadline = Instant::now() + Duration::from_secs(3);
+            // Setup bound, not the behavior under test: generous so load and coverage
+            // instrumentation cannot win the race (#1564-#1567).
+            let deadline = Instant::now() + Duration::from_secs(30);
             while admission.state.lock().unwrap().pending < MAX_PENDING {
                 assert!(
                     Instant::now() < deadline,

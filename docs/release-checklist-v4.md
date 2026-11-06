@@ -1,5 +1,7 @@
 # Release Checklist — v4.0.0
 
+> **Historical (Go era):** this checklist describes the v4.0.0 (OpenPass) release. The Go commands and paths below no longer exist; current releases are gated by `.github/workflows/release.yml` (Rust gates: `make rust-lint`, `make rust-test`, `make rust-security`, `make release-contract-selftest`).
+
 The release manager ticks every box below before running `git tag v4.0.0` and
 pushing the tag. The checklist is a hard gate: a missing tick blocks the
 release.
@@ -17,15 +19,14 @@ run on every minor.
 - [ ] `make clean` removes all build artifacts (no `*.test`, `*.out`,
       `symvault` binary, `coverage/` dir in repo root). The goreleaser
       pre-hook would otherwise reject the build.
-- [ ] `go env GOWORK` is empty (or set via `env GOWORK=off`).
+- [ ] (Historical) `go env GOWORK` was empty; no Go toolchain is involved any more.
 
 ## Build & static analysis
 
-- [ ] `make build` succeeds on the release machine.
-- [ ] `make vet` is clean (includes `passlint` analyzer).
-- [ ] `make lint` exits 0. `golangci-lint` findings, if any, are documented in
-      the PR that introduced them and explicitly approved.
-- [ ] `make fmt-check` is clean.
+- [ ] `make rust-cli` succeeds on the release machine.
+- [ ] `make rust-lint` exits 0 (rustfmt and Clippy with `-D warnings`). Findings, if any,
+      are documented in the PR that introduced them and explicitly approved.
+- [ ] `make rust-security` is clean (`cargo audit`, `cargo deny`).
 
 ## Tests
 
@@ -105,10 +106,9 @@ justification in the release PR.
 
 ## Security & supply-chain
 
-- [ ] `make vet` includes `passlint`; analyzer is loaded.
-- [ ] `govulncheck ./...` reports no actionable vulnerabilities (deferred
+- [ ] `make rust-security` reports no actionable vulnerabilities (deferred
       transitive CVEs documented in `docs/dependency-evaluations/`).
-- [ ] Code-scanning (gosec/CodeQL) on `main`: 0 open alerts.
+- [ ] Code-scanning (CodeQL) on `main`: 0 open alerts.
 - [ ] Dependabot alerts on the repo: 0 open.
 - [ ] No secrets in the release tree: goreleaser pre-hook passes
       (`identity.age`, `mcp-token`, `.env`, `coverage`, `*.test`).

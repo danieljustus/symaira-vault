@@ -1,5 +1,7 @@
 #![cfg(unix)]
 
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
 
@@ -14,21 +16,22 @@ fn temporary_root(name: &str) -> test_temp_root::TempRoot {
 }
 
 fn run(binary: &Path, args: &[String], root: &Path, home: &Path) -> Output {
-    Command::new(binary)
-        .args(args)
-        .env("HOME", home)
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .env("XDG_DATA_HOME", home.join("data"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("SYMVAULT_VAULT", root)
-        .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
-        .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
-        .env("SYMVAULT_TEST_KEYRING", "memory")
-        .env("RUN_SAFE_MARKER", "ambient-value")
-        .env("RUN_PATTERN_CORPUS", synthetic_pattern_corpus())
-        .env("CI", "1")
-        .output()
-        .expect("run CLI")
+    go_oracle::output(
+        Command::new(binary)
+            .args(args)
+            .env("HOME", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("SYMVAULT_VAULT", root)
+            .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
+            .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+            .env("SYMVAULT_TEST_KEYRING", "memory")
+            .env("RUN_SAFE_MARKER", "ambient-value")
+            .env("RUN_PATTERN_CORPUS", synthetic_pattern_corpus())
+            .env("CI", "1"),
+    )
+    .expect("run CLI")
 }
 
 fn assert_success(output: &Output, label: &str) {
@@ -121,30 +124,39 @@ fn synthetic_pattern_corpus() -> String {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn run_matches_go_for_secret_env_file_passthrough_pattern_and_exit() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "run_differential",
+        "run_matches_go_for_secret_env_file_passthrough_pattern_and_exit",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let root = temporary_root("vault");
     let home = temporary_root("home");
     let env_file = temporary_root("env");
     fs::create_dir_all(&home).expect("home");
 
-    let init = run(
-        &rust_binary,
-        &string_args(&[
-            "--vault",
-            root.to_str().expect("vault path"),
-            "init",
-            "--auth",
-            "passphrase",
-        ]),
-        &root,
-        &home,
-    );
+    // `init` generates random keys; the recorded Go calls were captured against
+    // exactly this frozen vault.
+    let init = oracle.seed_run("init", &[&root, &home], || {
+        run(
+            &rust_binary,
+            &string_args(&[
+                "--vault",
+                root.to_str().expect("vault path"),
+                "init",
+                "--auth",
+                "passphrase",
+            ]),
+            &root,
+            &home,
+        )
+    });
     assert_success(&init, "Rust init");
 
     let set = run(

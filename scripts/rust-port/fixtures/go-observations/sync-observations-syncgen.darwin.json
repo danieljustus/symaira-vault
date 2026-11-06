@@ -1,0 +1,74 @@
+{
+  "args": [
+    "go",
+    "test",
+    "-race",
+    "./scripts/rust-port/cmd/syncgen",
+    "-count=1",
+    "-json"
+  ],
+  "contract": "sync-observations-syncgen",
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "darwin",
+  "observations": {
+    "events": [
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/scripts/rust-port/cmd/syncgen"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/scripts/rust-port/cmd/syncgen",
+        "Test": "TestExtractArchiveContainment"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/scripts/rust-port/cmd/syncgen",
+        "Test": "TestExtractArchiveContainment/absolute_path"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/scripts/rust-port/cmd/syncgen",
+        "Test": "TestExtractArchiveContainment/nested_traversal"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/scripts/rust-port/cmd/syncgen",
+        "Test": "TestExtractArchiveContainment/parent_traversal"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/scripts/rust-port/cmd/syncgen",
+        "Test": "TestExtractArchiveContainment/symbolic_link"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/scripts/rust-port/cmd/syncgen",
+        "Test": "TestExtractArchiveRejectsSymlinkedParent"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/scripts/rust-port/cmd/syncgen",
+        "Test": "TestFixturePathIsBounded"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/scripts/rust-port/cmd/syncgen",
+        "Test": "TestObservationSelectionRejectsUnknownAndDuplicateCases"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/scripts/rust-port/cmd/syncgen",
+        "Test": "TestPinnedSyncArchiveContract"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/scripts/rust-port/cmd/syncgen",
+        "Test": "TestPinnedSyncOracleIsRepeatable"
+      }
+    ]
+  },
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "schema": 1
+}

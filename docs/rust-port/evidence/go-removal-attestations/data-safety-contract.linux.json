@@ -1,0 +1,154 @@
+{
+  "direction": "live Go opens, reads and writes the vaults Rust has just written (the reverse half of the data-safety contract)",
+  "go_verdict": {
+    "accepted": true,
+    "command": [
+      "data_safety_contract.py",
+      "--capture-go"
+    ],
+    "exit_code": 0,
+    "observation_calls_sha256": "1297edf9c8c53318a43d3d832e47263bfad415d676faffaaa4626644254b6a2b",
+    "output_sha256": "a02398ee820b9c2376569ecb9ff42e28179c7af8c3eb86e367f5d7965bf6df6f",
+    "reverse_calls": [
+      {
+        "args": [
+          "get",
+          "personal/email",
+          "--output",
+          "json"
+        ],
+        "key": "ffi-seed#0",
+        "returncode": 0,
+        "stdout_sha256": "35bc1d899bbc660216cec9bfed1cb6fadb20aeabe1713f2cee79a1cd851788cf",
+        "vault_tree_sha256": "637e023f850c2f1a8a614b7c6d2d2789de35470822abace9a8237c10e5208b2d"
+      },
+      {
+        "args": [
+          "get",
+          "harness/new.password",
+          "--print"
+        ],
+        "key": "ffi-seed#1",
+        "returncode": 0,
+        "stdout_sha256": "c675ef1d47ce1ce746bbdaa29010ebce4876c9cec6bd29cf869efe571febf32e",
+        "vault_tree_sha256": "637e023f850c2f1a8a614b7c6d2d2789de35470822abace9a8237c10e5208b2d"
+      },
+      {
+        "args": [
+          "get",
+          "harness/second.password",
+          "--print"
+        ],
+        "key": "ffi-seed#2",
+        "returncode": 0,
+        "stdout_sha256": "c675ef1d47ce1ce746bbdaa29010ebce4876c9cec6bd29cf869efe571febf32e",
+        "vault_tree_sha256": "0865a660407ee7b99a15153aad311028ea7729773d0f974984e36465d0897b79"
+      },
+      {
+        "args": [
+          "verify"
+        ],
+        "key": "ffi-seed#3",
+        "returncode": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "vault_tree_sha256": "d9d58155d0595c6345ba72d33b48bf62cfbdcaec69e71dbe830d8d8a97ea5217"
+      },
+      {
+        "args": [
+          "set",
+          "harness/by-go",
+          "--value",
+          "StrongPassword123!"
+        ],
+        "key": "ffi-seed#4",
+        "returncode": 0,
+        "stdout_sha256": "4ed4556ecaf4247219cb23d0a1725bb13c77d21ec1a24e165c660d00ef00e5dd",
+        "vault_tree_sha256": "d9d58155d0595c6345ba72d33b48bf62cfbdcaec69e71dbe830d8d8a97ea5217"
+      },
+      {
+        "args": [
+          "get",
+          "work/github",
+          "--output",
+          "json"
+        ],
+        "key": "go-init#3",
+        "returncode": 0,
+        "stdout_sha256": "96bcdf1296cd3b0cf88f0e23269d8288ddf070dd505665fc289332f4eedd2360",
+        "vault_tree_sha256": "5245d504be60ec2839e9bc9d9d8094e91c3119c4b0712be7c717b36156cd7797"
+      },
+      {
+        "args": [
+          "get",
+          "harness/new.password",
+          "--print"
+        ],
+        "key": "go-init#4",
+        "returncode": 0,
+        "stdout_sha256": "c675ef1d47ce1ce746bbdaa29010ebce4876c9cec6bd29cf869efe571febf32e",
+        "vault_tree_sha256": "5245d504be60ec2839e9bc9d9d8094e91c3119c4b0712be7c717b36156cd7797"
+      },
+      {
+        "args": [
+          "get",
+          "harness/second.password",
+          "--print"
+        ],
+        "key": "go-init#5",
+        "returncode": 0,
+        "stdout_sha256": "c675ef1d47ce1ce746bbdaa29010ebce4876c9cec6bd29cf869efe571febf32e",
+        "vault_tree_sha256": "791905c3802e90e14d5ce5d9b819f303e3edb93319afc60c60ca1477a76bf661"
+      },
+      {
+        "args": [
+          "verify"
+        ],
+        "key": "go-init#6",
+        "returncode": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "vault_tree_sha256": "93227b83893dcefbd537ac431b528abcd88c95b641eabda4395d1636a148fb7b"
+      },
+      {
+        "args": [
+          "set",
+          "harness/by-go",
+          "--value",
+          "StrongPassword123!"
+        ],
+        "key": "go-init#7",
+        "returncode": 0,
+        "stdout_sha256": "4ed4556ecaf4247219cb23d0a1725bb13c77d21ec1a24e165c660d00ef00e5dd",
+        "vault_tree_sha256": "93227b83893dcefbd537ac431b528abcd88c95b641eabda4395d1636a148fb7b"
+      },
+      {
+        "args": [
+          "list"
+        ],
+        "key": "zero-key#2",
+        "returncode": 0,
+        "stdout_sha256": "f50fb4c07256f5c678aeb85700679012823a6ec5826957e1ccae00f8a96ec63b",
+        "vault_tree_sha256": "eeb2734ade89e96915a1d928f3a595f6583a279c3caa5b5bf10e3c0f1585f842"
+      }
+    ]
+  },
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "linux",
+  "name": "data-safety-contract",
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "rust_artifacts_sha256": {
+    "ffi-seed#0": "637e023f850c2f1a8a614b7c6d2d2789de35470822abace9a8237c10e5208b2d",
+    "ffi-seed#1": "637e023f850c2f1a8a614b7c6d2d2789de35470822abace9a8237c10e5208b2d",
+    "ffi-seed#2": "0865a660407ee7b99a15153aad311028ea7729773d0f974984e36465d0897b79",
+    "ffi-seed#3": "d9d58155d0595c6345ba72d33b48bf62cfbdcaec69e71dbe830d8d8a97ea5217",
+    "ffi-seed#4": "d9d58155d0595c6345ba72d33b48bf62cfbdcaec69e71dbe830d8d8a97ea5217",
+    "go-init#3": "5245d504be60ec2839e9bc9d9d8094e91c3119c4b0712be7c717b36156cd7797",
+    "go-init#4": "5245d504be60ec2839e9bc9d9d8094e91c3119c4b0712be7c717b36156cd7797",
+    "go-init#5": "791905c3802e90e14d5ce5d9b819f303e3edb93319afc60c60ca1477a76bf661",
+    "go-init#6": "93227b83893dcefbd537ac431b528abcd88c95b641eabda4395d1636a148fb7b",
+    "go-init#7": "93227b83893dcefbd537ac431b528abcd88c95b641eabda4395d1636a148fb7b",
+    "zero-key#2": "eeb2734ade89e96915a1d928f3a595f6583a279c3caa5b5bf10e3c0f1585f842"
+  },
+  "rust_commit": "2080d4633142b0839dfabd2b0247b1716bf51a43",
+  "schema": 1
+}

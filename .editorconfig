@@ -11,18 +11,9 @@ end_of_line = lf
 insert_final_newline = true
 trim_trailing_whitespace = true
 
-# Go files: use tabs for indentation
-[*.go]
-indent_style = tab
-indent_size = 4
-
-# Go module files
-[go.mod]
-indent_style = tab
-indent_size = 4
-
-[go.sum]
-indent_style = tab
+# Rust files: rustfmt owns formatting (4 spaces)
+[*.rs]
+indent_style = space
 indent_size = 4
 
 # YAML files: use 2 spaces for indentation

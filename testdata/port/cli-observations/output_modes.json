@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "bf7f687bb8f57316e8333965635e733b8f567c72",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "tests": {
+    "touch_id_availability_matches_go_in_the_same_sandbox": {
+      "touchIDAvailable": {
+        "go": true,
+        "recorded_on": "macos",
+        "rust": true
+      }
+    }
+  }
+}

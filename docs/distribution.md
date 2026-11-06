@@ -6,18 +6,14 @@ Symaira Vault is distributed through multiple channels to support different plat
 
 The product targets Apple Silicon macOS, iOS and Web where applicable. Linux
 remains a supported CLI/server and CI platform. Windows and Intel Macs are
-unsupported and receive no new CI or release artifacts. Existing FreeBSD CLI
-artifacts remain unchanged. See [#1550](https://github.com/danieljustus/symaira-vault/issues/1550).
+unsupported and receive no new CI or release artifacts, and FreeBSD has been
+dropped. See [#1550](https://github.com/danieljustus/symaira-vault/issues/1550).
 
 | OS | Arch | Formats |
 |----|------|---------|
 | Linux | amd64, arm64 | tar.gz, deb, rpm, apk, mcpb |
 | macOS | arm64 | tar.gz, Homebrew, mcpb |
-| FreeBSD | amd64, arm64 | tar.gz |
 | NixOS / Nix | amd64, arm64 | Nix flake |
-
-**Notes:**
-- **FreeBSD**: Prebuilt binaries are built with `CGO_ENABLED=0`, which disables OS keyring integration. Instead, Symaira Vault uses an in-memory encrypted session cache (AES-256-GCM) with a 15-minute TTL. See [docs/troubleshooting.md](troubleshooting.md#freebsd) for details.
 
 ## First-Class Channels
 
@@ -61,7 +57,7 @@ The formula is rendered by `scripts/homebrew-formula.sh` and published to `danie
 curl -LO https://github.com/danieljustus/symaira-vault/releases/latest/download/symvault_<version>_linux_<arch>.deb
 
 # Install
-sudo dpkg -i symvault_<version>_linux_<arch>.deb
+sudo apt install ./symvault_<version>_linux_<arch>.deb   # resolves the git dependency (dpkg -i would not)
 ```
 
 #### Fedora/RHEL (.rpm)
@@ -71,7 +67,7 @@ sudo dpkg -i symvault_<version>_linux_<arch>.deb
 curl -LO https://github.com/danieljustus/symaira-vault/releases/latest/download/symvault_<version>_linux_<arch>.rpm
 
 # Install
-sudo rpm -i symvault_<version>_linux_<arch>.rpm
+sudo dnf install ./symvault_<version>_linux_<arch>.rpm   # resolves the git dependency
 ```
 
 #### Alpine (.apk)
@@ -107,7 +103,7 @@ nix run github:danieljustus/symaira-vault
 #   inputs.symvault.url = "github:danieljustus/symaira-vault";
 ```
 
-> **Note:** Go module dependencies are pinned via `vendorHash` in `flake.nix`. If updating dependencies, run `go mod vendor && nix hash path --sri vendor/` and update the hash.
+> **Note:** The flake builds the Rust CLI with `rustPlatform.buildRustPackage` from `Cargo.lock` (no vendor hash to maintain; the one git dependency is fetched by its locked rev). It needs a nixpkgs whose `rustc` satisfies the workspace `rust-version` (1.98); if the build reports `requires rustc 1.98`, run `nix flake update nixpkgs`.
 
 ### MCP Bundle (.mcpb)
 
@@ -126,19 +122,28 @@ Available MCPB platforms: `darwin-arm64`, `linux-amd64`, `linux-arm64`.
 
 For detailed installation instructions, see [docs/mcpb-install.md](mcpb-install.md).
 
-### Go Install
+### Cargo Install
 
 ```bash
-go install github.com/danieljustus/symaira-vault@latest
+cargo install --locked --git https://github.com/danieljustus/symaira-vault --tag <release tag> symvault-cli
 ```
+
+### Runtime dependency: git
+
+`symvault` shells out to the `git` executable (vault history and sync), so
+`git` must be on `PATH`. The deb/rpm/apk packages declare `git` as a hard
+dependency; the archives, install script and `cargo install` do not install it
+for you. On macOS, `git` comes with the Xcode Command Line Tools
+(`xcode-select --install`, prompted on first use) or Homebrew. Rationale:
+[ADR 0033](adr/0033-git-binary-runtime-dependency.md).
 
 ### Build from Source
 
 ```bash
 git clone https://github.com/danieljustus/symaira-vault
 cd symaira-vault
-make build
-sudo mv symvault /usr/local/bin/
+make rust-cli   # cargo build --release --locked -p symvault-cli --bin symvault
+sudo install -m 0755 target/release/symvault /usr/local/bin/symvault
 ```
 
 ## Code Signing and Notarization Policy
@@ -161,12 +166,12 @@ To protect users against supply-chain attacks and avoid operating system warning
 
 ## Build Pipeline
 
-All artifacts are built by [GoReleaser](https://goreleaser.com/) via the release workflow (`.github/workflows/release.yml`).
+All artifacts are built by [GoReleaser](https://goreleaser.com/) (Rust builder) via the release workflow (`.github/workflows/release.yml`). No Go toolchain is involved.
 
 The pipeline:
-1. Runs tests and govulncheck
-2. Runs lint and security gates (fmt-check, golangci-lint, gosec)
-3. Builds cross-platform binaries
+1. Runs the Rust gates (rustfmt, Clippy with `-D warnings`, nextest and doctests)
+2. Runs the security gates (`cargo audit`, `cargo deny`) and the release-contract checker self-test
+3. Builds the binaries with cargo (static musl via cargo-zigbuild on Linux, native cargo on macOS arm64)
 4. Creates archives (tar.gz)
 5. Creates Linux packages (deb/rpm/apk) via nfpms
 6. Generates Homebrew formula
@@ -243,8 +248,6 @@ The following matrix shows which distribution channels have automated vs. manual
 | Linux arm64 | All | Manual | Cross-compile target |
 | macOS arm64 | tar.gz | Automated | `smoke-test-macos` job |
 | macOS | Homebrew | Manual | Tap-based install |
-| FreeBSD amd64 | tar.gz | Manual | No GA runner available |
-| FreeBSD arm64 | tar.gz | Manual | No GA runner available |
 
 ### Automated Smoke Tests
 

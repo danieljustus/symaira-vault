@@ -1,0 +1,20 @@
+{
+  "args": [
+    "mcp_authz_matrix.py",
+    "--capture-go"
+  ],
+  "contract": "mcp-authz-matrix",
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "darwin",
+  "observations": {
+    "cases": 2376,
+    "fixture": "testdata/port/mcp/authz-matrix.json",
+    "fixture_sha256": "ef0e9066f05d4dc782a1ee0f99b8f90d722ad687530dbba5a0cd050b79bdef44",
+    "probe_sha256": "c7e8656814af7c0e01c45abbcd635918a137fa0b67b7a0e3a765592f374584d9",
+    "seed_sha256": "d2b0eb2ab8bb3b676525efe328121adc744d5f51ca14fecdbf8b748f0523fea3",
+    "source_digest": "2f0eb79be70febfa74544200a22d75adda2ea78aa74ca0391272d311314c008a"
+  },
+  "oracle_commit": "24acdb08fcc7021262717aa803d72eb8d151c66a",
+  "schema": 1
+}

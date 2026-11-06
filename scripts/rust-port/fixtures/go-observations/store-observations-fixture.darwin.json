@@ -1,0 +1,22 @@
+{
+  "args": [
+    "go",
+    "run",
+    "./scripts/rust-port/cmd/storegen",
+    "--check",
+    "--output",
+    "testdata/port/store/store.json"
+  ],
+  "contract": "store-observations-fixture",
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "darwin",
+  "observations": {
+    "check_exit": 0,
+    "files": {
+      "testdata/port/store/store.json": "4b9014ed400030db3add30e6f886797f6c6d2080ec00f75c82d97e45e7eeba9d"
+    }
+  },
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "schema": 1
+}

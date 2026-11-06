@@ -3,6 +3,7 @@
 mod add_commands;
 mod agent_audit_commands;
 mod agent_doctor_commands;
+mod agent_gate;
 mod agent_install_commands;
 mod agent_list_commands;
 mod agent_profile_commands;
@@ -14,6 +15,7 @@ mod agent_whoami_commands;
 mod approval_commands;
 mod audit_commands;
 mod audit_export_commands;
+mod authguard;
 mod backup_commands;
 mod broker_commands;
 mod cli_artifacts;
@@ -28,11 +30,13 @@ mod deprecated_stubs;
 mod device;
 mod device_approval;
 mod doctor_commands;
+mod dynamic_commands;
 mod edit_commands;
 mod export_commands;
 mod file_commands;
 mod help_commands;
 mod history_commands;
+mod identity_error;
 mod import_commands;
 mod import_review_commands;
 mod intake_commands;
@@ -50,8 +54,11 @@ mod search_commands;
 mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
+mod set_input;
+mod setup_wizard;
 mod share_commands;
 mod startup_profile_commands;
+mod stdin_input;
 mod sync_commands;
 mod template_commands;
 mod tui;
@@ -65,7 +72,7 @@ use std::{
     collections::BTreeMap,
     ffi::{OsStr, OsString},
     fs,
-    io::{self, Write},
+    io::{self, BufRead, Write},
     path::{Path, PathBuf},
     process::ExitCode,
     sync::Arc,
@@ -149,10 +156,10 @@ enum Command {
     /// Launch the interactive terminal UI.
     Ui {
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "print_keybindings")]
         print_keybindings: bool,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "experimental")]
         experimental: bool,
     },
     /// Review-gated credential intake from loose files.
@@ -167,7 +174,7 @@ enum Command {
         #[arg(value_name = "SHELL", value_parser = ["bash", "zsh", "fish", "powershell"])]
         shell: Option<String>,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "no_descriptions")]
         no_descriptions: bool,
     },
     /// Run a command with secrets injected as environment variables.
@@ -181,17 +188,17 @@ enum Command {
         passthrough: Vec<String>,
         #[arg(short = 'C', long)]
         working_dir: Option<PathBuf>,
-        #[arg(short = 't', long)]
+        #[arg(short = 't', long, allow_hyphen_values = true)]
         timeout: Option<String>,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "broker")]
         broker: bool,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "broker_strict")]
         broker_strict: bool,
-        #[arg(long)]
+        #[arg(long, allow_hyphen_values = true)]
         broker_passthrough: Vec<String>,
-        #[arg(last = true, required = true)]
+        #[arg(required = true, num_args = 1..)]
         command: Vec<String>,
     },
     /// Run the egress credential broker (loopback MITM proxy).
@@ -200,9 +207,9 @@ enum Command {
         #[arg(long, default_value = "127.0.0.1:0")]
         addr: String,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "strict")]
         strict: bool,
-        #[arg(long)]
+        #[arg(long, allow_hyphen_values = true)]
         passthrough: Vec<String>,
         #[arg(hide = true)]
         _args: Vec<String>,
@@ -234,6 +241,19 @@ enum Command {
         #[arg(long, default_value = "ask")]
         auth: String,
     },
+    /// Interactive setup wizard for Symaira Vault.
+    Setup {
+        /// Do not rollback vault init artifacts when subsequent steps fail.
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "keep_on_error")]
+        keep_on_error: bool,
+        /// Disable setup resume after abort.
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "no_resume")]
+        no_resume: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     /// Add a new password entry.
     #[command(alias = "new", alias = "create")]
     Add {
@@ -241,13 +261,14 @@ enum Command {
         name: String,
         #[arg(long, value_name = "VALUE")]
         value: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "stdin_value")]
         stdin_value: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "stdin_totp_secret")]
         stdin_totp_secret: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "generate")]
         generate: bool,
-        #[arg(long, default_value_t = 20)]
+        #[arg(long, default_value_t = 20, allow_hyphen_values = true,
+            value_parser = cobra_usage::parse_go_int)]
         length: i64,
         #[arg(long)]
         username: Option<String>,
@@ -261,15 +282,15 @@ enum Command {
         totp_issuer: Option<String>,
         #[arg(long)]
         totp_account: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "force")]
         force: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "allow_empty")]
         allow_empty: bool,
         #[arg(long = "type")]
         secret_type: Option<String>,
         #[arg(long)]
         usage_hint: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "auto_rotate")]
         auto_rotate: bool,
         #[arg(long)]
         expires_at: Option<String>,
@@ -297,13 +318,13 @@ enum Command {
         query: String,
         #[arg(value_name = "EXTRA")]
         extra: Vec<String>,
-        #[arg(short, long)]
+        #[arg(short, long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "_print")]
         _print: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "length")]
         length: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "digest")]
         digest: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "metadata")]
         metadata: bool,
     },
     /// Search entry paths and contents.
@@ -320,40 +341,44 @@ enum Command {
         #[arg(short = 'l', long, default_value_t = 20, allow_hyphen_values = true,
             value_parser = cobra_usage::parse_go_int)]
         length: i64,
-        #[arg(short = 's', long)]
+        #[arg(short = 's', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "symbols")]
         symbols: bool,
         #[arg(long)]
         store: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "reveal")]
         reveal: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "quiet")]
         quiet: bool,
         #[command(subcommand)]
         subcommand: Option<GenerateCommand>,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Check vault health and configuration
     Doctor {
         /// Skip checks that require network access
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "no_network")]
         no_network: bool,
         /// Return non-zero exit code for warnings (7) or failures (8)
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "strict")]
         strict: bool,
         /// Only run checks matching these glob patterns (comma-separated, e.g. vault.*)
-        #[arg(long, value_delimiter = ',')]
-        only: Option<Vec<String>>,
+        #[arg(long, allow_hyphen_values = true)]
+        only: Vec<String>,
         /// Skip checks matching these glob patterns (comma-separated)
-        #[arg(long, value_delimiter = ',')]
-        exclude: Option<Vec<String>>,
+        #[arg(long, allow_hyphen_values = true)]
+        exclude: Vec<String>,
         /// Auto-repair safe issues (permissions, gitignore, git init)
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "fix")]
         fix: bool,
         /// Log what --fix would do without modifying anything
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "fix_dry_run")]
         fix_dry_run: bool,
         /// Skip slow checks
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "quick")]
         quick: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Run a read-only Git history operation.
     Git {
@@ -370,6 +395,11 @@ enum Command {
         #[command(subcommand)]
         command: MigrateCommand,
     },
+    /// Generate dynamic secrets with time-limited leases.
+    Dynamic {
+        #[command(subcommand)]
+        command: DynamicCommand,
+    },
     /// Generate configuration files from built-in templates.
     Template {
         #[command(subcommand)]
@@ -377,15 +407,19 @@ enum Command {
     },
     /// Create a compressed vault backup archive.
     Backup {
+        // OsString, not PathBuf: clap's PathBuf parser rejects an empty value,
+        // but Go accepts `backup ""` and writes `.tar.gz`.
         #[arg(value_name = "ARCHIVE_PATH")]
-        archive: PathBuf,
-        #[arg(long)]
+        archive: OsString,
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "exclude_git")]
         exclude_git: bool,
     },
     /// Restore a vault from a backup archive.
     Restore {
+        // OsString for the same reason as `backup`: Go reports `stat : no such
+        // file or directory` for an empty archive argument.
         #[arg(value_name = "ARCHIVE_PATH")]
-        archive: PathBuf,
+        archive: OsString,
     },
     /// Add or export binary file attachments.
     File {
@@ -394,16 +428,18 @@ enum Command {
     },
     /// Verify or rebuild the vault entry manifest.
     Verify {
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "rebuild")]
         rebuild: bool,
-        #[arg(long = "rebuild-only")]
+        #[arg(long = "rebuild-only", action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "rebuild_only")]
         rebuild_only: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Synchronize encrypted vault files with the Git remote.
     Sync {
-        #[arg(long, short = 'p')]
+        #[arg(long, short = 'p', action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "push")]
         push: bool,
-        #[arg(long, short = 'f')]
+        #[arg(long, short = 'f', action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "force")]
         force: bool,
     },
     /// Inspect the vault Git remote.
@@ -420,33 +456,44 @@ enum Command {
     Audit {
         #[command(subcommand)]
         command: Option<AuditCommand>,
-        #[arg(short = 'n', long, default_value_t = 20)]
+        #[arg(short = 'n', long, default_value_t = 20, allow_hyphen_values = true,
+            value_parser = cobra_usage::parse_go_int)]
         tail: i64,
-        #[arg(short = 'j', long)]
+        #[arg(short = 'j', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "audit_json")]
         audit_json: bool,
         #[arg(short = 'a', long, default_value = "default")]
         agent: String,
         #[arg(short = 's', long, default_value = "")]
         since: String,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "failed")]
         failed: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Export vault entries to CSV or JSON.
     Export {
-        #[arg(long, value_name = "FORMAT", required = true)]
+        // pflag keeps the last occurrence of a repeated string flag.
+        #[arg(
+            long,
+            value_name = "FORMAT",
+            required = true,
+            overrides_with = "format"
+        )]
         format: String,
-        #[arg(long, default_value = "")]
+        #[arg(long, default_value = "", overrides_with = "mapping")]
         mapping: String,
-        #[arg(short = 'y', long)]
+        #[arg(short = 'y', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
     },
     /// Measure and report CLI startup time.
     StartupProfile {
         // allow_hyphen_values mirrors pflag, which accepts `--count -5`
         // (clamped to one iteration by the command itself).
-        #[arg(short = 'n', long, default_value_t = 10, allow_hyphen_values = true)]
+        #[arg(short = 'n', long, default_value_t = 10, allow_hyphen_values = true,
+            value_parser = cobra_usage::parse_go_int)]
         count: i64,
-        #[arg(long, default_value_t = 5, allow_hyphen_values = true)]
+        #[arg(long, default_value_t = 5, allow_hyphen_values = true,
+            value_parser = cobra_usage::parse_go_int)]
         top: i64,
         // OsString, not PathBuf: clap's PathBuf parser rejects an empty value,
         // but Go treats `--trace ""` as "no trace" and runs the benchmark.
@@ -497,11 +544,11 @@ enum Command {
         query: String,
         #[arg(long, value_name = "VALUE")]
         value: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "stdin_value")]
         stdin_value: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "allow_empty")]
         allow_empty: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "force")]
         force: bool,
         #[arg(long)]
         totp_secret: Option<String>,
@@ -515,7 +562,7 @@ enum Command {
     Delete {
         #[arg(value_name = "PATH")]
         path: String,
-        #[arg(short = 'y', long)]
+        #[arg(short = 'y', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
     },
     /// Import entries from another password manager.
@@ -524,22 +571,22 @@ enum Command {
         /// first non-flag word may name the `review` group (Find semantics).
         #[arg(value_name = "ARG", num_args = 0..)]
         args: Vec<OsString>,
-        #[arg(long)]
+        // cobra string flags keep the last value of a repeated flag.
+        #[arg(long, overrides_with = "format")]
         format: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "dry_run")]
         dry_run: bool,
-        #[arg(long, default_value = "")]
+        #[arg(long, default_value = "", overrides_with = "prefix")]
         prefix: String,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "skip_existing")]
         skip_existing: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "overwrite")]
         overwrite: bool,
-        #[arg(long, default_value = "")]
+        #[arg(long, default_value = "", overrides_with = "mapping")]
         mapping: String,
         #[arg(
             long,
-            help = "Import entries into quarantine/<import-id>/ for human review before agent access"
-        )]
+            help = "Import entries into quarantine/<import-id>/ for human review before agent access", action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "quarantine")]
         quarantine: bool,
     },
     /// Print the version of Symaira Vault.
@@ -560,14 +607,19 @@ enum Command {
         command: ConfigCommand,
     },
     /// Lock the vault by clearing its cached session.
-    Lock,
+    Lock {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     /// Unlock the vault or check whether a cached session is active.
     Unlock {
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "check")]
         check: bool,
         /// Session duration override (for example, 30m or 1h).
-        #[arg(long, value_name = "DURATION")]
+        #[arg(long, value_name = "DURATION", allow_hyphen_values = true)]
         ttl: Option<String>,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Check for Symaira Vault updates or show installation-method info.
     Update {
@@ -595,7 +647,7 @@ enum IntakeCommand {
         #[arg(long, default_value = "5s", allow_hyphen_values = true)]
         debounce: String,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "once")]
         once: bool,
         #[command(subcommand)]
         command: Option<IntakeWatchCommand>,
@@ -614,6 +666,10 @@ enum GenerateCommand {
     Manpages {
         #[arg(value_name = "DIRECTORY")]
         directory: PathBuf,
+        /// The persistent `--quiet` does not reach this nested command through
+        /// `generate`'s own local flag; Go accepts it and prints the result anyway.
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "quiet")]
+        quiet: bool,
     },
 }
 
@@ -632,11 +688,20 @@ enum McpAction {
         flags: McpFlags,
     },
     /// Install MCP server as a background service.
-    Install,
+    Install {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     /// Show MCP server service status.
-    Status,
+    Status {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     /// Remove the MCP server background service.
-    Uninstall,
+    Uninstall {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     /// Deprecated: use `symvault agent token <action> <name>`.
     ///
     /// Deliberately a catch-all instead of clap subcommands: the oracle's
@@ -649,17 +714,32 @@ enum McpAction {
     },
 }
 
+/// Positionals that cobra accepts and ignores.
+///
+/// A cobra command whose `Args` validator is nil accepts any number of
+/// positional words and its handler never reads them, so `symvault lock x`
+/// locks the vault. clap rejects an unexpected positional unless the command
+/// declares one; this hidden catch-all keeps `--help` and usage text unchanged.
+/// Only commands the error-taxonomy corpus lists under `nil_args` flatten it;
+/// a command with a validator (`ExactArgs`, `NoArgs`, ...) must not.
+#[derive(Debug, Args, Default)]
+struct IgnoredPositionals {
+    #[arg(hide = true, value_name = "ARG", num_args = 0..)]
+    _extra: Vec<OsString>,
+}
+
 /// One argument boundary for canonical and deprecated MCP launch commands.
 #[derive(Debug, Args)]
 struct McpFlags {
     #[arg(long)]
     agent: Option<String>,
     #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-        default_missing_value = "true", default_value = "false", value_parser = parse_mcp_bool)]
+        default_missing_value = "true", default_value = "false", value_parser = parse_mcp_bool, overrides_with = "stdio")]
     stdio: bool,
     #[arg(long, default_value = "127.0.0.1")]
     bind: String,
-    #[arg(long, default_value_t = 8080, allow_hyphen_values = true)]
+    #[arg(long, default_value_t = 8080, allow_hyphen_values = true,
+        value_parser = cobra_usage::parse_go_int)]
     port: i64,
     #[arg(long, default_value = "")]
     tls_cert: String,
@@ -668,7 +748,7 @@ struct McpFlags {
     #[arg(long, default_value = "")]
     tls_ca: String,
     #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-        default_missing_value = "true", default_value = "false", value_parser = parse_mcp_bool)]
+        default_missing_value = "true", default_value = "false", value_parser = parse_mcp_bool, overrides_with = "allow_locked")]
     allow_locked: bool,
 }
 
@@ -682,10 +762,19 @@ fn parse_mcp_bool(value: &str) -> Result<bool, String> {
 
 #[derive(Debug, Subcommand)]
 enum PolicyCommand {
-    Validate { file: PathBuf },
-    Apply { file: PathBuf },
-    Remove { name: String },
-    List,
+    Validate {
+        file: PathBuf,
+    },
+    Apply {
+        file: PathBuf,
+    },
+    Remove {
+        name: String,
+    },
+    List {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -702,19 +791,24 @@ enum ShareCommand {
         to: String,
         #[arg(long, default_value = "")]
         path: String,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
 }
 
 #[derive(Debug, Subcommand)]
 enum ApprovalCommand {
     /// List pending approval requests.
-    List,
+    List {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     /// Approve or deny a pending request.
     Decide {
         request_id: String,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "approve")]
         approve: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "deny")]
         deny: bool,
     },
 }
@@ -732,13 +826,17 @@ enum AgentCommand {
         #[arg(value_name = "NAME", num_args = 0..)]
         _args: Vec<String>,
     },
-    List,
+    List {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     Doctor {
         name: String,
     },
     Audit {
         name: String,
-        #[arg(long, default_value_t = 50)]
+        #[arg(long, default_value_t = 50, allow_hyphen_values = true,
+            value_parser = cobra_usage::parse_go_int)]
         limit: i64,
         #[arg(long, default_value = "")]
         since: String,
@@ -752,6 +850,8 @@ enum AgentCommand {
     Whoami {
         #[arg(short = 'o', long)]
         output: Option<String>,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     Profile {
         #[command(subcommand)]
@@ -760,13 +860,13 @@ enum AgentCommand {
     Uninstall {
         name: String,
         /// Don't remove the skill file.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "keep_skill")]
         keep_skill: bool,
         /// Don't modify the agent config file.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "keep_config")]
         keep_config: bool,
         /// Skip confirmation prompt.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
     },
     /// Upgrade an agent's security tier with interactive confirmation.
@@ -778,19 +878,19 @@ enum AgentCommand {
         #[arg(long, default_value = "")]
         tier: String,
         /// Show diff without applying changes.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "dry_run")]
         dry_run: bool,
         /// Non-interactive mode (requires --reason).
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
         /// Audit reason for the upgrade (required with --yes).
         #[arg(long, default_value = "")]
         reason: String,
         /// Rotate the agent's MCP token on upgrade.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "rotate_token")]
         rotate_token: bool,
         /// Skip biometric verification (not recommended).
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "no_biometric")]
         no_biometric: bool,
     },
     /// Export or refresh embedded skill packages for AI agents.
@@ -807,28 +907,28 @@ enum AgentCommand {
         #[arg(value_name = "ARG", num_args = 0..)]
         args: Vec<String>,
         /// Install every supported agent that is detected on this machine.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "auto_detect")]
         auto_detect: bool,
         /// Permission tier: safe, standard or admin (default safe).
         #[arg(long, default_value = "safe")]
         tier: String,
         /// Use HTTP transport instead of stdio.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "http")]
         http: bool,
         /// Validate and render, but do not write anything.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "dry_run")]
         dry_run: bool,
         /// Skip the agent's MCP config file and only install the skill.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "skill_only")]
         skill_only: bool,
         /// Skip the skill file and only update the agent's MCP config.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "config_only")]
         config_only: bool,
         /// Overwrite an existing agent profile in the vault config.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "force")]
         force: bool,
         /// Suppress the success line.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "quiet")]
         quiet: bool,
         /// Output format: text, json or yaml (default text).
         #[arg(long, default_value = "text")]
@@ -861,12 +961,7 @@ enum AgentTokenCommand {
     },
     New {
         name: String,
-        #[arg(
-            long,
-            use_value_delimiter = true,
-            value_delimiter = ',',
-            default_value = "*"
-        )]
+        #[arg(long, allow_hyphen_values = true)]
         tools: Vec<String>,
         #[arg(long, default_value = "")]
         ttl: String,
@@ -879,12 +974,7 @@ enum AgentTokenCommand {
     },
     Rotate {
         name: String,
-        #[arg(
-            long,
-            use_value_delimiter = true,
-            value_delimiter = ',',
-            default_value = "*"
-        )]
+        #[arg(long, allow_hyphen_values = true)]
         tools: Vec<String>,
         #[arg(long, default_value = "")]
         ttl: String,
@@ -913,7 +1003,10 @@ enum AgentProfileCommand {
 #[derive(Debug, Subcommand)]
 enum AuditCommand {
     /// Rotate the audit log HMAC key.
-    RotateKey,
+    RotateKey {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     /// Export local audit evidence.
     Export {
         #[arg(long, default_value = "")]
@@ -922,16 +1015,18 @@ enum AuditCommand {
         action: String,
         #[arg(long, default_value = "")]
         since: String,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "failed")]
         failed: bool,
         #[arg(short = 'o', long)]
         output: Option<String>,
         #[arg(long, default_value = "json")]
         format: String,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "verify_hmac")]
         verify_hmac: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "redact_paths")]
         redact_paths: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
 }
 
@@ -943,10 +1038,13 @@ enum RemoteCommand {
         name: String,
         #[arg(short = 'p', long)]
         path: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "push")]
         push: bool,
     },
-    Status,
+    Status {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -959,20 +1057,23 @@ enum ProfileCommand {
 #[derive(Debug, Subcommand)]
 enum RecipientsCommand {
     /// List recipients configured for the vault.
-    List,
+    List {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     /// Add a recipient public key.
     Add {
         recipient: String,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "reencrypt")]
         reencrypt: bool,
     },
     /// Remove a recipient public key.
     #[command(alias = "rm")]
     Remove {
         recipient: String,
-        #[arg(short = 'y', long)]
+        #[arg(short = 'y', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "no_reencrypt")]
         no_reencrypt: bool,
     },
 }
@@ -980,18 +1081,29 @@ enum RecipientsCommand {
 #[derive(Debug, Subcommand)]
 enum FileCommand {
     /// Attach a source file to an entry field.
+    ///
+    /// Go checks `--field` and `--from` in the command body and reads the source
+    /// before it opens the vault, so neither is a clap-required argument; pflag takes
+    /// the next word as a value even when it starts with `-` and keeps the last of
+    /// repeated flags. `--max-size` is an `int64` (`ParseInt(s, 0, 64)`).
+    #[command(args_override_self = true)]
     Add {
         #[arg(value_name = "PATH")]
         path: String,
-        #[arg(long)]
+        #[arg(long, default_value = "", allow_hyphen_values = true)]
         field: String,
-        #[arg(long = "from")]
-        source: PathBuf,
-        #[arg(long = "type", default_value = "certificate")]
+        #[arg(long = "from", default_value = "", allow_hyphen_values = true)]
+        source: String,
+        #[arg(
+            long = "type",
+            default_value = "certificate",
+            allow_hyphen_values = true
+        )]
         secret_type: String,
-        #[arg(long, default_value_t = file_commands::DEFAULT_MAX_ATTACHMENT_SIZE)]
-        max_size: u64,
-        #[arg(long)]
+        #[arg(long, default_value_t = file_commands::DEFAULT_MAX_ATTACHMENT_SIZE,
+            allow_hyphen_values = true, value_parser = cobra_usage::parse_go_int)]
+        max_size: i64,
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "shred")]
         shred: bool,
     },
     /// Export a stored file attachment.
@@ -1004,6 +1116,7 @@ enum FileCommand {
         out: Option<PathBuf>,
     },
     /// Run a command with an attachment materialized to a private temporary file.
+    #[command(args_override_self = true)]
     Use {
         #[arg(value_name = "PATH[#FIELD]")]
         query: String,
@@ -1011,9 +1124,9 @@ enum FileCommand {
         field: Option<String>,
         #[arg(long = "as")]
         as_name: Option<String>,
-        #[arg(short, long)]
+        #[arg(short, long, allow_hyphen_values = true)]
         timeout: Option<String>,
-        #[arg(last = true, required = true)]
+        #[arg(required = true, num_args = 1..)]
         command: Vec<String>,
     },
 }
@@ -1024,7 +1137,7 @@ enum ConfigCommand {
     Validate {
         #[arg(value_name = "PATH")]
         path: Option<PathBuf>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "fix")]
         fix: bool,
     },
     /// Get a value using dotted path notation.
@@ -1053,7 +1166,10 @@ enum ConfigCommand {
 #[derive(Debug, Subcommand)]
 enum AuthCommand {
     /// Show authentication method and session-cache status.
-    Status,
+    Status {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     /// Set the vault unlock authentication method.
     Set {
         #[arg(value_name = "passphrase|touchid")]
@@ -1067,11 +1183,15 @@ enum AuthCommand {
             num_args = 0..=1,
             require_equals = true,
             action = clap::ArgAction::Set,
-            default_missing_value = "true"
+            default_missing_value = "true",
+            value_parser = intake_commands::parse_bool,
+            overrides_with = "reencrypt"
         )]
         reencrypt: bool,
-        #[arg(short = 'y', long)]
+        #[arg(short = 'y', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
 }
 
@@ -1107,7 +1227,7 @@ enum DeviceCommand {
     /// Add this device to an existing multi-device vault.
     Add {
         /// Pair with an existing device using QR data.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "pair")]
         pair: bool,
         /// Name for this device (defaults to hostname).
         #[arg(long)]
@@ -1118,7 +1238,7 @@ enum DeviceCommand {
     /// Revoke a device and re-encrypt all entries.
     Revoke {
         /// Skip confirmation prompt.
-        #[arg(short = 'y', long = "yes")]
+        #[arg(short = 'y', long = "yes", action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
         #[arg(value_name = "ARG", num_args = 0..)]
         args: Vec<String>,
@@ -1133,11 +1253,13 @@ enum DeviceCommand {
         /// LAN address the phone should connect to (auto-detected when omitted).
         #[arg(long)]
         host: Option<String>,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Revoke an approval device's ability to approve/deny requests.
     ApprovalRevoke {
         /// Skip confirmation prompt.
-        #[arg(short = 'y', long = "yes")]
+        #[arg(short = 'y', long = "yes", action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
         #[arg(value_name = "ARG", num_args = 0..)]
         args: Vec<String>,
@@ -1151,28 +1273,36 @@ enum MigrateCommand {
     Paths,
     /// Migrate vault entries to pseudonymized storage paths.
     Pseudonymize {
-        #[arg(short = 'y', long)]
+        #[arg(short = 'y', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Re-encrypt a legacy scrypt identity using Argon2id.
     Kdf {
-        #[arg(short = 'y', long)]
+        #[arg(short = 'y', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
         /// Allow one exclusive historical-budget read for local policy migration.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "allow_legacy_kdf")]
         allow_legacy_kdf: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Migrate agent profiles and config to the v4.0 tier format.
     V4 {
-        #[arg(short = 'y', long)]
+        #[arg(short = 'y', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
-        #[arg(long = "dry-run")]
+        #[arg(long = "dry-run", action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "dry_run")]
         dry_run: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Upgrade a cached session from the legacy plaintext format.
     Session {
-        #[arg(long = "dry-run")]
+        #[arg(long = "dry-run", action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "dry_run")]
         dry_run: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
 }
 
@@ -1183,7 +1313,7 @@ enum TemplateCommand {
         kind: String,
         #[arg(long)]
         output: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "dry_run")]
         dry_run: bool,
         #[arg(long, default_value = "app")]
         name: String,
@@ -1193,9 +1323,30 @@ enum TemplateCommand {
     },
 }
 
+#[derive(Debug, Subcommand)]
+enum DynamicCommand {
+    /// Generate a dynamic secret.
+    ///
+    /// `cobra_usage` validates the flags first (required `--engine` and
+    /// `--role`, Go duration `--ttl`); the body never reads them because the
+    /// oracle registers no engine (`dynamic_commands`). pflag keeps the last
+    /// value of a repeated flag, so repeats must not be a clap error.
+    #[command(args_override_self = true)]
+    Generate {
+        #[arg(long = "engine", allow_hyphen_values = true)]
+        _engine: Option<String>,
+        #[arg(long = "role", allow_hyphen_values = true)]
+        _role: Option<String>,
+        #[arg(long = "ttl", allow_hyphen_values = true)]
+        _ttl: Option<String>,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
+}
+
 #[derive(Debug, Args)]
 struct VersionArgs {
-    #[arg(value_name = "ARG", num_args = 0.., trailing_var_arg = true, allow_hyphen_values = true)]
+    #[arg(value_name = "ARG", num_args = 0..)]
     _extra: Vec<OsString>,
 }
 
@@ -1228,9 +1379,23 @@ fn main() -> ExitCode {
 }
 
 fn run_cli() -> ExitCode {
+    // Go's `init` in internal/cli: config deprecation warnings go to stderr.
+    // Installed before anything can load a config, `__complete` included.
+    symvault_core::config::set_warn_hook(config::warn_sink);
+    // D1: the first mutation of a vault without a Rust marker is preceded by a
+    // verified backup; the store refuses to proceed without this guard.
+    symvault_sync::data_safety::install();
     let args: Vec<OsString> = std::env::args_os().collect();
     if let Some(index) = completion_protocol::request_index(&args) {
+        // Go's hidden `__complete` command runs the root PersistentPreRunE too.
+        if let Some(refusal) = agent_gate::complete_preflight() {
+            eprintln!("Error: {0}\nError: {0}", refusal.message);
+            return ExitCode::from(refusal.code);
+        }
         return completion_protocol::run(&args, index);
+    }
+    if let Some(code) = completion_commands::go_argument_shapes(&args) {
+        return code;
     }
     if has_unescaped_version_flag(&args) {
         return write_unknown_version_flag();
@@ -1250,7 +1415,7 @@ fn run_cli() -> ExitCode {
         return code;
     }
 
-    let cli = match Cli::try_parse_from(args) {
+    let cli = match Cli::try_parse_from(cobra_usage::clap_arguments(args, Cli::command())) {
         Ok(cli) => cli,
         Err(error) => {
             let code = if error.use_stderr() { 1 } else { 0 };
@@ -1260,6 +1425,7 @@ fn run_cli() -> ExitCode {
     };
 
     session_input::set_quiet(cli.quiet);
+    session_input::set_no_pipe_warning(cli._no_pipe_warning);
 
     match cli.command {
         Some(Command::Ui {
@@ -1273,7 +1439,14 @@ fn run_cli() -> ExitCode {
                     let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                     require_initialized(&root)?;
                     let identity = device::unlock_vault(&root)?;
-                    tui::run(&root, &identity)
+                    // Go prints a failed `ui` twice (cobra, then `ExecuteRoot`).
+                    tui::run(&root, &identity).map_err(|error| {
+                        if error == tui::INTERRUPTED_MESSAGE {
+                            reported(1, &error, None)
+                        } else {
+                            error
+                        }
+                    })
                 })()
             };
             finish_vault_result(result)
@@ -1321,6 +1494,16 @@ fn run_cli() -> ExitCode {
             shell,
             no_descriptions,
         }) => completion_commands::generate(shell.as_deref(), no_descriptions, Cli::command()),
+        Some(Command::Setup {
+            keep_on_error,
+            no_resume,
+            ..
+        }) => run_setup(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            keep_on_error,
+            no_resume,
+        ),
         Some(Command::Init { vault_dir, auth }) => run_init(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -1390,7 +1573,7 @@ fn run_cli() -> ExitCode {
                 }
                 Ok::<(), String>(())
             })();
-            finish_vault_result(result)
+            finish_vault_result_doubled_exit3(result)
         }
         Some(Command::List { prefix, extra }) => {
             if extra.is_empty() {
@@ -1441,7 +1624,7 @@ fn run_cli() -> ExitCode {
             cli.quiet,
         ),
         Some(Command::Generate {
-            subcommand: Some(GenerateCommand::Manpages { directory }),
+            subcommand: Some(GenerateCommand::Manpages { directory, .. }),
             ..
         }) => run_generate_manpages(&directory),
         Some(Command::Generate {
@@ -1451,6 +1634,7 @@ fn run_cli() -> ExitCode {
             reveal,
             quiet,
             subcommand: None,
+            ..
         }) => run_generate(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -1476,13 +1660,14 @@ fn run_cli() -> ExitCode {
             fix,
             fix_dry_run,
             quick,
+            ..
         }) => run_doctor(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
             no_network,
             strict,
-            only,
-            exclude,
+            cobra_usage::string_slice_flag(&only, &[]),
+            cobra_usage::string_slice_flag(&exclude, &[]),
             fix,
             fix_dry_run,
             quick,
@@ -1511,14 +1696,14 @@ fn run_cli() -> ExitCode {
         }) => run_backup(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
-            &archive,
+            Path::new(&archive),
             exclude_git,
             cli.quiet,
         ),
         Some(Command::Restore { archive }) => run_restore(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
-            &archive,
+            Path::new(&archive),
             cli.quiet,
         ),
         Some(Command::File { command }) => run_file(
@@ -1530,6 +1715,7 @@ fn run_cli() -> ExitCode {
         Some(Command::Verify {
             rebuild,
             rebuild_only,
+            ..
         }) => run_verify(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -1578,6 +1764,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -1585,7 +1772,7 @@ fn run_cli() -> ExitCode {
         }
 
         Some(Command::Remote {
-            command: RemoteCommand::Status,
+            command: RemoteCommand::Status { .. },
         }) => run_remote_status(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -1655,7 +1842,7 @@ fn run_cli() -> ExitCode {
                         &store,
                         &identity,
                         broker_strict,
-                        &broker_passthrough,
+                        &cobra_usage::string_slice_flag(&broker_passthrough, &[]),
                         execute,
                     )?
                 } else {
@@ -1680,6 +1867,8 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
+                && !error.starts_with(READ_PASSPHRASE_PREFIX)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -1697,10 +1886,19 @@ fn run_cli() -> ExitCode {
                 let identity = device::unlock_vault(&root)?;
                 let store = symvault_store::Store::open_with_legacy_migration(&root, &identity)
                     .map_err(|error| error.to_string())?;
-                broker_commands::run(&root, &store, &identity, &addr, strict, &passthrough)
+                broker_commands::run(
+                    &root,
+                    &store,
+                    &identity,
+                    &addr,
+                    strict,
+                    &cobra_usage::string_slice_flag(&passthrough, &[]),
+                )
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
+                && !error.starts_with(READ_PASSPHRASE_PREFIX)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -1731,6 +1929,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -1743,6 +1942,7 @@ fn run_cli() -> ExitCode {
                     from,
                     to,
                     path,
+                    ..
                 },
         }) => {
             let result = (|| {
@@ -1765,6 +1965,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -1780,7 +1981,7 @@ fn run_cli() -> ExitCode {
                     cli.output.as_deref().unwrap_or("text")
                 };
                 match command {
-                    ApprovalCommand::List => {
+                    ApprovalCommand::List { .. } => {
                         approval_commands::list(&root, format, cli.json, cli.quiet)
                     }
                     ApprovalCommand::Decide {
@@ -1800,6 +2001,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -1820,7 +2022,7 @@ fn run_cli() -> ExitCode {
                         let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                         policy_commands::remove(&root, &name, &mut output)
                     }
-                    PolicyCommand::List => {
+                    PolicyCommand::List { .. } => {
                         let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                         policy_commands::list(&root, &mut output)
                     }
@@ -1828,13 +2030,14 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
         }
         Some(Command::Agent {
-            command: AgentCommand::Whoami { output },
+            command: AgentCommand::Whoami { output, .. },
         }) => {
             let result = (|| {
                 let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
@@ -1848,13 +2051,14 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
         }
         Some(Command::Agent {
-            command: AgentCommand::List,
+            command: AgentCommand::List { .. },
         }) => {
             let result = (|| {
                 let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
@@ -1884,6 +2088,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -1901,6 +2106,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -1923,7 +2129,7 @@ fn run_cli() -> ExitCode {
                 agent_token_commands::new(
                     &vault,
                     &name,
-                    tools,
+                    cobra_usage::string_slice_flag(&tools, &["*"]),
                     &ttl,
                     &label,
                     cli.quiet,
@@ -1932,6 +2138,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -1955,6 +2162,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -1977,7 +2185,7 @@ fn run_cli() -> ExitCode {
                 agent_token_commands::rotate(
                     &vault,
                     &name,
-                    tools,
+                    cobra_usage::string_slice_flag(&tools, &["*"]),
                     &ttl,
                     &label,
                     cli.quiet,
@@ -1986,6 +2194,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2014,6 +2223,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2033,6 +2243,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2067,6 +2278,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2104,7 +2316,8 @@ fn run_cli() -> ExitCode {
                         config_only,
                         force,
                         quiet,
-                        output,
+                        // The persistent `--json` overrides the format.
+                        output: if cli.json { "json".to_owned() } else { output },
                     },
                     &mut output_stream,
                     &mut io::stderr().lock(),
@@ -2112,6 +2325,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2149,6 +2363,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2177,6 +2392,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2212,6 +2428,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2221,7 +2438,7 @@ fn run_cli() -> ExitCode {
             command: AgentCommand::Setup { .. },
         }) => deprecated_stubs::agent_setup(),
         Some(Command::Audit {
-            command: Some(AuditCommand::RotateKey),
+            command: Some(AuditCommand::RotateKey { .. }),
             ..
         }) => run_audit_rotate_key(cli.vault.as_deref(), cli._profile.as_deref()),
         Some(Command::Audit {
@@ -2235,6 +2452,7 @@ fn run_cli() -> ExitCode {
                     format,
                     verify_hmac,
                     redact_paths,
+                    ..
                 }),
             ..
         }) => run_audit_export(
@@ -2258,6 +2476,7 @@ fn run_cli() -> ExitCode {
             agent,
             since,
             failed,
+            ..
         }) => run_audit(
             &agent,
             tail,
@@ -2275,7 +2494,11 @@ fn run_cli() -> ExitCode {
             cli._profile.as_deref(),
             &format,
             &mapping,
-            cli.output.as_deref().map(Path::new),
+            // `--output ""` is the stdout default (fsutil.CreateSensitiveOutput).
+            cli.output
+                .as_deref()
+                .filter(|output| !output.is_empty())
+                .map(Path::new),
             yes,
             cli.quiet,
         ),
@@ -2352,7 +2575,8 @@ fn run_cli() -> ExitCode {
             cli._profile.as_deref(),
             &path,
             yes,
-            cli.json || cli.output.as_deref() == Some("json"),
+            cli.output.as_deref().unwrap_or("text"),
+            cli.json,
             cli.quiet,
         ),
         Some(Command::Import {
@@ -2403,8 +2627,10 @@ fn run_cli() -> ExitCode {
         Some(Command::Version(_)) => {
             write_version(cli.output.as_deref().unwrap_or("text"), cli.json)
         }
-        Some(Command::Lock) => run_lock(cli.vault.as_deref(), cli._profile.as_deref(), cli.quiet),
-        Some(Command::Unlock { check, ttl }) => run_unlock(
+        Some(Command::Lock { .. }) => {
+            run_lock(cli.vault.as_deref(), cli._profile.as_deref(), cli.quiet)
+        }
+        Some(Command::Unlock { check, ttl, .. }) => run_unlock(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
             check,
@@ -2412,7 +2638,7 @@ fn run_cli() -> ExitCode {
             cli.quiet,
         ),
         Some(Command::Auth { command }) => match command {
-            AuthCommand::Status => run_auth_status(
+            AuthCommand::Status { .. } => run_auth_status(
                 cli.vault.as_deref(),
                 cli._profile.as_deref(),
                 cli.output.as_deref().unwrap_or("text"),
@@ -2425,7 +2651,7 @@ fn run_cli() -> ExitCode {
                 &method,
                 cli.quiet,
             ),
-            AuthCommand::RotatePassphrase { reencrypt, yes } => run_auth_rotate_passphrase(
+            AuthCommand::RotatePassphrase { reencrypt, yes, .. } => run_auth_rotate_passphrase(
                 cli.vault.as_deref(),
                 cli._profile.as_deref(),
                 reencrypt,
@@ -2458,13 +2684,14 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
         }
         Some(Command::Migrate {
-            command: MigrateCommand::Pseudonymize { yes },
+            command: MigrateCommand::Pseudonymize { yes, .. },
         }) => run_migrate_pseudonymize(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -2476,6 +2703,7 @@ fn run_cli() -> ExitCode {
                 MigrateCommand::Kdf {
                     yes,
                     allow_legacy_kdf,
+                    ..
                 },
         }) => run_migrate_kdf(
             cli.vault.as_deref(),
@@ -2484,7 +2712,7 @@ fn run_cli() -> ExitCode {
             allow_legacy_kdf,
         ),
         Some(Command::Migrate {
-            command: MigrateCommand::V4 { yes, dry_run },
+            command: MigrateCommand::V4 { yes, dry_run, .. },
         }) => run_migrate_v4(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -2493,7 +2721,7 @@ fn run_cli() -> ExitCode {
             cli.quiet,
         ),
         Some(Command::Migrate {
-            command: MigrateCommand::Session { dry_run },
+            command: MigrateCommand::Session { dry_run, .. },
         }) => run_migrate_session(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -2506,6 +2734,9 @@ fn run_cli() -> ExitCode {
             cli.json,
             cli.quiet,
         ),
+        Some(Command::Dynamic {
+            command: DynamicCommand::Generate { .. },
+        }) => dynamic_commands::generate(cli.vault.as_deref(), cli._profile.as_deref()),
         Some(Command::Template {
             command:
                 TemplateCommand::Generate {
@@ -2521,13 +2752,19 @@ fn run_cli() -> ExitCode {
                 let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                 require_initialized(&vault)?;
                 let identity = device::unlock_vault(&vault)?;
-                let rendered = template_commands::generate(
+                // Go returns these from RunE, so cobra and ExecuteRoot each
+                // print the identical `Error:` line.
+                let rendered = template_commands::generate_bytes(
                     &vault, &identity, &kind, &name, &prefix, &refs, dry_run,
-                )?;
+                )
+                .map_err(|error| reported(1, &error, None))?;
                 if let Some(path) = output {
-                    symvault_sync::safeio::write_atomic(Path::new(&path), rendered.as_bytes())
-                        .map_err(|error| format!("write output file: {error}"))?;
-                    if cli.json || cli.output.as_deref() == Some("json") {
+                    symvault_sync::safeio::write_atomic(Path::new(&path), &rendered).map_err(
+                        |error| reported(1, &format!("write output file: {error}"), None),
+                    )?;
+                    // `--output` is this command's own file flag, so it never
+                    // selects the JSON report; only the persistent `--json` does.
+                    if cli.json {
                         println!(
                             "{}",
                             serde_json::json!({"output_path": path, "dry_run": dry_run})
@@ -2536,7 +2773,10 @@ fn run_cli() -> ExitCode {
                         println!("Template written to: {path}");
                     }
                 } else {
-                    println!("{rendered}");
+                    // Bytes, not text: a template may emit invalid UTF-8.
+                    let mut stdout = io::stdout().lock();
+                    let _ = stdout.write_all(&rendered);
+                    let _ = stdout.write_all(b"\n");
                 }
                 Ok::<(), String>(())
             })();
@@ -2551,10 +2791,10 @@ fn run_cli() -> ExitCode {
                 }
             };
             let vault = vault.as_path();
-            // `device join` fails inside its RunE like the commands that print each error
-            // twice (cobra, then the root executor); the other device commands do not
-            // have a frozen oracle line yet and keep the single line.
-            let doubled_errors = matches!(command, DeviceCommand::Join { .. });
+            // Every device command fails inside its RunE, so cobra and the root
+            // executor each print the error (`output-modes.json` freezes this for
+            // accept, add, approval-pair, approval-revoke and revoke).
+            let doubled_errors = true;
             let result = match command {
                 DeviceCommand::Pair { .. } => device::pair(vault, cli.quiet),
                 DeviceCommand::Join {
@@ -2580,11 +2820,12 @@ fn run_cli() -> ExitCode {
                     if args.len() != 1 {
                         Err(format!("accepts 1 arg(s), received {}", args.len()))
                     } else {
-                        device::revoke(vault, &args[0], yes, cli.quiet)
+                        require_initialized(vault)
+                            .and_then(|()| device::revoke(vault, &args[0], yes, cli.quiet))
                     }
                 }
                 DeviceCommand::ApprovalList { .. } => device_approval::list(vault, cli.quiet),
-                DeviceCommand::ApprovalPair { host } => (|| {
+                DeviceCommand::ApprovalPair { host, .. } => (|| {
                     require_initialized(vault)?;
                     approval_commands::pair(vault, host.as_deref(), cli.quiet)
                 })(),
@@ -2598,6 +2839,18 @@ fn run_cli() -> ExitCode {
             };
             match result {
                 Ok(()) => ExitCode::SUCCESS,
+                Err(error) if is_not_initialized(&error) => {
+                    write_not_initialized(&error);
+                    ExitCode::from(3)
+                }
+                // A failed passphrase read is an ExitLocked error in Go.
+                Err(error) if error.starts_with(READ_PASSPHRASE_PREFIX) => {
+                    report_failed_passphrase_read(&error, false).unwrap_or(ExitCode::from(4))
+                }
+                // A configuration that does not load or validate is `ExitConfigError`.
+                Err(error) if error.starts_with(CONFIG_INVALID_PREFIX) => {
+                    report_failed_passphrase_read(&error, false).unwrap_or(ExitCode::from(6))
+                }
                 Err(error) if doubled_errors => {
                     print_error_like_go(&error);
                     ExitCode::from(1)
@@ -2680,15 +2933,21 @@ fn run_cli() -> ExitCode {
                     },
                     cli.quiet,
                 ),
-                ConfigOperation::List => {
-                    config::list(&path, cli.quiet).map_err(config::ConfigFailure::from)
-                }
+                ConfigOperation::List => config::list(&path, cli.quiet),
                 ConfigOperation::Set { key, value } => config::set(&path, &key, &value, cli.quiet),
             };
             match result {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(config::ConfigFailure::Plain(error)) => {
                     let _ = writeln!(io::stderr(), "Error: {error}");
+                    ExitCode::from(6)
+                }
+                Err(config::ConfigFailure::GoConfigBytes(error)) => {
+                    print_error_bytes_like_go(&error);
+                    let _ = writeln!(
+                        io::stderr(),
+                        "Run 'symvault doctor' to diagnose and fix configuration issues."
+                    );
                     ExitCode::from(6)
                 }
                 Err(config::ConfigFailure::GoConfigError(error)) => {
@@ -2735,7 +2994,8 @@ fn run_add(
             let stdin = io::stdin();
             let mut input = io::BufReader::new(stdin.lock());
             let (value, totp_secret) =
-                add_commands::read_stdin_values(&mut input, stdin_value, stdin_totp_secret)?;
+                add_commands::read_stdin_values(&mut input, stdin_value, stdin_totp_secret)
+                    .map_err(|error| reported(1, &error, None))?;
             if value.is_some() {
                 options.value = value;
             }
@@ -2744,13 +3004,24 @@ fn run_add(
             }
         }
         let path = options.path.clone();
-        add_commands::add(&vault, &identity, &options)?;
+        // Go returns every `add` failure from `RunE`, so cobra and
+        // `ExecuteRoot` both print it (doubled `Error:` line). The exit status
+        // is 1, except for the empty sensitive value, a CLIError with
+        // ExitInvalidInput (9) in `cmd/crud/add.go`.
+        add_commands::add(&vault, &identity, &options).map_err(|error| {
+            let code = if error.starts_with("cannot set empty value for sensitive field") {
+                9
+            } else {
+                1
+            };
+            reported(code, &error, None)
+        })?;
         if !quiet {
             println!("Entry created: {path}");
         }
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
+    finish_vault_result_doubled_exit3(result)
 }
 
 fn run_verify(
@@ -2766,7 +3037,8 @@ fn run_verify(
         let identity = device::unlock_vault(&vault)?;
         verify_commands::verify(&vault, &identity, rebuild, rebuild_only, &mut io::stderr())
     })();
-    finish_vault_result(result)
+    // Go returns every failure from `RunE`: cobra and `ExecuteRoot` each print it.
+    finish_vault_result_doubled_exit3(result)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2775,8 +3047,8 @@ fn run_doctor(
     profile: Option<&str>,
     no_network: bool,
     strict: bool,
-    only: Option<Vec<String>>,
-    exclude: Option<Vec<String>>,
+    only: Vec<String>,
+    exclude: Vec<String>,
     fix: bool,
     fix_dry_run: bool,
     quick: bool,
@@ -2790,8 +3062,8 @@ fn run_doctor(
         no_network,
         quick,
         quiet,
-        only: only.unwrap_or_default(),
-        exclude: exclude.unwrap_or_default(),
+        only,
+        exclude,
     };
 
     let mut results = doctor_commands::run_checks(&vault_dir, &opts);
@@ -2903,6 +3175,7 @@ fn run_profile(command: &ProfileCommand, vault: Option<&Path>, quiet: bool) -> E
     // Go reports profile command errors through both Cobra and main.
     if let Err(error) = &result
         && !is_not_initialized(error)
+        && !is_config_invalid(error)
     {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
@@ -2981,6 +3254,7 @@ fn run_audit_export(
     })();
     if let Err(error) = &result
         && !is_not_initialized(error)
+        && !is_config_invalid(error)
     {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
@@ -3053,6 +3327,7 @@ fn run_audit_rotate_key(explicit_vault: Option<&Path>, profile: Option<&str>) ->
     })();
     if let Err(error) = &result
         && !is_not_initialized(error)
+        && !is_config_invalid(error)
     {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
@@ -3113,8 +3388,9 @@ fn run_auth_set(
                         fs::read(&config_path).map_err(|error| format!("read config: {error}"))?;
                     let identity_bytes = fs::read(vault.join("identity.age"))
                         .map_err(|error| format!("read identity: {error}"))?;
-                    let passphrase = unlock_passphrase(&config_bytes, &config, &vault, &runtime)?;
-                    decrypt_identity(&identity_bytes, &SecretBytes::new(passphrase.as_bytes()))
+                    let _ = &config_bytes;
+                    let passphrase = passphrase_for_biometric_setup(&vault, &runtime)?;
+                    identity_error::open_identity(&vault, &identity_bytes, passphrase.as_bytes())
                         .map_err(|error| format!("open vault: {error}"))?;
                     session_commands::save_touch_id_passphrase(
                         &vault,
@@ -3163,25 +3439,8 @@ fn run_auth_rotate_passphrase(
 
         let old_passphrase = session_input::read_passphrase("Current passphrase: ")
             .map_err(|error| format!("cannot read current passphrase: {error}"))?;
-        let identity =
-            match decrypt_identity(&original, &SecretBytes::new(old_passphrase.as_bytes())) {
-                Ok(identity) => identity,
-                Err(_) => {
-                    let load_error = if symvault_crypto::detect_envelope(&original)
-                        == symvault_crypto::EnvelopeFormat::Argon2id
-                    {
-                        let recipients_file = vault.join("recipients.txt");
-                        if !recipients_file.is_file() {
-                            "load identity: zero-key recovery requires a trusted recipients.txt"
-                        } else {
-                            "load identity: zero-key recovery failed"
-                        }
-                    } else {
-                        "load identity: decryption failed"
-                    };
-                    return Err(format!("current passphrase is incorrect: {load_error}"));
-                }
-            };
+        let identity = identity_error::open_identity(&vault, &original, old_passphrase.as_bytes())
+            .map_err(|error| format!("current passphrase is incorrect: {error}"))?;
 
         device::open_unlocked_vault(&vault, &identity)
             .map_err(|error| format!("current passphrase is incorrect: {error}"))?;
@@ -3309,7 +3568,9 @@ fn run_auth_rotate_passphrase(
         {
             let _ = logger.append(symvault_store::audit::LogEntry {
                 timestamp: export_commands::go_timestamp_seconds(),
-                agent: "symvault".to_owned(),
+                // Go's audit.New("symvault", ...) names the file; the entry
+                // itself never sets Agent, so the record's agent is empty.
+                agent: String::new(),
                 action: "rotate-passphrase".to_owned(),
                 ok: true,
                 ..symvault_store::audit::LogEntry::default()
@@ -3334,6 +3595,19 @@ fn run_file(
     quiet: bool,
 ) -> ExitCode {
     let result = (|| {
+        // Go validates and reads the source of `file add` before it resolves the vault.
+        let source_file = match &command {
+            FileCommand::Add {
+                field,
+                source,
+                max_size,
+                ..
+            } => Some(
+                file_commands::read_source(field, Path::new(source), *max_size)
+                    .map_err(|(code, message)| reported(code, &message, None))?,
+            ),
+            _ => None,
+        };
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
@@ -3343,20 +3617,21 @@ fn run_file(
                 field,
                 source,
                 secret_type,
-                max_size,
                 shred,
+                ..
             } => {
+                let source_file = source_file.ok_or("file add lost its source")?;
                 let result = file_commands::add(
                     &vault,
                     &identity,
                     &file_commands::AddOptions {
                         path,
                         field,
-                        source,
+                        source: PathBuf::from(source),
                         secret_type,
-                        max_size,
                         shred,
                     },
+                    source_file,
                 )?;
                 if !quiet {
                     println!(
@@ -3378,7 +3653,8 @@ fn run_file(
                         field: field.unwrap_or_default(),
                         output,
                     },
-                )?;
+                )
+                .map_err(report_file_error)?;
                 if !quiet {
                     println!(
                         "Exported {}#{} to {} ({} bytes)",
@@ -3411,19 +3687,84 @@ fn run_file(
                         timeout,
                         command,
                     },
-                )?;
+                );
+                let result = match result {
+                    Err(error) if error.starts_with("cannot read entry: entry not found: ") => {
+                        return Err(reported(
+                            2,
+                            &format!("{error}: entry not found"),
+                            Some("Try: symvault find <search-term>"),
+                        ));
+                    }
+                    other => other.map_err(report_file_error)?,
+                };
                 if !result.timed_out {
                     print!("{}", result.stdout);
                     eprint!("{}", result.stderr);
                 }
                 if result.exit_code != 0 {
-                    return Err(format!("command exited with code {}", result.exit_code));
+                    return Err(reported(
+                        1,
+                        &format!("command exited with code {}", result.exit_code),
+                        None,
+                    ));
                 }
             }
         }
         Ok::<(), String>(())
     })();
     finish_vault_result(result)
+}
+
+/// `symvault setup`: the Go command refuses to start without a terminal on
+/// stdin, then hands the vault directory `cli.GetVaultDir()` resolves to
+/// (the resolver's data directory when resolution fails) to the wizard.
+fn run_setup(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    keep_on_error: bool,
+    no_resume: bool,
+) -> ExitCode {
+    if !setup_wizard::stdin_is_terminal() {
+        print_error_like_go(setup_wizard::NON_TTY_ERROR);
+        return ExitCode::from(1);
+    }
+    let vault_dir = resolve_vault(explicit_vault, profile)
+        .unwrap_or_else(|_| PathResolver::new().data_dir)
+        .to_string_lossy()
+        .into_owned();
+    let environment = setup_wizard::Environment {
+        // Go asks `session.BiometricAvailable()` with no CI gate. The only
+        // exception is the explicit test hook `SYMVAULT_TEST_TOUCH_ID=unavailable`:
+        // it lets the differential tests compare against a no-cgo Go oracle,
+        // which can never see Touch ID, without reaching the host's biometrics.
+        touch_id_available: std::env::var("SYMVAULT_TEST_TOUCH_ID").as_deref() != Ok("unavailable")
+            && touch_id_available(),
+        save_touch_id: Box::new(|vault, passphrase| {
+            #[cfg(target_os = "macos")]
+            {
+                let runtime = runtime_session_manager();
+                session_commands::save_touch_id_passphrase(
+                    vault,
+                    touch_id_items(&runtime).as_ref(),
+                    passphrase,
+                )
+                .map_err(|error| error.to_string())
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = (vault, passphrase);
+                Err("touch ID is not available in this Symaira Vault build".to_owned())
+            }
+        }),
+    };
+    match setup_wizard::run(&vault_dir, keep_on_error, no_resume, environment) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(message) => {
+            print_error_like_go(&message);
+            ExitCode::from(1)
+        }
+    }
 }
 
 fn run_init(
@@ -3503,7 +3844,7 @@ fn run_list(
         let format = if json { "json" } else { output };
         vault_commands::write_list(&mut io::stdout().lock(), &entries, format, quiet)
     })();
-    finish_vault_result(result)
+    finish_vault_result_doubled_exit3(result)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3528,29 +3869,23 @@ fn run_get(
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
-        let identity = device::unlock_vault(&vault)?;
-        let result = vault_commands::get(&vault, &identity, query);
+        // Go unlocks `get` without prompting (`WithVaultForScripting`) once
+        // stdin is not a terminal.
+        let identity =
+            device::unlock_vault_for_transport(&vault, io::IsTerminal::is_terminal(&io::stdin()))?;
         if length || digest || metadata {
-            let value = match result {
-                Ok(vault_commands::GetResult::Field { value, .. }) => value,
+            // Go demands an exact `path.field` before it searches anything.
+            let value = match vault_commands::exact_field(&vault, &identity, query)? {
+                Some(vault_commands::GetResult::Field { value, .. }) => value,
                 _ => {
-                    // Go reports this from the command and again from
-                    // ExecuteRoot; the caller below prints it once, so emit the
-                    // command-level line here to keep the pair identical to Go.
-                    let _ = writeln!(
-                        io::stderr(),
-                        "Error: field is required for --length, --digest, or --metadata"
-                    );
-                    return Err(
-                        "field is required for --length, --digest, or --metadata".to_owned()
-                    );
+                    return Err(reported(
+                        9,
+                        "field is required for --length, --digest, or --metadata",
+                        None,
+                    ));
                 }
             };
-            let str_value = match &value {
-                serde_json::Value::String(s) => s.clone(),
-                serde_json::Value::Null => String::new(),
-                other => other.to_string(),
-            };
+            let str_value = run_commands::format_go_value(&value);
             if !quiet {
                 if length {
                     println!("{}", str_value.len());
@@ -3586,7 +3921,19 @@ fn run_get(
             }
             return Ok(());
         }
-        let result = result?;
+        let result = match search_commands::get_or_search(&vault, &identity, query) {
+            Ok(result) => result,
+            Err(error) => return Err(report_get_error(error)),
+        };
+        if print {
+            let (path, field) = match &result {
+                vault_commands::GetResult::Entry { path, .. } => (path.as_str(), ""),
+                vault_commands::GetResult::Field { path, field, .. } => {
+                    (path.as_str(), field.as_str())
+                }
+            };
+            emit_exposure_audit(&vault, path, field);
+        }
         let format = if json { "json" } else { output };
         let clipboard = symvault_platform::get_clipboard::native_get_clipboard();
         let clock = symvault_platform::get_clipboard::RealClock::with_termination_signals();
@@ -3608,7 +3955,85 @@ fn run_get(
             &mut io::stderr(),
         )
     })();
-    finish_vault_result(result)
+    finish_vault_result_doubled_exit3(result)
+}
+
+/// Go's failure shapes of `get`: a miss is a `not found` (2) with the `find`
+/// hint, an ambiguous search lists its hits on stderr first (`cliout.Warnf`,
+/// which `--quiet` does not silence here), and a path the store rejects is a
+/// plain read failure (1) whose cause Go prints twice.
+fn report_get_error(error: vault_commands::GetError) -> String {
+    const FIND_HINT: &str = "Try: symvault find <search-term>";
+    match error {
+        vault_commands::GetError::NotFound(path) => reported(
+            2,
+            &format!("entry not found: {path}: entry not found"),
+            Some(FIND_HINT),
+        ),
+        vault_commands::GetError::Ambiguous { query, paths } => {
+            let mut stderr = io::stderr();
+            let _ = writeln!(stderr, "Multiple matches:");
+            for path in &paths {
+                let _ = writeln!(stderr, "  {path}");
+            }
+            reported(
+                2,
+                &format!("ambiguous path: {query}: entry not found"),
+                Some(FIND_HINT),
+            )
+        }
+        vault_commands::GetError::InvalidPath(path) => {
+            let detail = import_commands::go_invalid_path_text(path.as_bytes())
+                .map(|text| String::from_utf8_lossy(&text).into_owned())
+                .unwrap_or_else(|| format!("entry path {path:?} is not valid"));
+            format!("cannot read entry: cannot read entry {path}: {detail}: {detail}")
+        }
+        vault_commands::GetError::Other(message) => message,
+    }
+}
+
+/// Go's `emitExposureAudit`: `get --print` records that plaintext left the
+/// vault. Best effort, like Go: a failing audit log only warns.
+fn emit_exposure_audit(vault: &Path, path: &str, field: &str) {
+    use sha2::{Digest, Sha256};
+    let runtime = runtime_session_manager();
+    let Some(keyring) = runtime.keyring.as_deref() else {
+        eprintln!("Warning: audit log open failed: audit keyring unavailable");
+        return;
+    };
+    let mut logger = match symvault_store::audit::open_with_keyring(
+        "symvault",
+        vault,
+        keyring,
+        symvault_store::audit::RotationConfig::default(),
+    ) {
+        Ok(logger) => logger,
+        Err(error) => {
+            eprintln!("Warning: audit log open failed: {error}");
+            return;
+        }
+    };
+    let argv = std::env::args().collect::<Vec<_>>().join(" ");
+    let digest = Sha256::digest(argv.as_bytes());
+    let argv_hash: String = digest
+        .iter()
+        .take(8)
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    if let Err(error) = logger.append(symvault_store::audit::LogEntry {
+        timestamp: export_commands::go_timestamp_seconds(),
+        // Go's audit.New("symvault", ...) names the file; emitExposureAudit
+        // never sets LogEntry.Agent, so the record's agent is empty.
+        agent: String::new(),
+        action: "expose_plaintext".to_owned(),
+        path: path.to_owned(),
+        field: field.to_owned(),
+        argv_hash,
+        ok: true,
+        ..symvault_store::audit::LogEntry::default()
+    }) {
+        eprintln!("Warning: audit log write failed: {error}");
+    }
 }
 
 /// What `get` needs from the outside world to choose between printing and
@@ -3639,6 +4064,15 @@ fn emit_get_result(
     {
         return Ok(());
     }
+    if let vault_commands::GetResult::Field { value, .. } = &result
+        && matches!(format, "text" | "")
+    {
+        if !quiet {
+            writeln!(stdout, "{}", run_commands::format_go_value(value))
+                .map_err(|error| error.to_string())?;
+        }
+        return Ok(());
+    }
     let result = if format != "text" && !format.is_empty() && !print {
         mask_sensitive(result)
     } else {
@@ -3657,8 +4091,8 @@ fn emit_get_result(
 /// Go's default `get <path.field>` on a terminal: copy to the clipboard, count
 /// down, clear and verify (`cmd/crud/get.go`, PLATFORM-001 slice 2). Returns
 /// `false` when the value should be printed instead. Go prints the copy failure
-/// through cobra and again through `ExecuteRoot`; the first line is emitted
-/// here and the caller prints the second.
+/// through cobra and again through `ExecuteRoot`; both lines come from the
+/// caller's `finish_vault_result_doubled_exit3`, so nothing is printed here.
 fn copy_get_field_to_clipboard(
     vault: &Path,
     format: &str,
@@ -3683,11 +4117,7 @@ fn copy_get_field_to_clipboard(
     if destination == clip::GetDestination::Stdout {
         return Ok(false);
     }
-    let text = match value {
-        serde_json::Value::String(text) => text.clone(),
-        serde_json::Value::Null => String::new(),
-        other => other.to_string(),
-    };
+    let text = run_commands::format_go_value(value);
     let seconds = clip::auto_clear_seconds(section.map(|section| section.auto_clear_duration));
     clip::copy_and_auto_clear(
         environment.clipboard,
@@ -3696,10 +4126,7 @@ fn copy_get_field_to_clipboard(
         environment.clock,
         stderr,
     )
-    .map_err(|error| {
-        let _ = writeln!(stderr, "Error: {error}");
-        error.to_string()
-    })?;
+    .map_err(|error| error.to_string())?;
     Ok(true)
 }
 
@@ -3755,15 +4182,58 @@ fn run_find(
             return Ok(());
         }
         if json || output == "json" {
-            let value = serde_json::json!({ "matches": matches });
-            serde_json::to_writer(io::stdout().lock(), &value)
+            // Go marshals the struct: `path` before `fields`.
+            #[derive(serde::Serialize)]
+            struct FindMatch<'a> {
+                path: &'a str,
+                fields: &'a [String],
+            }
+            #[derive(serde::Serialize)]
+            struct FindResult<'a> {
+                matches: Vec<FindMatch<'a>>,
+            }
+            let value = FindResult {
+                matches: matches
+                    .iter()
+                    .map(|item| FindMatch {
+                        path: &item.path,
+                        fields: &item.fields,
+                    })
+                    .collect(),
+            };
+            // `PrintResult` disables HTML escaping.
+            let encoded = serde_json::to_string(&value).map_err(|error| error.to_string())?;
+            println!("{encoded}");
+            return Ok(());
+        }
+        if output == "yaml" {
+            use symvault_gojson::yaml::{self, Node};
+            let node = Node::Map(vec![(
+                "matches".to_owned(),
+                Node::Seq(
+                    matches
+                        .iter()
+                        .map(|item| {
+                            Node::Map(vec![
+                                ("path".to_owned(), Node::Str(item.path.clone())),
+                                (
+                                    "fields".to_owned(),
+                                    Node::Seq(item.fields.iter().cloned().map(Node::Str).collect()),
+                                ),
+                            ])
+                        })
+                        .collect(),
+                ),
+            )]);
+            io::stdout()
+                .lock()
+                .write_all(yaml::to_string(&node).as_bytes())
                 .map_err(|error| error.to_string())?;
-            println!();
             return Ok(());
         }
         if output != "text" {
             return Err(format!(
-                "unknown output format: {output:?} (valid: text, json)"
+                "unknown output format: {output:?} (valid: text, json, yaml)"
             ));
         }
         let mut stdout = io::stdout().lock();
@@ -3777,7 +4247,7 @@ fn run_find(
         }
         Ok(())
     })();
-    finish_vault_result(result)
+    finish_vault_result_doubled_exit3(result)
 }
 
 /// Go's root executor prints every error twice and, for exit 3, the init hint
@@ -3798,10 +4268,58 @@ pub(crate) fn write_not_initialized(error: &str) {
     );
 }
 
+/// Go's `resolveUnlockPassphrase` wraps a failed passphrase read (an EOF at the
+/// `Passphrase: ` prompt included) in an `ExitLocked` error: cobra and
+/// `ExecuteRoot` each print it, then the locked hint follows and the exit status
+/// is 4. `symvault unlock` swaps the hint (`invokedCommandIsUnlock`).
+const READ_PASSPHRASE_PREFIX: &str = "read passphrase: ";
+
+pub(crate) fn report_failed_passphrase_read(error: &str, unlock_command: bool) -> Option<ExitCode> {
+    if error.starts_with(CONFIG_INVALID_PREFIX) {
+        return Some(report_config_invalid(error));
+    }
+    error
+        .starts_with(READ_PASSPHRASE_PREFIX)
+        .then(|| report_exit_locked(error, unlock_command))
+}
+
+/// Go's `unlockVault` wraps a configuration that does not load or validate in an
+/// `ExitConfigError` (`configuration is invalid: <cause>`): cobra and `ExecuteRoot` each
+/// print it, then the doctor hint follows and the exit status is 6.
+pub(crate) const CONFIG_INVALID_PREFIX: &str = "configuration is invalid: ";
+
+pub(crate) fn is_config_invalid(error: &(impl std::fmt::Display + ?Sized)) -> bool {
+    error.to_string().starts_with(CONFIG_INVALID_PREFIX)
+}
+
+fn report_config_invalid(error: &str) -> ExitCode {
+    print_error_like_go(error);
+    let _ = writeln!(
+        io::stderr(),
+        "Run 'symvault doctor' to diagnose and fix configuration issues."
+    );
+    ExitCode::from(6)
+}
+
+/// An `ExitLocked` error: `Error:` twice, the locked hint, exit status 4.
+fn report_exit_locked(error: &str, unlock_command: bool) -> ExitCode {
+    print_error_like_go(error);
+    let hint = if unlock_command {
+        "Enable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) \u{2014} the passphrase variable alone is ignored."
+    } else {
+        "Unlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) \u{2014} the passphrase variable alone is ignored."
+    };
+    let _ = writeln!(io::stderr(), "{hint}");
+    ExitCode::from(4)
+}
+
 fn finish_execution_result(result: Result<(), String>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if let Some(code) = report_failed_passphrase_read(&error, false) {
+                return code;
+            }
             if is_not_initialized(&error) {
                 write_not_initialized(&error);
                 return ExitCode::from(3);
@@ -3823,7 +4341,54 @@ fn finish_vault_result_exit_1(result: Result<(), String>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if let Some(code) = report_failed_passphrase_read(&error, false) {
+                return code;
+            }
             let _ = writeln!(io::stderr(), "Error: {error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+/// A command whose failures Go returns from `RunE` unchanged: cobra and
+/// `ExecuteRoot` each print `Error: <message>`, the exit status is 1.
+fn finish_vault_result_doubled(result: Result<(), String>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            if let Some(code) = error.strip_prefix(REPORTED_PREFIX) {
+                return ExitCode::from(code.parse().unwrap_or(1));
+            }
+            if let Some(code) = report_failed_passphrase_read(&error, false) {
+                return code;
+            }
+            print_error_like_go(&error);
+            ExitCode::from(1)
+        }
+    }
+}
+
+/// `finish_vault_result_doubled` that keeps the exit-3 "vault not initialized"
+/// handling: Go's `set` returns every failure from `RunE`.
+fn finish_vault_result_doubled_exit3(result: Result<(), String>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            if let Some(code) = error.strip_prefix(REPORTED_PREFIX) {
+                return ExitCode::from(code.parse().unwrap_or(1));
+            }
+            if let Some(code) = report_failed_passphrase_read(&error, false) {
+                return code;
+            }
+            if is_not_initialized(&error) {
+                write_not_initialized(&error);
+                return ExitCode::from(3);
+            }
+            if error.starts_with("vault locked:") {
+                // Go's `ExitLocked` error: printed twice, then the locked hint.
+                return report_exit_locked(&error, false);
+            }
+            print_error_like_go(&error);
             ExitCode::from(1)
         }
     }
@@ -3833,16 +4398,18 @@ fn finish_vault_result(result: Result<(), String>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if let Some(code) = error.strip_prefix(REPORTED_PREFIX) {
+                return ExitCode::from(code.parse().unwrap_or(1));
+            }
+            if let Some(code) = report_failed_passphrase_read(&error, false) {
+                return code;
+            }
             if is_not_initialized(&error) {
                 write_not_initialized(&error);
                 return ExitCode::from(3);
             }
             let _ = writeln!(io::stderr(), "Error: {error}");
-            if error == "field is required for --length, --digest, or --metadata" {
-                ExitCode::from(9)
-            } else {
-                ExitCode::from(1)
-            }
+            ExitCode::from(1)
         }
     }
 }
@@ -3859,6 +4426,8 @@ fn run_git(
         require_initialized(&vault)?;
         match action {
             "log" => {
+                // Go opens the vault (`cli.WithVaultRaw`) before it reads the history.
+                device::unlock_vault(&vault)?;
                 let commits = history_commands::log(&vault, path, 0)
                     .map_err(|error| format!("cannot get log: {error}"))?;
                 history_commands::write_log(&mut io::stdout().lock(), &commits, quiet)
@@ -3889,7 +4458,7 @@ fn run_recipients(
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         match command {
-            RecipientsCommand::List => {
+            RecipientsCommand::List { .. } => {
                 let recipients = recipients_commands::list(&vault)?;
                 recipients_commands::write_list(
                     &mut io::stdout().lock(),
@@ -3911,6 +4480,7 @@ fn run_recipients(
                     quiet,
                     &mut io::stdout().lock(),
                 )
+                .map_err(recipient_failure)
             }
             RecipientsCommand::Remove {
                 recipient,
@@ -3942,10 +4512,29 @@ fn run_recipients(
                     quiet,
                     &mut io::stdout().lock(),
                 )
+                .map_err(recipient_failure)
             }
         }
     })();
     finish_vault_result(result)
+}
+
+/// Go's exit classes for the recipient mutations: an invalid key is a usage
+/// error (9), an unknown recipient is `ErrEntryNotFound` (2) with its hint.
+fn recipient_failure(error: String) -> String {
+    if error.starts_with("invalid recipient: must be a valid age public key") {
+        return reported(9, &error, None);
+    }
+    if error.starts_with("recipient ") && error.ends_with(" not found") {
+        return reported(
+            2,
+            &format!("{error}: entry not found"),
+            Some(
+                "Try: symvault list to browse entries, or symvault find <term> to search by keyword.",
+            ),
+        );
+    }
+    error
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3967,10 +4556,13 @@ fn run_generate(
             return utility_commands::render_password(
                 &mut io::stdout().lock(),
                 password.as_str(),
+                // `generate` declares its own `--quiet`, which shadows the global
+                // flag: the global quiet mode is never set, so the password is
+                // always printed unless it is being stored.
                 utility_commands::OutputOptions {
                     format: output,
                     json,
-                    quiet: global_quiet,
+                    quiet: false,
                 },
             );
         };
@@ -4029,6 +4621,28 @@ fn run_generate_manpages(directory: &Path) -> ExitCode {
     finish_vault_result(result)
 }
 
+/// Go's executor for the `export`, `backup` and `restore` bodies: cobra prints
+/// the returned error, `ExecuteRoot` prints it again, then the exit-class hint.
+/// An uninitialized vault is exit 3 with its own hint; everything else these
+/// commands return is a plain exit-1 error. (`--quiet` does not reach `cliout`
+/// before flags are parsed, so neither line is ever suppressed.)
+fn finish_go_command_result(result: Result<(), String>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            if let Some(code) = report_failed_passphrase_read(&error, false) {
+                return code;
+            }
+            if is_not_initialized(&error) {
+                write_not_initialized(&error);
+                return ExitCode::from(3);
+            }
+            print_error_like_go(&error);
+            ExitCode::from(1)
+        }
+    }
+}
+
 fn run_backup(
     explicit_vault: Option<&Path>,
     profile: Option<&str>,
@@ -4045,7 +4659,7 @@ fn run_backup(
         }
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
+    finish_go_command_result(result)
 }
 
 fn run_restore(
@@ -4056,6 +4670,12 @@ fn run_restore(
 ) -> ExitCode {
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
+        // Restore overwrites vault files in place: an existing vault without a
+        // Rust marker is backed up first (a missing archive keeps Go's error).
+        if fs::metadata(archive).is_ok() {
+            symvault_store::data_safety::ensure_marker(&vault)
+                .map_err(|error| error.to_string())?;
+        }
         backup_commands::restore(&vault, archive)?;
         require_initialized(&vault)?;
         if !quiet {
@@ -4063,7 +4683,7 @@ fn run_restore(
         }
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
+    finish_go_command_result(result)
 }
 
 fn run_export(
@@ -4078,13 +4698,13 @@ fn run_export(
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         let format = export_commands::ExportFormat::parse(format)?;
-        let mapping = export_commands::parse_mapping(mapping)?;
+        let mapping = export_commands::parse_mapping(mapping)
+            .map_err(|error| format!("invalid mapping: {error}"))?;
         let options = export_commands::ExportOptions {
             format,
             mapping,
             output: output.map(Path::to_path_buf),
             yes,
-            quiet,
         };
         let exported = export_commands::run_export(
             &vault,
@@ -4115,7 +4735,7 @@ fn run_export(
         }
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
+    finish_go_command_result(result)
 }
 
 fn run_migrate_session(
@@ -4182,8 +4802,8 @@ fn run_migrate_v4(
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         let config_path = vault.join("config.yaml");
-        let mut config =
-            Config::load(&config_path).map_err(|error| format!("load config: {error}"))?;
+        let mut config = Config::load(&config_path)
+            .map_err(|error| config::go_load_config_error(&config_path, &error))?;
 
         // Tier assignment mirrors the oracle: profiles that already carry a
         // non-empty tier are left alone, which makes the migration idempotent.
@@ -4272,7 +4892,7 @@ fn run_migrate_v4(
         );
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
+    finish_vault_result_doubled(result)
 }
 
 fn run_migrate_pseudonymize(
@@ -4284,6 +4904,9 @@ fn run_migrate_pseudonymize(
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
+        // Go unlocks the vault (environment-passphrase warning, passphrase
+        // prompt) before it asks for the confirmation.
+        let identity = device::unlock_vault(&vault)?;
         if !yes {
             eprint!("Migrate all entries to pseudonymized paths. Make a backup first (y/N): ");
             io::stderr().flush().map_err(|error| error.to_string())?;
@@ -4293,7 +4916,8 @@ fn run_migrate_pseudonymize(
                 .map_err(|error| format!("read confirmation: {error}"))?
                 == 0
             {
-                return Err("read confirmation: EOF".to_owned());
+                // Cobra reports the failure, then `ExecuteRoot` does.
+                return Err(reported(1, "read confirmation: EOF", None));
             }
             if !answer.trim().eq_ignore_ascii_case("y") {
                 eprintln!("Canceled");
@@ -4316,7 +4940,6 @@ fn run_migrate_pseudonymize(
                 .map_err(|error| format!("save config: {error}"))?;
         }
 
-        let identity = device::unlock_vault(&vault)?;
         let store = symvault_store::Store::open_with_legacy_migration(&vault, &identity)
             .map_err(|error| format!("open vault: {error}"))?;
         let summary = store
@@ -4448,7 +5071,7 @@ fn run_migrate_kdf(
         println!("The previous identity.age was backed up to identity.age.bak.");
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
+    finish_vault_result_doubled(result)
 }
 
 /// Which `mcp` service action to run.
@@ -4567,13 +5190,13 @@ fn run_mcp_action(
     quiet: bool,
 ) -> ExitCode {
     let flags = match action {
-        Some(McpAction::Install) => {
+        Some(McpAction::Install { .. }) => {
             return run_mcp_service(explicit_vault, profile, quiet, McpService::Install);
         }
-        Some(McpAction::Status) => {
+        Some(McpAction::Status { .. }) => {
             return run_mcp_service(explicit_vault, profile, quiet, McpService::Status);
         }
-        Some(McpAction::Uninstall) => {
+        Some(McpAction::Uninstall { .. }) => {
             return run_mcp_service(explicit_vault, profile, quiet, McpService::Uninstall);
         }
         Some(McpAction::Token { args }) => return deprecated_stubs::serve_token(&args),
@@ -4631,7 +5254,7 @@ fn run_mcp(
                 eprintln!(
                     "Vault is locked; starting MCP server in read-only mode. Run 'symvault unlock' to enable vault tools."
                 );
-                return mcp_commands::run_locked_stdio();
+                return mcp_commands::run_locked_stdio(&vault);
             }
             Err(error) => return Err(error),
         };
@@ -4640,6 +5263,7 @@ fn run_mcp(
             .keyring
             .as_deref()
             .ok_or_else(|| "MCP audit keyring unavailable".to_owned())?;
+        mcp_commands::install_auth_guard(authguard::mcp_seams(runtime.keyring.clone()));
         mcp_commands::run(
             &vault,
             agent,
@@ -4671,6 +5295,15 @@ fn run_mcp(
     })();
     match result {
         Ok(()) => ExitCode::SUCCESS,
+        // Go's `wrapVaultError` passes an `ExitConfigError` through unchanged (its message
+        // never contains `load config`, which would be rewrapped), so `ExecuteRoot` exits 6
+        // with the doctor hint.
+        Err(error) if is_config_invalid(&error) => report_config_invalid(&error),
+        // `mcp serve` (HTTP) prompts for the passphrase; an EOF there is an `ExitLocked` error
+        // (exit 4 and the locked hint), which `wrapVaultError` passes through.
+        Err(error) if error.starts_with(READ_PASSPHRASE_PREFIX) => {
+            report_failed_passphrase_read(&error, false).unwrap_or(ExitCode::from(4))
+        }
         Err(error) => {
             print_error_like_go(&error);
             if error.starts_with("vault not initialized") {
@@ -4713,60 +5346,78 @@ fn run_set(
     quiet: bool,
 ) -> ExitCode {
     let result = (|| {
-        let vault = resolve_vault(explicit_vault, profile)?;
-        require_initialized(&vault)?;
-        let identity = device::unlock_vault(&vault)?;
-        let value = if stdin_value {
-            let mut line = String::new();
+        // Go reads and validates the value before `WithVault` resolves and
+        // unlocks the vault, so input errors never trigger an unlock. Every
+        // failure is returned from `RunE` (cobra and `ExecuteRoot` each print
+        // it), so the pre-unlock ones go through `reported`.
+        let (path, field) = set_input::split_query(query);
+        let target_field = if field.is_empty() { "password" } else { field };
+        let mut value = value;
+        if stdin_value {
+            let mut bytes = zeroize::Zeroizing::new(Vec::new());
             io::stdin()
-                .read_line(&mut line)
-                .map_err(|error| format!("read --stdin-value: {error}"))?;
-            if line.is_empty() {
-                return Err("read --stdin-value: EOF".to_owned());
+                .lock()
+                .read_until(b'\n', &mut bytes)
+                .map_err(|error| reported(1, &format!("read --stdin-value: {error}"), None))?;
+            if bytes.is_empty() {
+                return Err(reported(1, "read --stdin-value: EOF", None));
             }
-            line.trim_end_matches(['\r', '\n']).to_owned()
-        } else if let Some(value) = value {
-            value
+            let line = stdin_input::go_string(&bytes);
+            // Go overwrites `SetValue`, so a terminal stdin warns here too.
+            value = Some(line.trim_end_matches(['\r', '\n']).to_owned());
+        }
+        add_commands::warn_argv_exposure_values(
+            value.as_deref().unwrap_or_default(),
+            totp_secret.as_deref().unwrap_or_default(),
+            false,
+        );
+
+        let mut data = BTreeMap::new();
+        if let Some(value) = value {
+            if value.is_empty() && write_commands::sensitive_field(target_field) && !allow_empty {
+                return Err(reported(
+                    9,
+                    &format!(
+                        "cannot set empty value for sensitive field {target_field:?} (use --allow-empty to override)"
+                    ),
+                    None,
+                ));
+            }
+            if !force && target_field == "password" && !value.is_empty() {
+                symvault_core::password::validate_password_strength(&value)
+                    .map_err(|error| reported(1, &error, None))?;
+            }
+            data.insert(target_field.to_owned(), serde_json::Value::String(value));
+        } else if !field.is_empty() {
+            let value =
+                set_input::read_confirmed_field_value(field, allow_empty).map_err(|error| {
+                    match error {
+                        set_input::InputError::Invalid(message) => reported(9, &message, None),
+                        set_input::InputError::General(message) => reported(1, &message, None),
+                    }
+                })?;
+            data.insert(field.to_owned(), serde_json::Value::String(value));
         } else {
-            interactive_set_value(query, allow_empty)?
-        };
-        let path = write_commands::set_entry(
-            &vault,
-            &identity,
-            query,
-            value,
-            allow_empty,
-            force,
+            data = set_input::collect_entry_data(totp_secret.as_deref().unwrap_or_default(), force)
+                .map_err(|error| reported(1, &error, None))?;
+        }
+        let data = write_commands::apply_totp_flags(
+            data,
             totp_secret.as_deref(),
             totp_issuer.as_deref(),
             totp_account.as_deref(),
-        )?;
+        )
+        .map_err(|error| reported(1, &error, None))?;
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let identity = device::unlock_vault(&vault)?;
+        write_commands::set_fields(&vault, &identity, path, data)?;
         if !quiet {
             println!("Entry saved: {path}");
         }
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
-}
-
-fn interactive_set_value(query: &str, allow_empty: bool) -> Result<String, String> {
-    let field = query
-        .rsplit_once('.')
-        .map(|(_, field)| if field.is_empty() { "password" } else { field })
-        .unwrap_or("password");
-    let value = session_input::read_passphrase(&format!("Enter value for {field}: "))?.to_string();
-    if write_commands::sensitive_field(field) && !value.is_empty() {
-        let confirmation = session_input::read_passphrase(&format!("Confirm value for {field}: "))?;
-        if confirmation.as_str() != value {
-            return Err("values do not match".to_owned());
-        }
-    }
-    if value.is_empty() && write_commands::sensitive_field(field) && !allow_empty {
-        return Err(format!(
-            "cannot set empty value for sensitive field {field:?} (use --allow-empty to override)"
-        ));
-    }
-    Ok(value)
+    finish_vault_result_doubled_exit3(result)
 }
 
 fn run_delete(
@@ -4774,43 +5425,78 @@ fn run_delete(
     profile: Option<&str>,
     path: &str,
     yes: bool,
+    output: &str,
     json: bool,
     quiet: bool,
 ) -> ExitCode {
+    let format = if json { "json" } else { output };
+    let print_structured = |value: serde_json::Value| -> Result<(), String> {
+        match format {
+            "yaml" => io::stdout()
+                .lock()
+                .write_all(
+                    symvault_gojson::yaml::to_string(&symvault_gojson::yaml::Node::from_json(
+                        &value,
+                    ))
+                    .as_bytes(),
+                )
+                .map_err(|error| error.to_string()),
+            _ => {
+                println!("{value}");
+                Ok(())
+            }
+        }
+    };
     let result = (|| {
+        // Go's `WithVault` unlocks (and warns about an environment passphrase)
+        // before the confirmation prompt.
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let identity = device::unlock_vault(&vault)?;
         if !yes {
             eprint!("Delete {path}? (y/N): ");
             io::stderr()
                 .flush()
                 .map_err(|error| format!("delete confirmation prompt: {error}"))?;
             let mut answer = String::new();
-            io::stdin()
+            let read = io::stdin()
                 .read_line(&mut answer)
                 .map_err(|error| format!("delete confirmation: {error}"))?;
+            if read == 0 {
+                return Err(reported(1, "read confirmation: EOF", None));
+            }
             if !answer.trim().eq_ignore_ascii_case("y") {
-                if json {
-                    println!(
-                        "{}",
-                        serde_json::json!({"deleted": false, "path": path, "canceled": true})
-                    );
-                } else if !quiet {
+                if format == "text" {
                     eprintln!("Canceled");
+                } else {
+                    print_structured(
+                        serde_json::json!({"deleted": false, "path": path, "canceled": true}),
+                    )?;
                 }
                 return Ok::<(), String>(());
             }
         }
-        let vault = resolve_vault(explicit_vault, profile)?;
-        require_initialized(&vault)?;
-        let identity = device::unlock_vault(&vault)?;
-        write_commands::delete(&vault, &identity, path)?;
-        if json {
-            println!("{}", serde_json::json!({"deleted": true, "path": path}));
-        } else if !quiet {
-            println!("Deleted: {path}");
+        match write_commands::delete(&vault, &identity, path) {
+            Ok(()) => {}
+            Err(error) if error.starts_with("entry not found: ") => {
+                return Err(reported(
+                    2,
+                    &format!("cannot delete entry: {error}: entry not found"),
+                    Some("Try: symvault find <search-term>"),
+                ));
+            }
+            Err(error) => return Err(error),
+        }
+        if format == "text" {
+            if !quiet {
+                println!("Deleted: {path}");
+            }
+        } else {
+            print_structured(serde_json::json!({"deleted": true, "path": path}))?;
         }
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
+    finish_vault_result_doubled_exit3(result)
 }
 
 /// `symvault import review <list|promote>` — the word dispatch mirrors
@@ -4865,6 +5551,8 @@ fn run_import_review(
     })();
     if let Err(error) = &result
         && !is_not_initialized(error)
+        && !is_config_invalid(error)
+        && !error.starts_with(READ_PASSPHRASE_PREFIX)
     {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
@@ -4885,75 +5573,85 @@ fn run_import(
     quarantine: bool,
     quiet: bool,
 ) -> ExitCode {
-    // Go resolves the format and flag conflicts before opening the vault.
-    if let Err(error) = import_commands::resolve_format(format, source) {
-        return finish_vault_result(Err(error));
-    }
-    if skip_existing && overwrite {
-        return finish_vault_result(Err(
-            "--skip-existing and --overwrite cannot be used together".into(),
-        ));
-    }
-    if quarantine && !prefix.is_empty() {
-        return finish_vault_result(Err(
-            "--quarantine and --prefix cannot be used together".into()
-        ));
-    }
+    let mut stdout = io::stdout();
+    let mut reporter = import_commands::Reporter::new(&mut stdout, quiet);
     let result = (|| {
+        // Go resolves the format, prints its reports, checks the flag
+        // conflicts and parses the source before it opens the vault, so a bad
+        // source never reaches the passphrase or the "not initialized" check.
+        let options = import_commands::ImportOptions {
+            source: source.to_owned(),
+            format: format.map(str::to_owned),
+            dry_run,
+            prefix: prefix.to_owned(),
+            skip_existing,
+            overwrite,
+            mapping: mapping.to_owned(),
+            quarantine_id: if quarantine {
+                Some(import_commands::generate_import_id()?)
+            } else {
+                None
+            },
+        };
+        let prepared = import_commands::prepare(&options, &mut reporter)?;
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
-        let quarantine_id = if quarantine {
-            Some(import_commands::generate_import_id()?)
-        } else {
-            None
-        };
-        if !quiet && let Some(import_id) = quarantine_id.as_deref() {
-            println!("Quarantine import ID: {import_id}");
-        }
-        let result = import_commands::run_import(
+        let result = import_commands::apply(
             &vault,
             &identity,
-            &import_commands::ImportOptions {
-                source: source.to_owned(),
-                format: format.map(str::to_owned),
-                dry_run,
-                prefix: prefix.to_owned(),
-                skip_existing,
-                overwrite,
-                mapping: mapping.to_owned(),
-                quarantine_id,
-            },
+            prepared,
+            &options,
+            &mut reporter,
             write_commands::import_fields,
             write_commands::replace_fields,
             |root, identity, path, secret_type| {
                 write_commands::set_secret_type(root, identity, path, secret_type)
             },
         )?;
-        if !quiet {
-            println!(
-                "Import summary: {} imported, {} skipped",
-                result.imported, result.skipped
-            );
-        }
-        Ok::<(), String>(())
+        reporter.line(&format!(
+            "Import summary: {} imported, {} skipped",
+            result.imported, result.skipped
+        ));
+        Ok::<(), import_commands::ApplyError>(())
     })();
-    finish_vault_result(result)
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        // `cli.WithVault` -> `unlockVault` wraps a configuration that does not
+        // load or validate in an `ExitConfigError`: exit 6 and the doctor hint
+        // (plain and `--dry-run` alike; the source was parsed first).
+        Err(error) if is_config_invalid(&error) => report_config_invalid(&error.lossy()),
+        // `unlockVault` wraps a failed passphrase read (EOF at the prompt, no cached
+        // identity) in an `ExitLocked` error: exit 4 and the locked hint.
+        Err(error) if error.to_string().starts_with(READ_PASSPHRASE_PREFIX) => {
+            report_failed_passphrase_read(&error.lossy(), false).unwrap_or(ExitCode::from(4))
+        }
+        // Cobra and the root executor each print a failure of this command.
+        // The message is the exact Go byte string: an entry path that is not
+        // valid UTF-8 appears in it unchanged.
+        Err(error) if !is_not_initialized(&error) => {
+            print_error_bytes_like_go(&error.0);
+            ExitCode::from(1)
+        }
+        Err(error) => finish_vault_result(Err(error.lossy())),
+    }
 }
 
+/// Go's `cli.ConfirmInteractive` as `export` uses it: the prompt goes to stderr,
+/// one line is read from stdin, and only `y` (any case, surrounding space
+/// trimmed) confirms. End of input before any byte is an error, not a refusal.
 fn confirm_export() -> Result<bool, String> {
-    eprint!("Export all vault entries as plaintext? [y/N] ");
+    eprint!("Export all vault entries as plaintext? (y/N): ");
     io::stderr()
         .flush()
-        .map_err(|error| format!("export confirmation prompt: {error}"))?;
-    let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .map_err(|error| format!("export confirmation: {error}"))?;
-    Ok(matches!(
-        input.trim().to_ascii_lowercase().as_str(),
-        "y" | "yes"
-    ))
+        .map_err(|error| format!("export confirmation failed: read confirmation: {error}"))?;
+    let mut answer = Vec::new();
+    std::io::BufRead::read_until(&mut io::stdin().lock(), b'\n', &mut answer)
+        .map_err(|error| format!("export confirmation failed: read confirmation: {error}"))?;
+    if answer.is_empty() {
+        return Err("export confirmation failed: read confirmation: EOF".to_owned());
+    }
+    Ok(String::from_utf8_lossy(&answer).trim().to_lowercase() == "y")
 }
 
 fn run_unlock(
@@ -4980,6 +5678,8 @@ fn run_unlock(
             }
             return Ok::<(), String>(());
         }
+        // `UnlockVaultForSession` resolves the configuration first, like every open.
+        device::resolve_configuration(&vault, true)?;
         let config = Config::load(vault.join("config.yaml"))
             .map_err(|error| format!("load config: {error}"))?;
         let config_bytes =
@@ -4987,9 +5687,9 @@ fn run_unlock(
         let identity_bytes = fs::read(vault.join("identity.age"))
             .map_err(|error| format!("read identity: {error}"))?;
         let passphrase = unlock_passphrase(&config_bytes, &config, &vault, &runtime)?;
-        let secret = SecretBytes::new(passphrase.as_bytes());
-        let decrypted_identity = decrypt_identity(&identity_bytes, &secret)
-            .map_err(|error| format!("unlock vault: {error}"))?;
+        let decrypted_identity =
+            identity_error::open_identity(&vault, &identity_bytes, passphrase.as_bytes())
+                .map_err(|error| format!("open vault: {error}"))?;
         device::open_unlocked_vault(&vault, &decrypted_identity)
             .map_err(|error| format!("open vault: {error}"))?;
         let configured_ttl = if config.session_timeout.is_zero() {
@@ -5031,6 +5731,39 @@ fn run_unlock(
         Ok::<(), String>(())
     })();
     finish_session_result(result, true, 3)
+}
+
+/// Go `passphraseForBiometricSetup` (cmd/auth/auth.go): a cached session
+/// passphrase, else a bare `ReadHiddenInput("Passphrase: ")`. It is not
+/// `UnlockVault`: no passphrase policy, no Touch ID and a failed read is a plain
+/// error (exit 1), not `ExitLocked`. Its `SYMVAULT_PASSPHRASE` branch is dead in
+/// the shipped binary because `main` moves the variable out of the environment
+/// (`SniffAndClearEnvPassphrase`) before any command runs.
+#[cfg(target_os = "macos")]
+fn passphrase_for_biometric_setup(
+    vault: &Path,
+    runtime: &RuntimeSession,
+) -> Result<Zeroizing<String>, String> {
+    let vault_string = vault
+        .to_str()
+        .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
+    if let Ok(bytes) = runtime.manager.load_passphrase(vault_string)
+        && !bytes.is_empty()
+    {
+        return String::from_utf8(bytes)
+            .map(Zeroizing::new)
+            .map_err(|_| "cached session passphrase is not valid UTF-8".to_owned());
+    }
+    session_input::read_passphrase("Passphrase: ")
+}
+
+/// Go's `Touch ID skipped` warning (`internal/cli/unlock.go`).
+const TOUCH_ID_SKIPPED: &str = "Touch ID skipped (no GUI session); use 'symvault unlock' in a graphical session or enable security.allow_env_passphrase / SYMVAULT_ALLOW_ENV_PASSPHRASE";
+
+/// `touchid && !interactive && !SessionHasGUISession()`: the branch that follows
+/// Go's `touchid && SessionHasGUISession()` attempt.
+const fn touch_id_skip_warning(touch_id: bool, interactive: bool, gui_session: bool) -> bool {
+    touch_id && !interactive && !gui_session
 }
 
 fn unlock_passphrase(
@@ -5089,6 +5822,16 @@ fn unlock_passphrase_with_mode(
             Err(_) => {}
         }
     }
+    // `resolveUnlockPassphrase`: Touch ID is a GUI prompt, so a script without a
+    // GUI session is told why it was skipped (`cliout.Warnf`, silenced by --quiet).
+    if touch_id_skip_warning(
+        config.effective_auth_method() == symvault_core::config::AuthMethod::Touchid,
+        interactive,
+        session_commands::gui_session_available(),
+    ) && !session_input::is_quiet()
+    {
+        eprintln!("{TOUCH_ID_SKIPPED}");
+    }
     if interactive {
         session_input::unlock_passphrase_for_session(config_bytes)
     } else {
@@ -5125,9 +5868,9 @@ fn run_auth_status(
         }
         Ok::<(), String>(())
     })();
-    if let Err(error) = &result
-        && !is_not_initialized(error)
-    {
+    // Go prints a plain (non-CLIError) failure twice, "vault not initialized"
+    // included: cobra reports it, then ExecuteRoot does.
+    if let Err(error) = &result {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
     finish_session_result(result, false, 1)
@@ -5141,17 +5884,33 @@ fn finish_session_result(
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if let Some(code) = report_failed_passphrase_read(&error, locked_error) {
+                return code;
+            }
             if not_initialized_code == 3 && is_not_initialized(&error) {
                 write_not_initialized(&error);
                 return ExitCode::from(3);
             }
+            if locked_error && error.starts_with("session cache is memory-only") {
+                // Cobra reports the ExitLocked error, then `ExecuteRoot` does and
+                // adds the `unlock` flavour of the locked hint.
+                print_error_like_go(&error);
+                let _ = writeln!(
+                    io::stderr(),
+                    "Enable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored."
+                );
+                return ExitCode::from(4);
+            }
+            if locked_error && error.starts_with("open vault: ") {
+                // `UnlockVaultForSession` wraps the open failure in a CLIError,
+                // which cobra and `ExecuteRoot` each print.
+                print_error_like_go(&error);
+                return ExitCode::from(1);
+            }
             let _ = writeln!(io::stderr(), "Error: {error}");
             if error.contains("vault not initialized") {
                 ExitCode::from(not_initialized_code)
-            } else if locked_error
-                && (error == "no active session"
-                    || error.starts_with("session cache is memory-only"))
-            {
+            } else if locked_error && error == "no active session" {
                 ExitCode::from(4)
             } else {
                 ExitCode::from(1)
@@ -5224,8 +5983,54 @@ fn deprecated_stub_message(message: &str) -> ExitCode {
 /// `auth rotate-passphrase` and `get`'s mutually-exclusive flags. The duplicate
 /// is contract parity, not a copy-paste bug.
 fn print_error_like_go(message: &str) {
+    print_error_bytes_like_go(message.as_bytes());
+}
+
+/// Marker of an error that was already written to stderr in Go's shape; the
+/// remainder is the exit status. `finish_vault_result` only maps it to an exit
+/// code, so handlers can reproduce Go's per-command exit classes (`not found`
+/// = 2, usage = 9, ...) without a second error channel.
+const REPORTED_PREFIX: &str = "\u{1}reported:";
+
+/// Writes `Error: <message>` twice (cobra, then `ExecuteRoot`), then the
+/// optional hint line, and returns the marker for `finish_vault_result`.
+fn reported(code: u8, message: &str, hint: Option<&str>) -> String {
+    print_error_like_go(message);
+    if let Some(hint) = hint {
+        let _ = writeln!(io::stderr(), "{hint}");
+    }
+    format!("{REPORTED_PREFIX}{code}")
+}
+
+/// Go's `file` commands fail with CLIErrors, each printed twice (cobra, then
+/// `ExecuteRoot`) with its own exit class: a missing attachment field is
+/// `not found` (2, with the `find` hint), and an entry without exactly one
+/// recorded attachment needs `--field` (invalid input, 9). A child that outlives
+/// `--timeout` is a plain error (1), printed the same way.
+fn report_file_error(error: String) -> String {
+    if error.starts_with("command timed out after ") || error.starts_with("failed to run command: ")
+    {
+        return reported(1, &error, None);
+    }
+    if error.starts_with("entry has no recorded attachment fields")
+        || error.starts_with("entry has multiple attachment fields (")
+    {
+        return reported(9, &error, None);
+    }
+    if (error.starts_with("field ") || error.starts_with("chunk field "))
+        && error.ends_with(" not found in entry")
+    {
+        return reported(2, &error, Some("Try: symvault find <search-term>"));
+    }
+    error
+}
+
+fn print_error_bytes_like_go(message: &[u8]) {
+    let mut stderr = io::stderr();
     for _ in 0..2 {
-        let _ = writeln!(io::stderr(), "Error: {message}");
+        let _ = stderr.write_all(b"Error: ");
+        let _ = stderr.write_all(message);
+        let _ = stderr.write_all(b"\n");
     }
 }
 
@@ -5242,6 +6047,24 @@ fn parse_vault_flag(value: &str) -> Result<PathBuf, std::convert::Infallible> {
 }
 
 fn resolve_vault(explicit: Option<&Path>, profile: Option<&str>) -> Result<PathBuf, String> {
+    resolve_vault_with(
+        explicit,
+        profile,
+        |path| Config::load(path).map_err(|error| error.to_string()),
+        false,
+    )
+}
+
+/// [`resolve_vault`] with the config loader (and so the wording of its error) chosen
+/// by the caller; the agent-mode gate words it the way Go does. With
+/// `strict_profile_env` a `SYMVAULT_PROFILE` that is not UTF-8 is a profile request
+/// that matches no profile, as in Go (otherwise it is ignored).
+fn resolve_vault_with(
+    explicit: Option<&Path>,
+    profile: Option<&str>,
+    load_config: impl FnOnce(&Path) -> Result<Config, String>,
+    strict_profile_env: bool,
+) -> Result<PathBuf, String> {
     let vault_env = if explicit.is_some() {
         None
     } else {
@@ -5253,17 +6076,34 @@ fn resolve_vault(explicit: Option<&Path>, profile: Option<&str>) -> Result<PathB
             }
         }
     };
-    let profile_env = std::env::var("SYMVAULT_PROFILE").ok();
     let resolver = PathResolver::new();
+    let profile_env_raw = std::env::var_os("SYMVAULT_PROFILE");
+    let profile_env = profile_env_raw.as_deref().and_then(std::ffi::OsStr::to_str);
+    if let Some(raw) = profile_env_raw
+        .as_deref()
+        .filter(|_| strict_profile_env && profile_env.is_none())
+    {
+        // A profile name that is not UTF-8 is a non-empty request that no profile
+        // can match; Go's `VaultPath` fails on it unless a vault flag / variable
+        // or a profile flag decides first.
+        let decided = |value: Option<&str>| value.is_some_and(|value| !value.trim().is_empty());
+        if explicit.is_none() && !decided(vault_env.as_deref()) && !decided(profile) {
+            load_config(&resolver.config_path()).map_err(|e| format!("cannot load config: {e}"))?;
+            return Err(format!(
+                "profile {} not found",
+                cli_artifacts::quote_go_bytes(raw.as_encoded_bytes().trim_ascii())
+            ));
+        }
+    }
     symvault_core::config_overrides::VaultOverrides {
         vault_flag: explicit,
         profile_flag: profile,
         vault_env: vault_env.as_deref(),
-        profile_env: profile_env.as_deref(),
+        profile_env,
     }
     .resolve(
         &resolver,
-        || Config::load(resolver.config_path()).map_err(|error| error.to_string()),
+        || load_config(&resolver.config_path()),
         expand_vault_path,
     )
 }
@@ -5474,6 +6314,109 @@ fn write_unknown_version_flag() -> ExitCode {
         return ExitCode::from(1);
     }
     ExitCode::from(1)
+}
+
+/// CLI-005: cobra accepts and ignores extra positionals on every command whose
+/// `Args` validator is nil. The error-taxonomy corpus lists those commands
+/// (`nil_args`, derived from the compiled Go command tree); clap must not reject
+/// a positional on any of them. This covers the commands the byte-for-byte replay
+/// leaves out (host- or timing-dependent output, long-running servers).
+#[cfg(test)]
+mod nil_args_positional_tests {
+    use super::*;
+    use clap::error::ErrorKind;
+
+    fn nil_args_paths() -> Vec<(String, bool)> {
+        let raw = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../testdata/port/cli/error-taxonomy.json"
+        ))
+        .expect("read error-taxonomy fixture");
+        let fixture: serde_json::Value = serde_json::from_str(&raw).expect("parse fixture");
+        fixture["nil_args"]
+            .as_array()
+            .expect("nil_args")
+            .iter()
+            .map(|entry| {
+                (
+                    entry["path"].as_str().expect("path").to_owned(),
+                    entry["runnable"].as_bool().expect("runnable"),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn clap_accepts_extra_positionals_on_every_runnable_nil_args_command() {
+        let mut checked = 0;
+        for (path, runnable) in nil_args_paths() {
+            if !runnable {
+                continue;
+            }
+            for extra in [&["x"][..], &["x", "y"][..], &["--", "x"][..]] {
+                let args: Vec<&str> = path.split(' ').chain(extra.iter().copied()).collect();
+                if let Err(error) = Cli::try_parse_from(&args) {
+                    assert!(
+                        !matches!(
+                            error.kind(),
+                            ErrorKind::UnknownArgument | ErrorKind::InvalidSubcommand
+                        ),
+                        "{args:?}: clap rejects the positionals: {error}"
+                    );
+                }
+                checked += 1;
+            }
+        }
+        // All 48 runnable nil-Args commands are native subcommands now.
+        assert_eq!(checked, 48 * 3);
+    }
+
+    /// pflag keeps the last value of a repeated string/duration flag.
+    #[test]
+    fn dynamic_generate_accepts_repeated_flags_like_pflag() {
+        for args in [
+            &[
+                "symvault", "dynamic", "generate", "--engine", "e", "--engine", "f", "--role", "r",
+            ][..],
+            &[
+                "symvault",
+                "dynamic",
+                "generate",
+                "--engine=e",
+                "--engine=f",
+                "--role=r",
+            ][..],
+            &[
+                "symvault", "dynamic", "generate", "--engine", "e", "--role", "r", "--role", "s",
+            ][..],
+            &[
+                "symvault", "dynamic", "generate", "--engine", "e", "--role", "r", "--ttl", "1m",
+                "--ttl", "2m",
+            ][..],
+        ] {
+            Cli::try_parse_from(args).unwrap_or_else(|error| panic!("{args:?}: {error}"));
+        }
+    }
+
+    /// Negative control: commands with a validator keep rejecting extras at the
+    /// clap layer (`get` is validated by the cobra emulation instead).
+    #[test]
+    fn clap_still_rejects_extra_positionals_where_cobra_has_a_validator() {
+        for args in [
+            &["symvault", "backup", "a", "b"][..],
+            &["symvault", "delete", "a", "b"][..],
+            &["symvault", "config", "get", "a", "b"][..],
+        ] {
+            let error = Cli::try_parse_from(args).expect_err("validator keeps rejecting");
+            assert!(
+                matches!(
+                    error.kind(),
+                    ErrorKind::UnknownArgument | ErrorKind::InvalidSubcommand
+                ),
+                "{args:?}: {error}"
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -5772,23 +6715,229 @@ mod get_clipboard_wiring_tests {
     }
 
     #[test]
-    fn a_failed_copy_reports_once_here_and_leaks_nothing() {
+    fn a_failed_copy_is_left_to_the_caller_and_leaks_nothing() {
         let vault = vault_with_config(None);
         let outcome = run(vault.path(), secret_field(), "text", false, true, true);
         assert_eq!(
             outcome.result,
             Err("copy to clipboard: no clipboard tool".to_owned())
         );
-        assert_eq!(
-            outcome.stderr,
-            "Error: copy to clipboard: no clipboard tool\n"
-        );
+        // `finish_vault_result_doubled_exit3` prints both Go lines.
+        assert_eq!(outcome.stderr, "");
         assert_eq!(outcome.stdout, "");
-        assert!(!outcome.stderr.contains(SECRET));
     }
 
     #[test]
-    fn non_string_values_are_copied_as_json_text() {
+    fn go_recorded_value_formats() {
+        use sha2::{Digest, Sha256};
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../testdata/port/platform/get_clipboard.json"
+        ))
+        .unwrap();
+        let cases = fixture["value_scenarios"].as_array().unwrap();
+        assert_eq!(cases.len(), 84);
+        let vault = vault_with_config(Some("clipboard:\n  auto_clear_duration: 0\n"));
+        let mut replayed = 0;
+        let mut negative_zero = 0;
+        for case in cases {
+            let name = case["name"].as_str().unwrap();
+            // The value reaches `get` the way a real one does: as a field of
+            // decrypted entry JSON decoded by the store (which, like Go's
+            // float64 decoding, keeps the sign of `-0`).
+            let plaintext = format!(
+                "{{\"data\":{{\"value\":{}}}}}",
+                case["value_json"].as_str().unwrap()
+            );
+            let value = symvault_store::decode_entry_plaintext(plaintext.as_bytes(), "fixture")
+                .unwrap()
+                .data
+                .remove("value")
+                .unwrap();
+            replayed += 1;
+            negative_zero += usize::from(name.ends_with("_negative_zero"));
+            let text = crate::run_commands::format_go_value(&value);
+            if name.starts_with("copy_") {
+                let outcome = run(
+                    vault.path(),
+                    field("value", value),
+                    "text",
+                    false,
+                    true,
+                    false,
+                );
+                assert_eq!(outcome.result, Ok(()), "{name}");
+                assert_eq!(
+                    format!("copy:{}", outcome.clipboard.state.lock().unwrap().0),
+                    case["clipboard_ops"][0].as_str().unwrap(),
+                    "{name}"
+                );
+            } else if name.starts_with("print_") {
+                let outcome = run(
+                    vault.path(),
+                    field("value", value),
+                    "text",
+                    false,
+                    false,
+                    false,
+                );
+                assert_eq!(outcome.stdout, case["stdout"].as_str().unwrap(), "{name}");
+            } else if name.starts_with("length_") {
+                assert_eq!(
+                    format!("{}\n", text.len()),
+                    case["stdout"].as_str().unwrap(),
+                    "{name}"
+                );
+            } else {
+                let digest = Sha256::digest(text.as_bytes())
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>();
+                if name.starts_with("digest_") {
+                    assert_eq!(
+                        format!("sha256:{}\n", &digest[..12]),
+                        case["stdout"].as_str().unwrap(),
+                        "{name}"
+                    );
+                } else {
+                    let expected: serde_json::Value =
+                        serde_json::from_str(case["stdout"].as_str().unwrap()).unwrap();
+                    assert_eq!(expected["length"], text.len(), "{name}");
+                    assert_eq!(expected["sha256_12"], &digest[..12], "{name}");
+                }
+            }
+        }
+        assert_eq!(
+            replayed, 84,
+            "every recorded value case runs, none is skipped"
+        );
+        assert_eq!(negative_zero, 3, "copy, print and length of -0");
+    }
+
+    /// ADR 0034 item 22 (ratified: "Rust copies JSON text, null as empty
+    /// text"). Measured at this revision the described difference does not
+    /// exist: Rust copies exactly what Go's `fmt.Sprintf("%v", value)` puts on
+    /// the clipboard, `<nil>` for null and `map[...]` for objects included
+    /// (PLATFORM-001-FIDELITY, residual 10, landed after the ADR's baseline).
+    /// This pins the ADR's named shapes (number, bool, null, object, array)
+    /// byte for byte against the Go recording and proves that the three that
+    /// the ADR said would differ (null, object, array) still tell Go's text
+    /// from JSON text, so a regression to the ADR's description is detected.
+    #[test]
+    fn adr_0034_item_22_non_string_values_copy_as_go_prints_them() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../testdata/port/platform/get_clipboard.json"
+        ))
+        .unwrap();
+        let cases = fixture["value_scenarios"].as_array().unwrap();
+        let vault = vault_with_config(Some("clipboard:\n  auto_clear_duration: 0\n"));
+        // (case, Go's clipboard text, whether JSON text would equal it)
+        let named = [
+            ("copy_integer", "42", true),
+            ("copy_bool_true", "true", true),
+            ("copy_bool_false", "false", true),
+            ("copy_null", "<nil>", false),
+            ("copy_empty_object", "map[]", false),
+            (
+                "copy_object_sorted_keys",
+                "map[a:[1 2] b:1 c:map[y:s z:<nil>]]",
+                false,
+            ),
+            ("copy_array_mixed", "[1 a <nil> true 2.5]", false),
+        ];
+        let mut differs_from_json_text = 0;
+        for (name, go_text, json_equal) in named {
+            let case = cases
+                .iter()
+                .find(|case| case["name"] == name)
+                .unwrap_or_else(|| panic!("{name} is not in the Go recording"));
+            assert_eq!(
+                case["clipboard_ops"][0].as_str().unwrap(),
+                format!("copy:{go_text}"),
+                "{name}: Go's recorded clipboard text"
+            );
+            let plaintext = format!(
+                "{{\"data\":{{\"value\":{}}}}}",
+                case["value_json"].as_str().unwrap()
+            );
+            let value = symvault_store::decode_entry_plaintext(plaintext.as_bytes(), "fixture")
+                .unwrap()
+                .data
+                .remove("value")
+                .unwrap();
+            let json_text = serde_json::to_string(&value).unwrap();
+            assert_eq!(json_text == go_text, json_equal, "{name}: JSON text");
+            differs_from_json_text += usize::from(json_text != go_text);
+            let outcome = run(
+                vault.path(),
+                field("value", value),
+                "text",
+                false,
+                true,
+                false,
+            );
+            assert_eq!(outcome.result, Ok(()), "{name}");
+            assert_eq!(
+                outcome.clipboard.state.lock().unwrap().0,
+                go_text,
+                "{name}: Rust's clipboard text"
+            );
+        }
+        // null, empty object, object and array: the shapes where JSON text and
+        // Go's `%v` differ; none of them is copied as JSON text or as empty.
+        assert_eq!(differs_from_json_text, 4);
+    }
+
+    /// Go rejects a negative `clipboard.auto_clear_duration` when the command
+    /// opens the vault (exit 6), so `get` never reaches the clipboard with one;
+    /// it does not clamp it. The Rust validator must produce the same message.
+    /// (Rust's vault-open path does not yet run this validator for `get`; that
+    /// gap is tracked in the PLATFORM-001 residuals, not hidden here.)
+    #[test]
+    fn go_rejects_negative_auto_clear_with_the_message_rust_validates() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../testdata/port/platform/get_clipboard.json"
+        ))
+        .unwrap();
+        let rejected = fixture["config_rejected"].as_array().unwrap();
+        assert_eq!(rejected.len(), 3);
+        for case in rejected {
+            let name = case["name"].as_str().unwrap();
+            let seconds = case["auto_clear_seconds"].as_i64().unwrap();
+            assert!(seconds < 0, "{name}");
+            assert_eq!(case["exit_code"], 6, "{name}");
+            assert_eq!(case["clipboard_ops"].as_array().unwrap().len(), 0, "{name}");
+            let vault = vault_with_config(Some(&format!(
+                "clipboard:\n  auto_clear_duration: {seconds}\n"
+            )));
+            let config =
+                symvault_core::config::Config::load(vault.path().join("config.yaml")).unwrap();
+            let errors = config.validate();
+            assert_eq!(errors.len(), 1, "{name}: {errors:?}");
+            assert!(
+                case["stderr"].as_str().unwrap().contains(&errors[0]),
+                "{name}: Go's stderr does not contain {:?}",
+                errors[0]
+            );
+        }
+    }
+
+    #[test]
+    fn negative_zero_needs_the_store_decoder() {
+        // Control for the replay above: a plain serde_json parse loses the sign
+        // of the integer token `-0`, so the cases would pass only by accident
+        // if the store decoder stopped preserving it.
+        let plain: serde_json::Value = serde_json::from_str("-0").unwrap();
+        assert_eq!(crate::run_commands::format_go_value(&plain), "0");
+        let decoded = symvault_store::decode_entry_plaintext(br#"{"data":{"value":-0}}"#, "x")
+            .unwrap()
+            .data
+            .remove("value")
+            .unwrap();
+        assert_eq!(crate::run_commands::format_go_value(&decoded), "-0");
+    }
+
+    #[test]
+    fn non_string_values_are_copied_as_go_text() {
         let vault = vault_with_config(Some("clipboard:\n  auto_clear_duration: 0\n"));
         let outcome = run(
             vault.path(),
@@ -5799,5 +6948,35 @@ mod get_clipboard_wiring_tests {
             false,
         );
         assert_eq!(outcome.clipboard.state.lock().unwrap().0, "5432");
+    }
+}
+
+#[cfg(test)]
+mod touch_id_skip_warning_tests {
+    use super::{TOUCH_ID_SKIPPED, touch_id_skip_warning};
+
+    /// Go: `touchid && SessionHasGUISession()` attempts Touch ID; only the
+    /// `else if touchid && !interactive && !SessionHasGUISession()` warns.
+    #[test]
+    fn warns_only_for_touch_id_without_a_gui_session_when_not_interactive() {
+        for touch_id in [false, true] {
+            for interactive in [false, true] {
+                for gui in [false, true] {
+                    assert_eq!(
+                        touch_id_skip_warning(touch_id, interactive, gui),
+                        touch_id && !interactive && !gui,
+                        "touch_id={touch_id} interactive={interactive} gui={gui}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_text_is_gos() {
+        assert_eq!(
+            TOUCH_ID_SKIPPED,
+            "Touch ID skipped (no GUI session); use 'symvault unlock' in a graphical session or enable security.allow_env_passphrase / SYMVAULT_ALLOW_ENV_PASSPHRASE"
+        );
     }
 }

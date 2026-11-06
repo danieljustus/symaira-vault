@@ -33,7 +33,12 @@ pub fn inspect_identity(root: &Path) -> Result<MigrationResult, String> {
     let path = root.join("identity.age");
     let raw = safeio::read(&path)
         .map_err(|error| format!("read vault identity ({}): {error}", path.display()))?
-        .ok_or_else(|| format!("read vault identity ({}): file not found", path.display()))?;
+        .ok_or_else(|| {
+            let missing = std::io::Error::from(std::io::ErrorKind::NotFound);
+            let cause = crate::config::go_path_error(&path, &missing, false)
+                .unwrap_or_else(|| missing.to_string());
+            format!("read vault identity ({}): {cause}", path.display())
+        })?;
     Ok(match symvault_crypto::detect_envelope(&raw) {
         EnvelopeFormat::Argon2id => {
             let needs_header =
@@ -296,6 +301,12 @@ mod tests;
 /// Explicit local migration: historical reads stay exclusive, defaults remain
 /// unchanged, and both original files are retained without replacing old backups.
 pub fn migrate_resource_policy(root: &Path, passphrase: &SecretBytes) -> Result<(), String> {
+    // D1 data-safety gate BEFORE this command's own `.lock`: the gate takes the
+    // vault write lock itself (a second descriptor, so a lock held here would
+    // make it wait out its 30 s deadline and refuse with "vault is currently
+    // locked by another process"). Once the marker exists, the path-gated
+    // writes below find it and never touch the lock again.
+    symvault_store::data_safety::ensure_marker(root).map_err(|e| e.to_string())?;
     let lock = safeio::open_append(&root.join(".lock")).map_err(|e| e.to_string())?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     loop {
@@ -326,13 +337,22 @@ fn migrate_resource_policy_locked(
     }
     .map_err(|e| format!("unlock historical identity: {e}"))?;
     let config_path = root.join("config.yaml");
-    let config_original =
-        safeio::read_bounded(&config_path, 1024 * 1024).map_err(|e| e.to_string())?;
+    // Go's `prepareResourceMigrationConfig` wraps each stage: read, load and
+    // validate the config as "<stage> migration config: %w".
+    let config_original = safeio::read_bounded(&config_path, 1024 * 1024)
+        .map_err(|e| format!("read migration config: {e}"))?;
     let config_replacement = config_original
         .as_ref()
         .map(|raw| {
-            symvault_core::config::Config::load_from_bytes(raw)
-                .map_err(|e| format!("load config: {e}"))?;
+            let loaded = symvault_core::config::Config::load_from_bytes(raw)
+                .map_err(|e| format!("load migration config: {e}"))?;
+            let problems = loaded.validate();
+            if !problems.is_empty() {
+                return Err(format!(
+                    "validate migration config: {}",
+                    problems.join("\n")
+                ));
+            }
             let mut document: serde_yaml_ng::Value =
                 serde_yaml_ng::from_slice(raw).map_err(|e| e.to_string())?;
             if document.is_null() {
@@ -349,7 +369,7 @@ fn migrate_resource_policy_locked(
             }
             let vault = section
                 .as_mapping_mut()
-                .ok_or_else(|| "config vault must be a mapping".to_owned())?;
+                .ok_or_else(|| "migration config vault must be a mapping".to_owned())?;
             for (name, value) in [
                 ("format_version", 2),
                 ("argon2id_time", 3),

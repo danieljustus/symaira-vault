@@ -6,10 +6,16 @@
 
 pub mod archive;
 pub mod autocommit;
+pub mod backup_writer;
+pub mod data_safety;
 pub mod device_sessions;
 pub mod devices;
 pub mod export;
 pub mod git;
+mod goflate;
+mod gotar;
+pub mod gotemplate;
+mod gozip;
 mod gzip_multistream;
 pub mod importer;
 pub mod intake;

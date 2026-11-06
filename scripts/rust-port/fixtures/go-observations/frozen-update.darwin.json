@@ -1,0 +1,23 @@
+{
+  "args": [
+    "frozen_generator_replay.py",
+    "capture",
+    "update"
+  ],
+  "contract": "frozen-update",
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "darwin",
+  "observations": {
+    "commit": "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9",
+    "fixtures": {
+      "crates/symvault-cli/tests/fixtures/update-apply-stable/cases.json": "976fa648a8cb01c89560e8afd6905091b4c662ace2c19d32fc69bd2f90d38e40",
+      "crates/symvault-cli/tests/fixtures/update-apply-transaction/cases.json": "017941fbb0d6092f3ec200450d767284efb7f0fc5dd3e1eabdb656577bbad44a",
+      "crates/symvault-cli/tests/fixtures/update-apply-unsupported/cases.json": "264de15093c9671fdda378106bd52c301e3a3e43d63d062b92e80ab8a25509ed",
+      "crates/symvault-cli/tests/fixtures/update-check-cache/cases.json": "41cbfe0c93b0d5d767db01f42cbe08c7a687f2c0ee92e96b8a7e899984962418",
+      "crates/symvault-cli/tests/fixtures/update-check-http/cases.json": "359eeaab9c08e7360cdcd970de8d60f02a2a06df550500dd510e5eec3348b316"
+    }
+  },
+  "oracle_commit": "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9",
+  "schema": 1
+}

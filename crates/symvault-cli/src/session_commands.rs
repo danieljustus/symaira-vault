@@ -242,8 +242,8 @@ pub fn gui_session_available() -> bool {
 /// Parses the duration syntax accepted by Go's `time.ParseDuration` for CLI
 /// session TTLs. Fractions are preserved without floating point rounding.
 pub fn parse_ttl_override(value: &str) -> Result<Option<Duration>, String> {
-    let nanos = symvault_core::config::parse_duration_nanos(value)
-        .ok_or_else(|| format!("invalid ttl {value:?}"))?;
+    let nanos = symvault_core::config::parse_go_duration(value)
+        .map_err(|_| format!("invalid ttl {value:?}"))?;
     if nanos <= 0 {
         return Ok(None);
     }

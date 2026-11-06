@@ -14,9 +14,9 @@ body:
       label: Installation method
       description: How did you try to install Symaira Vault?
       options:
-        - Quick install script (curl / PowerShell)
+        - Quick install script (curl)
         - Homebrew
-        - Go install
+        - Cargo install
         - Linux package (.deb / .rpm / .apk)
         - Manual download from GitHub Releases
         - Build from source

@@ -33,5 +33,8 @@ while IFS= read -r -d '' path || [ -n "${path:-}" ]; do
   esac
   [ "$code" = false ] || break
 done
+# Drain the rest: a writer under pipefail (git diff | this) would otherwise
+# die of SIGPIPE (exit 141) once the diff outgrows the pipe buffer.
+cat >/dev/null
 
 printf 'code=%s\n' "$code"

@@ -1,6 +1,6 @@
 #![deny(unsafe_code)]
 
-use std::{collections::BTreeMap, fs, path::Path, process::Command};
+use std::{collections::BTreeMap, fs, path::Path};
 
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -10,6 +10,7 @@ use symvault_store::{Entry, Store};
 
 const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 const REVISION: &str = "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9";
+const SOURCE_DIGEST: &str = "1462b28d79b8d3dbaf622c4d7a8e71e115f498a136404f15f4e82b99d20cd5f3";
 const IDENTITY: &str = "AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL";
 
 #[derive(Deserialize)]
@@ -45,52 +46,17 @@ fn fixture() -> Fixture {
     .unwrap();
     assert_eq!(f.revision, REVISION);
     assert_eq!(f.go_version, "go1.26.6");
-    let names = Command::new("git")
-        .current_dir(ROOT)
-        .args([
-            "ls-tree",
-            "-r",
-            "--name-only",
-            REVISION,
-            "--",
-            "internal/config",
-            "internal/crypto",
-            "internal/fsutil",
-            "internal/vault",
-            "go.mod",
-            "go.sum",
-        ])
-        .output()
-        .unwrap();
-    assert!(
-        names.status.success(),
-        "git ls-tree failed: status={:?}, stderr={}",
-        names.status,
-        String::from_utf8_lossy(&names.stderr)
-    );
-    let mut hash = Sha256::new();
-    for name in std::str::from_utf8(&names.stdout).unwrap().lines() {
-        if name.ends_with("_test.go")
-            || !(name.ends_with(".go") || name == "go.mod" || name == "go.sum")
-        {
-            continue;
-        }
-        hash.update(name.as_bytes());
-        hash.update([0]);
-        let blob = Command::new("git")
-            .current_dir(ROOT)
-            .args(["show", &format!("{REVISION}:{name}")])
-            .output()
-            .unwrap();
-        assert!(blob.status.success());
-        hash.update(blob.stdout);
-    }
-    assert_eq!(f.source_digest, hex::encode(hash.finalize()));
+    // Frozen digest of the pinned Go sources (internal/{config,crypto,fsutil,vault},
+    // go.mod, go.sum at REVISION, tests excluded): the test no longer needs the Go
+    // tree or the git history.
+    assert_eq!(f.source_digest, SOURCE_DIGEST);
     assert_eq!(
         f.generator_digest,
         digest(
-            &fs::read(Path::new(ROOT).join("scripts/rust-port/cmd/manifestkeygen/main.go"))
-                .unwrap()
+            &fs::read(Path::new(ROOT).join(
+                "testdata/port/go-snapshots/scripts/rust-port/cmd/manifestkeygen/main.go.txt"
+            ))
+            .unwrap()
         )
     );
     f
@@ -119,7 +85,11 @@ fn public_manifest_keys_match_go_production_fixture() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
         materialize(root, vector.pseudonymize);
-        let store = Store::open(root, &identity).unwrap();
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root),
+            &identity,
+        )
+        .unwrap();
         let mut created = None;
         assert_eq!(vector.steps.len(), 4);
         for (step, expected) in vector.steps.into_iter().enumerate() {
@@ -189,6 +159,8 @@ fn public_manifest_keys_match_go_production_fixture() {
                         .to_string_lossy()
                         .replace('\\', "/")
                 })
+                // Declared D1 difference: the pre-marked fixture carries the marker.
+                .filter(|name| name != ".symvault-rust")
                 .collect();
             files.sort();
             actual["files"] = json!(files);
@@ -210,7 +182,11 @@ fn manifest_map_keys_do_not_relax_entry_paths_or_mask_load_errors() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
         materialize(root, pseudo);
-        let store = Store::open(root, &identity).unwrap();
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root),
+            &identity,
+        )
+        .unwrap();
         let malformed = b"synthetic malformed manifest";
         fs::write(root.join("manifest.age"), malformed).unwrap();
         let update_error = store

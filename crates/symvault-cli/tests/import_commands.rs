@@ -61,7 +61,11 @@ fn csv_import_and_malformed_input_preserve_vault_state() {
     let identity =
         vault_commands::initialize(&root, &SecretBytes::new(b"correct horse battery staple"))
             .expect("initialize");
-    let store = Store::open(&root, &identity).expect("open");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&root),
+        &identity,
+    )
+    .expect("open");
     store
         .write_new_entry("existing", &Entry::default(), &identity)
         .expect("existing entry");
@@ -87,11 +91,11 @@ fn csv_import_and_malformed_input_preserve_vault_state() {
         &root,
         &identity,
         &options,
-        |_, _, path, data| {
+        |_, _, path, data, _| {
             writes.push((path.to_owned(), data));
             Ok(())
         },
-        |_, _, _, _| panic!("unexpected replacement"),
+        |_, _, _, _, _| panic!("unexpected replacement"),
         |_, _, _, _| panic!("unexpected secret metadata"),
     )
     .expect("import");
@@ -113,17 +117,21 @@ fn csv_import_and_malformed_input_preserve_vault_state() {
         &root,
         &identity,
         &malformed_options,
-        |_, _, _, _| {
+        |_, _, _, _, _| {
             malformed_writes += 1;
             Ok(())
         },
-        |_, _, _, _| Ok(()),
+        |_, _, _, _, _| Ok(()),
         |_, _, _, _| panic!("unexpected secret metadata"),
     )
     .expect_err("malformed import must fail");
     assert!(error.contains("parse import source"));
     assert_eq!(malformed_writes, 0);
 
+    // Distinct raw paths that share one text form (`\xFF`, `\xFE`) are two
+    // entries in Go. The native store holds text paths, so the write stops
+    // before any callback: macOS refuses the file name like Go does, every
+    // other host gets an explicit refusal (ADR 0030). Nothing is written.
     let collision = root.join("collision.csv");
     fs::write(
         &collision,
@@ -140,21 +148,37 @@ fn csv_import_and_malformed_input_preserve_vault_state() {
         &root,
         &identity,
         &collision_options,
-        |_, _, _, _| {
+        |_, _, _, _, _| {
             collision_writes += 1;
             Ok(())
         },
-        |_, _, _, _| Ok(()),
+        |_, _, _, _, _| Ok(()),
         |_, _, _, _| panic!("unexpected secret metadata"),
     )
-    .expect_err("colliding paths must fail before writes");
-    assert!(error.contains("distinct CSV paths"));
+    .expect_err("an entry path that is not valid UTF-8 cannot be written");
+    // The `imports` prefix is joined before the write, as in Go.
+    assert!(
+        error.starts_with("cannot write entry: cannot create entry imports/\u{FFFD}: "),
+        "{error}"
+    );
+    if cfg!(target_os = "macos") {
+        // APFS refuses the raw name exactly as it does for Go.
+        assert!(error.ends_with(": illegal byte sequence"), "{error}");
+    } else {
+        assert!(
+            error.ends_with("the native store only persists UTF-8 entry paths"),
+            "{error}"
+        );
+    }
     assert_eq!(collision_writes, 0);
     assert!(
-        Store::open(&root, &identity)
-            .unwrap()
-            .get("existing", &identity)
-            .is_ok()
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity
+        )
+        .unwrap()
+        .get("existing", &identity)
+        .is_ok()
     );
     let _ = fs::remove_dir_all(root);
 }
@@ -180,7 +204,11 @@ fn failed_overwrite_keeps_the_existing_entry() {
     let identity =
         vault_commands::initialize(&root, &SecretBytes::new(b"correct horse battery staple"))
             .expect("initialize");
-    let store = Store::open(&root, &identity).expect("open");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&root),
+        &identity,
+    )
+    .expect("open");
     store
         .write_new_entry(
             "existing",
@@ -208,16 +236,23 @@ fn failed_overwrite_keeps_the_existing_entry() {
         &root,
         &identity,
         &options,
-        |_, _, _, _| panic!("overwrite must use replacement callback"),
-        |_, _, _, _| Err("injected replacement failure".into()),
+        |_, _, _, _, _| panic!("overwrite must use replacement callback"),
+        |_, _, _, _, _| Err("injected replacement failure".into()),
         |_, _, _, _| panic!("metadata must not run after replacement failure"),
     )
     .expect_err("replacement failure must be returned");
-    assert!(error.contains("cannot overwrite entry existing"));
-    let entry = Store::open(&root, &identity)
-        .unwrap()
-        .get("existing", &identity)
-        .unwrap();
+    // Go's wording carries the cause but not the path.
+    assert_eq!(
+        error,
+        "cannot overwrite entry: injected replacement failure"
+    );
+    let entry = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&root),
+        &identity,
+    )
+    .unwrap()
+    .get("existing", &identity)
+    .unwrap();
     assert_eq!(entry.data["password"], "old");
     let _ = fs::remove_dir_all(root);
 }
@@ -263,7 +298,11 @@ fn cxf_import_preserves_secret_metadata_and_write_version() {
     .expect("CXF import");
     assert!(result.imported > 0);
 
-    let store = Store::open(&root, &identity).expect("open imported vault");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&root),
+        &identity,
+    )
+    .expect("open imported vault");
     let entries: Vec<_> = store
         .list(&identity)
         .unwrap()
@@ -305,11 +344,11 @@ fn quarantine_import_uses_go_batch_id_shape_and_rejects_prefix() {
         &root,
         &identity,
         &options,
-        |_, _, path, _| {
+        |_, _, path, _, _| {
             written_path = Some(path.to_owned());
             Ok(())
         },
-        |_, _, _, _| panic!("unexpected replacement"),
+        |_, _, _, _, _| panic!("unexpected replacement"),
         |_, _, _, _| panic!("unexpected secret metadata"),
     )
     .expect("quarantine import");
@@ -338,8 +377,8 @@ fn quarantine_import_uses_go_batch_id_shape_and_rejects_prefix() {
         &root,
         &identity,
         &conflicting,
-        |_, _, _, _| panic!("conflict must be rejected before writes"),
-        |_, _, _, _| panic!("unexpected replacement"),
+        |_, _, _, _, _| panic!("conflict must be rejected before writes"),
+        |_, _, _, _, _| panic!("unexpected replacement"),
         |_, _, _, _| panic!("unexpected secret metadata"),
     )
     .expect_err("quarantine and prefix conflict");

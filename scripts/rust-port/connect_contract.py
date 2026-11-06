@@ -14,7 +14,7 @@ import tempfile
 import threading
 import time
 
-from build_timeout import oracle_build_timeout, remove_worktree
+import go_observations_common as observations
 
 ROOT = Path(__file__).resolve().parents[2]
 ORACLE = "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
@@ -118,52 +118,39 @@ def inventory(paths, root):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--rust", type=Path, required=True)
-    parser.add_argument("--receipt", type=Path, required=True)
+    parser.add_argument("--rust", type=Path)
+    parser.add_argument("--receipt", type=Path)
     parser.add_argument("--allow-dirty-for-development", action="store_true")
     args = parser.parse_args()
+    assert args.rust and args.receipt, "--rust and --receipt are required"
     rust = args.rust.resolve()
     assert rust.is_file()
     clean = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()
     assert clean or args.allow_dirty_for_development
     sources = sorted(x for x in checked(["git", "ls-files", "--cached", "--others", "--exclude-standard"]).decode().splitlines()
-                     if x.startswith(("crates/", "third_party/", "testdata/", "internal/mcp/apitemplates/builtin/"))
+                     if x.startswith(("crates/", "third_party/", "testdata/"))
                      or x in {"Cargo.toml", "Cargo.lock", ".gitattributes", "scripts/rust-port/connect_contract.py", "scripts/rust-port/connect_contract_probe.go.txt", ".github/workflows/rust-broker-connect.yml"})
+    recorded = observations.load("connect-contract", oracle_commit=ORACLE)["observations"]
     with tempfile.TemporaryDirectory(prefix="symvault-connect-contract-") as raw:
         base = Path(raw)
-        tree = base / "oracle"
-        checked(["git", "worktree", "add", "--detach", tree, ORACLE])
-        try:
-            oracle_sources = sorted(x for x in checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
-                                    if x in {"go.mod", "go.sum"} or (x.endswith(".go") and not x.endswith("_test.go")))
-            oracle_digest = inventory(oracle_sources, tree)
-            embedded = sorted(x for x in checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
-                              if x.startswith("internal/mcp/apitemplates/builtin/"))
-            assert len(embedded) == 17
-            helper = tree / "scripts/rust-port/cmd/connectprobe"
-            helper.mkdir()
-            (helper / "main.go").write_bytes(PROBE.read_bytes())
-            go = base / ("go-probe.exe" if os.name == "nt" else "go-probe")
-            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "./scripts/rust-port/cmd/connectprobe"],
-                    cwd=tree, timeout=oracle_build_timeout())
-            observed = {"go": exercise(go, base / "go-home", True), "rust": exercise(rust, base / "rust-home", False)}
-            assert observed["go"] == observed["rust"]
-            receipt = {"passed": True, "oracle_commit": ORACLE, "oracle_source_files": oracle_sources,
-                       "oracle_source_digest": oracle_digest, "probe_sha256": hashlib.sha256(PROBE.read_bytes()).hexdigest(),
-                       "oracle_embedded_files": embedded, "oracle_embedded_digest": inventory(embedded, tree),
-                       "go_binary_sha256": hashlib.sha256(go.read_bytes()).hexdigest(),
-                       "rust_binary_sha256": hashlib.sha256(rust.read_bytes()).hexdigest(),
-                       "candidate_commit": checked(["git", "rev-parse", "HEAD"]).decode().strip(),
-                       "candidate_worktree_clean": clean, "candidate_source_files": sources,
-                       "candidate_source_digest": inventory(sources, ROOT),
-                       "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                       "native_os": platform.system(), "architecture": platform.machine(),
-                       "allow_private": "explicit controlled test seam; production CLI policy unchanged",
-                       "termination": "forced-test-child-stop; signal/drain-not-measured", **observed}
-            args.receipt.write_bytes((json.dumps(receipt, indent=2)+"\n").encode("utf-8"))
-            print(f"PASS: three actual native Go/Rust CONNECT cases on {platform.system()}")
-        finally:
-            remove_worktree(lambda: checked(["git", "worktree", "remove", "--force", tree]), "oracle worktree")
+        observed = {"go": recorded["go"], "rust": exercise(rust, base / "rust-home", False)}
+        observations.compare(observed["go"], observed["rust"], "connect-contract")
+        receipt = {"passed": True, "oracle_commit": ORACLE, "oracle_source_files": recorded["oracle_source_files"],
+                   "oracle_source_digest": recorded["oracle_source_digest"], "probe_sha256": recorded["probe_sha256"],
+                   "oracle_embedded_files": recorded["oracle_embedded_files"], "oracle_embedded_digest": recorded["oracle_embedded_digest"],
+                   "go_binary_sha256": recorded["go_binary_sha256"],
+                   "rust_binary_sha256": hashlib.sha256(rust.read_bytes()).hexdigest(),
+                   "candidate_commit": checked(["git", "rev-parse", "HEAD"]).decode().strip(),
+                   "candidate_worktree_clean": clean, "candidate_source_files": sources,
+                   "candidate_source_digest": inventory(sources, ROOT),
+                   "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                   "native_os": platform.system(), "architecture": platform.machine(),
+                   "allow_private": "explicit controlled test seam; production CLI policy unchanged",
+                   "termination": "forced-test-child-stop; signal/drain-not-measured",
+                   "go_observation": "replayed from scripts/rust-port/fixtures/go-observations/connect-contract.%s.json" % observations.host_goos(),
+                   **observed}
+        args.receipt.write_bytes((json.dumps(receipt, indent=2)+"\n").encode("utf-8"))
+        print(f"PASS: three recorded Go / live Rust CONNECT cases on {platform.system()}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,2195 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "oracle_commit": "1f965f6e56f2507b9183cf30b822f58f7badb951",
+    "oracle_build": "go1.26.10 CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 -trimpath -buildvcs=true (worktree detached at 1f965f6e)",
+    "oracle_binary_sha256": "a6c47be09d8b5213404f9b62d23b13ed93d469ff792a51bd1e8b667286d00ab6",
+    "generated_on": "darwin",
+    "generator": "crates/symvault-cli/tests/setup_wizard_differential.rs record_go_results",
+    "comparison": [
+      "exit code and signal of every run",
+      "every scripted screen reached (ok) and the screens that were not",
+      "text printed after the alternate-screen exit (stdout and stderr share the PTY), ANSI-stripped",
+      "sandbox file manifest: path, kind, mode, normalized text or size"
+    ],
+    "excluded": [
+      "TUI frames and every byte written inside the alternate screen",
+      "Go panic goroutine dump",
+      "Touch ID (no-cgo oracle cannot see biometrics)",
+      "git internals except HEAD and config; cwd and tmp",
+      "normalized: timestamps, token ids, hashes, prefixes, tool_registry_hash, age public keys, resume file name hashes, sandbox root"
+    ]
+  },
+  "vault_seed": [
+    {
+      "path": "",
+      "kind": "dir",
+      "mode": "700"
+    },
+    {
+      "path": ".git",
+      "kind": "dir",
+      "mode": "755"
+    },
+    {
+      "path": ".git/HEAD",
+      "kind": "file",
+      "mode": "644",
+      "text": "ref: refs/heads/master\n"
+    },
+    {
+      "path": ".git/config",
+      "kind": "file",
+      "mode": "644",
+      "text": "[core]\n\tbare = false\n"
+    },
+    {
+      "path": ".git/objects",
+      "kind": "dir",
+      "mode": "755"
+    },
+    {
+      "path": ".git/objects/info",
+      "kind": "dir",
+      "mode": "755"
+    },
+    {
+      "path": ".git/objects/pack",
+      "kind": "dir",
+      "mode": "755"
+    },
+    {
+      "path": ".git/refs",
+      "kind": "dir",
+      "mode": "755"
+    },
+    {
+      "path": ".git/refs/heads",
+      "kind": "dir",
+      "mode": "755"
+    },
+    {
+      "path": ".git/refs/tags",
+      "kind": "dir",
+      "mode": "755"
+    },
+    {
+      "path": ".gitignore",
+      "kind": "file",
+      "mode": "600",
+      "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+    },
+    {
+      "path": "config.yaml",
+      "kind": "file",
+      "mode": "600",
+      "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+    },
+    {
+      "path": "entries",
+      "kind": "dir",
+      "mode": "700"
+    },
+    {
+      "path": "identity.age",
+      "kind": "file",
+      "mode": "600",
+      "base64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIFFUc20vWHVucksxQ2psLzJDcjBoMFEgdD0zLG09NjU1MzYscD00Ck9OZ004TXdtQjI5T1dIdXZJY3orQUI5anNNV2RaaUQwMVZBbi92bklwL3pRM0MwckpvRS9ueHk1T3EwCi0tLSAvM0twRHAvMWo1Z3NaKzV2UGd0Qi9ZM3B6aGx3dWx2ZG1SSlprNXMvZ1lzCj1hn7BzjzAZ2qv2Xpql7rnmy2BqDBS7lNfnR92yg8k+H51MZ5KR+eJQWBtVS+5STEwtm+artI0KI5EB/WXGrrCRbEpFSY8TnPXcQT0pll985sRaduSw3WNWQ+4t6BH5DWZrCaxV6SunJnI="
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "happy",
+      "runs": [
+        {
+          "label": "run1",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 256
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "no_resume",
+      "runs": [
+        {
+          "label": "abort",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "\nSetup paused. Resume anytime with `symvault setup`.\nStart fresh instead: `symvault setup --no-resume`.\nError: setup canceled\nError: setup canceled\n"
+        },
+        {
+          "label": "no_resume",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 256
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "abort_resume",
+      "runs": [
+        {
+          "label": "abort",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "\nSetup paused. Resume anytime with `symvault setup`.\nStart fresh instead: `symvault setup --no-resume`.\nError: setup canceled\nError: setup canceled\n"
+        },
+        {
+          "label": "resume",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 256
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "abort_ctrlc",
+      "runs": [
+        {
+          "label": "ctrlc",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "\nSetup paused. Resume anytime with `symvault setup`.\nStart fresh instead: `symvault setup --no-resume`.\nError: setup canceled\nError: setup canceled\n"
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard/<RESUME>.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "vault_dir: <ROOT>/xdg/data/symaira-vault\nexisting_vault: false\nauth_method: \"\"\nsync_mode: local\ngit_remote_url: \"\"\nauto_push: true\nmulti_device: false\nbackup_dir: \"\"\nprofile_name: default\nkeep_on_error: false\nlast_step: Sync Strategy\n"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "abort_no_resume_flag",
+      "runs": [
+        {
+          "label": "abort_noresume",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "Error: setup canceled\nError: setup canceled\n"
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "esc_then_no",
+      "runs": [
+        {
+          "label": "esc",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "Error: setup canceled\nError: setup canceled\n"
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "bad_passphrase",
+      "runs": [
+        {
+          "label": "badpass",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 256
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "agent_fail",
+      "runs": [
+        {
+          "label": "agent_fail",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "Error: apply completed with errors — run `symvault doctor` for details\nError: apply completed with errors — run `symvault doctor` for details\n"
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/mcp-tokens.json": {
+          "kind": "file",
+          "mode": "600",
+          "text": "{\n  \"tokens\": [\n    {\n      \"agent_name\": \"legacy\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"created_at\": \"<TS>\",\n      \"hash\": \"<HASH>\",\n      \"id\": \"<TOKID>\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"prefix\": \"<PFX>\",\n      \"revoked\": false\n    }\n  ],\n  \"version\": 2\n}"
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "agent_fail_keep",
+      "runs": [
+        {
+          "label": "agent_fail_keep",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "Error: apply completed with errors — run `symvault doctor` for details\nError: apply completed with errors — run `symvault doctor` for details\n"
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 256
+        },
+        "xdg/data/symaira-vault/mcp-tokens.json": {
+          "kind": "file",
+          "mode": "600",
+          "text": "{\n  \"tokens\": [\n    {\n      \"agent_name\": \"legacy\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"created_at\": \"<TS>\",\n      \"hash\": \"<HASH>\",\n      \"id\": \"<TOKID>\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"prefix\": \"<PFX>\",\n      \"revoked\": false\n    }\n  ],\n  \"version\": 2\n}"
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "profile_custom",
+      "runs": [
+        {
+          "label": "profile",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/config/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nprofiles:\n    work:\n        vault: <ROOT>/xdg/data/symaira-vault\n"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 256
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "profile_invalid",
+      "runs": [
+        {
+          "label": "profile_invalid",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/config/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nprofiles:\n    ok:\n        vault: <ROOT>/xdg/data/symaira-vault\n"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 256
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "git_sync",
+      "runs": [
+        {
+          "label": "git_sync",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "Caught panic:\n\nruntime error: invalid memory address or nil pointer dereference\n\nRestoring terminal...\n\nError: wizard: program was killed: program experienced a panic\nError: wizard: program was killed: program experienced a panic\n"
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard/<RESUME>.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "vault_dir: <ROOT>/xdg/data/symaira-vault\nexisting_vault: false\nauth_method: \"\"\nsync_mode: git\ngit_remote_url: https://example.invalid/v.git\nauto_push: true\nmulti_device: false\nbackup_dir: \"\"\nprofile_name: default\nkeep_on_error: false\nlast_step: Profile Name\n"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/.git": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault/.git/HEAD": {
+          "kind": "file",
+          "mode": "644",
+          "text": "ref: refs/heads/master\n"
+        },
+        "xdg/data/symaira-vault/.git/config": {
+          "kind": "file",
+          "mode": "644",
+          "text": "[core]\n\tbare = false\n[remote \"origin\"]\n\turl = https://example.invalid/v.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+        },
+        "xdg/data/symaira-vault/.gitignore": {
+          "kind": "file",
+          "mode": "600",
+          "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 256
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "git_multidevice",
+      "runs": [
+        {
+          "label": "git_md",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "Caught panic:\n\nruntime error: invalid memory address or nil pointer dereference\n\nRestoring terminal...\n\nError: wizard: program was killed: program experienced a panic\nError: wizard: program was killed: program experienced a panic\n"
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard/<RESUME>.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "vault_dir: <ROOT>/xdg/data/symaira-vault\nexisting_vault: false\nauth_method: \"\"\nsync_mode: git\ngit_remote_url: git@example.invalid:me/v.git\nauto_push: false\nmulti_device: true\nbackup_dir: \"\"\nprofile_name: default\nkeep_on_error: false\nlast_step: Profile Name\n"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/.git": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault/.git/HEAD": {
+          "kind": "file",
+          "mode": "644",
+          "text": "ref: refs/heads/master\n"
+        },
+        "xdg/data/symaira-vault/.git/config": {
+          "kind": "file",
+          "mode": "644",
+          "text": "[core]\n\tbare = false\n[remote \"origin\"]\n\turl = git@example.invalid:me/v.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+        },
+        "xdg/data/symaira-vault/.gitignore": {
+          "kind": "file",
+          "mode": "600",
+          "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 256
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "go_back",
+      "runs": [
+        {
+          "label": "go_back",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 256
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "summary_cancel",
+      "runs": [
+        {
+          "label": "summary_cancel",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "\nSetup paused. Resume anytime with `symvault setup`.\nStart fresh instead: `symvault setup --no-resume`.\nError: setup canceled\nError: setup canceled\n"
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard/<RESUME>.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "vault_dir: <ROOT>/xdg/data/symaira-vault\nexisting_vault: false\nauth_method: \"\"\nsync_mode: local\ngit_remote_url: \"\"\nauto_push: true\nmulti_device: false\nbackup_dir: \"\"\nprofile_name: default\nkeep_on_error: false\nlast_step: Profile Name\n"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "existing_vault",
+      "runs": [
+        {
+          "label": "first",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        },
+        {
+          "label": "reconfigure",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/config/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nprofiles:\n    second:\n        vault: <ROOT>/xdg/data/symaira-vault\n"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 256
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "existing_agent_fail",
+      "runs": [
+        {
+          "label": "first",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        },
+        {
+          "label": "reconfigure_agentfail",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "Error: apply completed with errors — run `symvault doctor` for details\nError: apply completed with errors — run `symvault doctor` for details\n"
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 256
+        },
+        "xdg/data/symaira-vault/mcp-tokens.json": {
+          "kind": "file",
+          "mode": "600",
+          "text": "{\n  \"tokens\": [\n    {\n      \"agent_name\": \"legacy\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"created_at\": \"<TS>\",\n      \"hash\": \"<HASH>\",\n      \"id\": \"<TOKID>\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"prefix\": \"<PFX>\",\n      \"revoked\": false\n    }\n  ],\n  \"version\": 2\n}"
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "vault_path_custom",
+      "runs": [
+        {
+          "label": "vpath",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard/<RESUME>.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "vault_dir: <ROOT>/xdg/data/symaira-vault\nexisting_vault: false\nauth_method: \"\"\nsync_mode: \"\"\ngit_remote_url: \"\"\nauto_push: false\nmulti_device: false\nbackup_dir: \"\"\nprofile_name: default\nkeep_on_error: false\nlast_step: Welcome\n"
+        },
+        "home/my vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/my vault/v1": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/my vault/v1/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/home/my vault/v1\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\n"
+        },
+        "home/my vault/v1/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/my vault/v1/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 256
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "existing_git_recipients_ctrl_s",
+      "runs": [
+        {
+          "label": "existing_git_ctrl_s",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/config/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nprofiles:\n    work:\n        vault: <ROOT>/xdg/data/symaira-vault\n"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/.git": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault/.git/HEAD": {
+          "kind": "file",
+          "mode": "644",
+          "text": "ref: refs/heads/master\n"
+        },
+        "xdg/data/symaira-vault/.git/config": {
+          "kind": "file",
+          "mode": "644",
+          "text": "[core]\n\tbare = false\n[remote \"origin\"]\n\turl = https://example.invalid/v.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+        },
+        "xdg/data/symaira-vault/.gitignore": {
+          "kind": "file",
+          "mode": "600",
+          "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 287
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "existing_git_recipients_enter",
+      "runs": [
+        {
+          "label": "existing_git_enter",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/config/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nprofiles:\n    work:\n        vault: <ROOT>/xdg/data/symaira-vault\n"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/.git": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault/.git/HEAD": {
+          "kind": "file",
+          "mode": "644",
+          "text": "ref: refs/heads/master\n"
+        },
+        "xdg/data/symaira-vault/.git/config": {
+          "kind": "file",
+          "mode": "644",
+          "text": "[core]\n\tbare = false\n[remote \"origin\"]\n\turl = https://example.invalid/v.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+        },
+        "xdg/data/symaira-vault/.gitignore": {
+          "kind": "file",
+          "mode": "600",
+          "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 287
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "existing_git_default",
+      "runs": [
+        {
+          "label": "existing_git_default",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/config/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/.git": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault/.git/HEAD": {
+          "kind": "file",
+          "mode": "644",
+          "text": "ref: refs/heads/master\n"
+        },
+        "xdg/data/symaira-vault/.git/config": {
+          "kind": "file",
+          "mode": "644",
+          "text": "[core]\n\tbare = false\n[remote \"origin\"]\n\turl = ssh://git@example.invalid/v.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+        },
+        "xdg/data/symaira-vault/.gitignore": {
+          "kind": "file",
+          "mode": "600",
+          "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 287
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "http_agent_resume",
+      "runs": [
+        {
+          "label": "abort",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "\nSetup paused. Resume anytime with `symvault setup`.\nStart fresh instead: `symvault setup --no-resume`.\nError: setup canceled\nError: setup canceled\n"
+        },
+        {
+          "label": "resume_http_agent",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "Error: apply completed with errors — run `symvault doctor` for details\nError: apply completed with errors — run `symvault doctor` for details\n"
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/.git": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault/.git/HEAD": {
+          "kind": "file",
+          "mode": "644",
+          "text": "ref: refs/heads/master\n"
+        },
+        "xdg/data/symaira-vault/.git/config": {
+          "kind": "file",
+          "mode": "644",
+          "text": "[core]\n\tbare = false\n"
+        },
+        "xdg/data/symaira-vault/.gitignore": {
+          "kind": "file",
+          "mode": "600",
+          "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 287
+        },
+        "xdg/data/symaira-vault/mcp-tokens.json": {
+          "kind": "file",
+          "mode": "600",
+          "text": "{\n  \"tokens\": [\n    {\n      \"agent_name\": \"claude-code\",\n      \"allowed_tools\": [\n        \"get\",\n        \"list\",\n        \"find\"\n      ],\n      \"created_at\": \"<TS>\",\n      \"hash\": \"<HASH>\",\n      \"id\": \"<TOKID>\",\n      \"label\": \"claude-code\",\n      \"prefix\": \"<PFX>\",\n      \"revoked\": false,\n      \"tool_registry_hash\": \"<REGISTRY-HASH>\"\n    },\n    {\n      \"agent_name\": \"legacy\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"created_at\": \"<TS>\",\n      \"hash\": \"<HASH>\",\n      \"id\": \"<TOKID>\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"prefix\": \"<PFX>\",\n      \"revoked\": false\n    }\n  ],\n  \"version\": 2\n}"
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "stale_resume",
+      "runs": [
+        {
+          "label": "abort",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "\nSetup paused. Resume anytime with `symvault setup`.\nStart fresh instead: `symvault setup --no-resume`.\nError: setup canceled\nError: setup canceled\n"
+        },
+        {
+          "label": "stale_then_fresh",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 256
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "corrupt_resume",
+      "runs": [
+        {
+          "label": "abort",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "\nSetup paused. Resume anytime with `symvault setup`.\nStart fresh instead: `symvault setup --no-resume`.\nError: setup canceled\nError: setup canceled\n"
+        },
+        {
+          "label": "corrupt_then_fresh",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 256
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "resume_no",
+      "runs": [
+        {
+          "label": "abort",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "\nSetup paused. Resume anytime with `symvault setup`.\nStart fresh instead: `symvault setup --no-resume`.\nError: setup canceled\nError: setup canceled\n"
+        },
+        {
+          "label": "resume_no",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 256
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "preflight_failure",
+      "runs": [
+        {
+          "label": "abort",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "\nSetup paused. Resume anytime with `symvault setup`.\nStart fresh instead: `symvault setup --no-resume`.\nError: setup canceled\nError: setup canceled\n"
+        },
+        {
+          "label": "preflight",
+          "ok": true,
+          "exit_code": 1,
+          "signal": null,
+          "failed": [],
+          "post_tui": "\nSetup paused. Resume anytime with `symvault setup`.\nStart fresh instead: `symvault setup --no-resume`.\nError: setup canceled\nError: setup canceled\n"
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard/<RESUME>.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "vault_dir: <ROOT>/xdg/data/symaira-vault\nexisting_vault: true\nauth_method: \"\"\nsync_mode: git\ngit_remote_url: \"\"\nauto_push: true\nmulti_device: true\nrecipients:\n    - age1short\nbackup_dir: \"\"\nprofile_name: default\nkeep_on_error: false\nlast_step: Profile Name\n"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/.git": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data/symaira-vault/.git/HEAD": {
+          "kind": "file",
+          "mode": "644",
+          "text": "ref: refs/heads/master\n"
+        },
+        "xdg/data/symaira-vault/.git/config": {
+          "kind": "file",
+          "mode": "644",
+          "text": "[core]\n\tbare = false\n"
+        },
+        "xdg/data/symaira-vault/.gitignore": {
+          "kind": "file",
+          "mode": "600",
+          "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+        },
+        "xdg/data/symaira-vault/config.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT>/xdg/data/symaira-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+        },
+        "xdg/data/symaira-vault/entries": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "xdg/data/symaira-vault/identity.age": {
+          "kind": "file",
+          "mode": "600",
+          "size": 287
+        }
+      },
+      "go_opens_vault": {}
+    },
+    {
+      "name": "vault_init_failure",
+      "runs": [
+        {
+          "label": "init_failure",
+          "ok": true,
+          "exit_code": 0,
+          "signal": null,
+          "failed": [],
+          "post_tui": ""
+        }
+      ],
+      "manifest": {
+        "home": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/Library": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard": {
+          "kind": "dir",
+          "mode": "700"
+        },
+        "home/Library/Caches/symaira/wizard/<RESUME>.yaml": {
+          "kind": "file",
+          "mode": "600",
+          "text": "vault_dir: <ROOT>/xdg/data/symaira-vault\nexisting_vault: false\nauth_method: \"\"\nsync_mode: \"\"\ngit_remote_url: \"\"\nauto_push: false\nmulti_device: false\nbackup_dir: \"\"\nprofile_name: default\nkeep_on_error: false\nlast_step: Welcome\n"
+        },
+        "home/vv": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "home/vv/entries": {
+          "kind": "file",
+          "mode": "644",
+          "text": "x"
+        },
+        "xdg": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/cache": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/config": {
+          "kind": "dir",
+          "mode": "755"
+        },
+        "xdg/data": {
+          "kind": "dir",
+          "mode": "755"
+        }
+      },
+      "go_opens_vault": {}
+    }
+  ]
+}

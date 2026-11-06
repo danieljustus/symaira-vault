@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""CLI-007: real Go/Rust signal behavior of `broker`, `run`, `run --broker`, `intake watch`.
+"""CLI-007: real Go/Rust signal behavior of `broker`, `run`, `run --broker`, `intake watch`,
+`mcp --stdio --allow-locked` and the `ui` terminal UI (under a pseudo-terminal).
 
 Unix only. Signals are delivered to real child processes in disposable HOME /
 XDG / TMPDIR roots with a memory keyring and a synthetic passphrase. Windows
@@ -9,30 +10,47 @@ running this driver on Windows fails closed instead of passing vacuously.
 
 Each observation records how the process ended (exit status or killing signal),
 stdout/stderr, whether a listener or an orphaned child survived, and the
-on-disk names left under HOME (including a private TMPDIR). The Go oracle is
-built from ORACLE; Rust must produce the same observation. The one documented
+on-disk names left under HOME (including a private TMPDIR). The Go side is
+replayed from the committed observation (recorded from ORACLE; no Go is run); Rust must produce the same observation. The one documented
 difference is Go's persistent <vault>/broker-ca.pem, which Rust replaces with a
 per-instance temporary CA directory that must not survive any catchable signal.
+
+Go-only oracle records (`go_only`, not compared against Rust): a stdio `mcp` server and the
+`ui` terminal UI (PTY, Enter copies the selected entry) and an HTTP `mcp` server (copy over
+HTTP; also with SIGHUP inherited as SIG_IGN) with an armed clipboard auto-clear timer. The Rust leg would need the real macOS pasteboard (`/usr/bin/pbcopy` is the only
+lookup), so the Rust side is carried by injected-clipboard process tests:
+`approval::tests::stdio_armed_clipboard_signal_clears_and_requests_shutdown` (mcp) and
+`tui::tests::ui_signal_with_held_copy_process_contract` (ui) and
+`mcp_shutdown::tests::http_sighup_follows_the_armed_clipboard_timer` plus
+`http_signal_shutdown_clears_an_armed_clipboard` (HTTP; Makefile target
+`signal-process-contract` runs them). Go runs against fake pasteboard tools on a PATH that
+cannot reach the real ones. Declared Rust-safer differences: SIGQUIT clears an armed
+clipboard (Go has no SIGQUIT in its auto-clear subscription and leaves the secret), in `ui`
+and in stdio `mcp`; a `ui` copy kept until quit (duration 0) is cleared before a SIGHUP death.
 """
 import argparse
 import hashlib
-import io
 import json
 import os
 from pathlib import Path
 import platform
+import pty
 import re
+import select
 import shutil
 import signal
 import socket
 import subprocess
 import sys
-import tarfile
 import tempfile
+import termios
 import threading
 import time
 
+import go_observations_common as observations
+
 ROOT = Path(__file__).resolve().parents[2]
+SEED = ROOT / "scripts/rust-port/http_process_seed.go.txt"
 ORACLE = "45b8577e01ce1826e312ed970d0fc01a3a9b6e17"
 PASSPHRASE = "correct horse battery staple"
 CA_NAME = "broker-ca.pem"
@@ -58,7 +76,34 @@ GO_EXPECTED = {
     ("run", "SIGHUP"): ("signal", signal.SIGHUP), ("run", "SIGQUIT"): ("exit", 2),
     ("run-broker", "SIGINT"): ("signal", signal.SIGINT), ("run-broker", "SIGTERM"): ("signal", signal.SIGTERM),
     ("run-broker", "SIGHUP"): ("signal", signal.SIGHUP), ("run-broker", "SIGQUIT"): ("exit", 2),
+    # `mcp --stdio --allow-locked`: `serve` subscribes SIGINT/SIGTERM/SIGQUIT before it branches on the vault.
+    ("mcp-locked", "SIGINT"): ("exit", 0), ("mcp-locked", "SIGTERM"): ("exit", 0),
+    ("mcp-locked", "SIGHUP"): ("signal", signal.SIGHUP), ("mcp-locked", "SIGQUIT"): ("exit", 0),
+    # `ui` (bubbletea): SIGTERM quits, an external SIGINT fails with `program was interrupted`.
+    ("ui", "SIGINT"): ("exit", 1), ("ui", "SIGTERM"): ("exit", 0),
+    ("ui", "SIGHUP"): ("signal", signal.SIGHUP), ("ui", "SIGQUIT"): ("exit", 2),
 }
+# Terminal state after `ui` ended: bubbletea restores the terminal and leaves the alternate
+# screen on SIGTERM and SIGINT; SIGHUP and SIGQUIT end the Go runtime and leave it raw.
+GO_EXPECTED_UI_TERMINAL = {"SIGINT": True, "SIGTERM": True, "SIGHUP": False, "SIGQUIT": False}
+UI_INTERRUPTED = "Error: ui failed: program was killed: program was interrupted\n"
+LOCKED_WARNING = "Vault is locked; starting MCP server in read-only mode. Run 'symvault unlock' to enable vault tools.\n"
+ALT_SCREEN_ON, ALT_SCREEN_OFF = b"\x1b[?1049h", b"\x1b[?1049l"
+INITIALIZE = (b'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25",'
+              b'"clientInfo":{"name":"signals","version":"1"},"capabilities":{}}}\n')
+# Fake pasteboard tools for the Go-only clipboard observation: every name atotto/clipboard can
+# resolve, writing to a file next to the script. `events` records `secret`/`clear` per write.
+FAKE_CLIPBOARD = '''#!/bin/sh
+d="${0%/*}"
+case "${0##*/}" in
+ pbpaste|wl-paste) cat "$d/clip.txt" 2>/dev/null; exit 0;;
+esac
+for a in "$@"; do case "$a" in -out|-o|--output) cat "$d/clip.txt" 2>/dev/null; exit 0;; esac; done
+cat > "$d/clip.txt"
+if [ -s "$d/clip.txt" ]; then echo secret >> "$d/events"; else echo clear >> "$d/events"; fi
+'''
+FAKE_CLIPBOARD_TOOLS = ("pbcopy", "pbpaste", "xclip", "xsel", "wl-copy", "wl-paste")
+CLIPBOARD_SECRET = "s3cret-value-12345"
 
 # Dispositions inherited as SIG_IGN (a parent such as nohup or a job-control-free
 # supervisor). Go 1.26 runtime/signal_unix.go sigInstallGoHandler keeps the
@@ -119,12 +164,12 @@ def ignoring(argv, names):
 class Proc:
     """A child with pipe readers, so a dead or orphan-holding child never blocks the driver."""
 
-    def __init__(self, args, home, new_session=False, ignore=()):
+    def __init__(self, args, home, new_session=False, ignore=(), stdin=subprocess.DEVNULL, env=None):
         self.home = home
         ignore = tuple(ignore)
         self.out, self.err = bytearray(), bytearray()
-        self.popen = subprocess.Popen(ignoring([str(x) for x in args], ignore), cwd=home, env=isolated(home),
-                                      stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        self.popen = subprocess.Popen(ignoring([str(x) for x in args], ignore), cwd=home, env=env or isolated(home),
+                                      stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                       start_new_session=new_session)
         self.threads = [threading.Thread(target=self._pump, args=(stream, sink), daemon=True)
                         for stream, sink in ((self.popen.stdout, self.out), (self.popen.stderr, self.err))]
@@ -149,13 +194,18 @@ class Proc:
         except subprocess.TimeoutExpired:
             self.popen.kill()
             self.popen.wait()
-            raise AssertionError("process did not stop after the signal")
+            raise AssertionError(("process did not stop after the signal", self.popen.args[-3:], bytes(self.err)[-300:]))
         finally:
             for thread in self.threads:
                 thread.join(timeout=3)
         return self.popen.returncode
 
     def kill(self):
+        if self.popen.stdin is not None and not self.popen.stdin.closed:
+            try:
+                self.popen.stdin.close()
+            except OSError:
+                pass
         if self.popen.poll() is None:
             self.popen.kill()
             self.popen.wait()
@@ -183,8 +233,10 @@ def ending(returncode):
 # implementation (Go also creates .lock and manifest.age on open). Anything
 # else at the vault top level, and every name outside the vault, is
 # signal-relevant state: private TMPDIR files, CA directories, staging.
-VAULT_BASELINE = {".git", ".gitignore", ".lock", ".symvault-migrated", "config.yaml", "entries",
-                  "identity.age", "manifest.age"}
+# `.symvault-rust` is the declared D1 artifact (data-safety gate marker): a Rust
+# run marks the Go-created vault before its first mutation; Go leaves none.
+VAULT_BASELINE = {".git", ".gitignore", ".lock", ".symvault-migrated", ".symvault-rust", "config.yaml",
+                  "entries", "identity.age", "manifest.age"}
 
 
 def snapshot(home):
@@ -193,6 +245,10 @@ def snapshot(home):
     for path in home.rglob("*"):
         parts = path.relative_to(home).parts
         if parts in {("child.py",), ("child.pid",)}:
+            continue
+        # Declared D1 artifact: the data-safety backup of a Go-created vault lands in
+        # $HOME/.local/state/symvault/backups (and the dirs created for it).
+        if parts in {(".local",), (".local", "state")} or parts[:3] == (".local", "state", "symvault"):
             continue
         if parts[0] == "vault" and (len(parts) > 2 or (len(parts) == 2 and parts[1] in VAULT_BASELINE)):
             continue
@@ -238,13 +294,14 @@ def new_home(base, template, name):
     return home
 
 
-def case_record(name, command, sig, proc, home, **extra):
+def case_record(name, command, sig, proc, home, graceful_quit=False, **extra):
     stderr = normal(bytes(proc.err), home)
     record = dict(case=name, command=command, signal=sig, ending=ending(proc.popen.returncode),
                   stdout=normal(bytes(proc.out), home),
                   # Go's SIGQUIT goroutine dump is runtime-specific and unbounded;
-                  # the exit status 2 and on-disk state are compared instead.
-                  stderr="<not compared: Go SIGQUIT goroutine dump>" if sig == "SIGQUIT" else stderr,
+                  # the exit status 2 and on-disk state are compared instead. `mcp`
+                  # handles SIGQUIT itself and prints one fixed line, which is compared.
+                  stderr="<not compared: Go SIGQUIT goroutine dump>" if sig == "SIGQUIT" and not graceful_quit else stderr,
                   state=snapshot(home))
     record.update(extra)
     return record
@@ -289,12 +346,6 @@ def foreground_case(binary, base, template, command, sig, ignored=False):
     finally:
         proc.kill()
     return record
-
-
-# A bounded run (--timeout) keeps the child in its own process group so a
-# timeout can kill the tree (#1199); a terminal Ctrl-C therefore does not reach
-# that child, unlike Go. Recorded and asserted so the exemption cannot go stale.
-KNOWN_DIVERGENCES = {"run-timeout-group-sigint": "Rust bounded run isolates the child in its own process group"}
 
 
 def run_case(binary, base, template, command, sig, group, extra=(), label="", ignored=False):
@@ -348,6 +399,131 @@ def run_case(binary, base, template, command, sig, group, extra=(), label="", ig
     return record
 
 
+def locked_case(binary, base, template, sig):
+    """`mcp --stdio --allow-locked --agent cli` with a locked vault, stdin held open.
+
+    Go subscribes SIGINT/SIGTERM/SIGQUIT in `serve` before it looks at the vault, so the
+    locked server shuts down like an unlocked one and clears the runtime records.
+    """
+    name = f"mcp-locked-{sig.lower()}"
+    home = new_home(base, template, name)
+    (home / "vault" / ".runtime-port").write_text('{"port":1,"bind":"127.0.0.1"}')
+    env = isolated(home)
+    for key in ("SYMVAULT_PASSPHRASE", "SYMVAULT_ALLOW_ENV_PASSPHRASE"):
+        env.pop(key)
+    proc = Proc([binary, "mcp", "--stdio", "--allow-locked", "--agent", "cli"], home, stdin=subprocess.PIPE, env=env)
+    try:
+        # A reply to `initialize` proves the stdio loop runs, which is after signal installation.
+        proc.popen.stdin.write(INITIALIZE)
+        proc.popen.stdin.flush()
+        proc.wait_for_output(b'"result"')
+        assert LOCKED_WARNING.encode() in bytes(proc.err), "control: the vault must be locked"
+        assert proc.popen.poll() is None, "control: process must run until signalled"
+        proc.popen.send_signal(getattr(signal, sig))
+        proc.finish()
+        record = case_record(name, "mcp-locked", sig, proc, home, graceful_quit=True)
+    finally:
+        proc.kill()
+    return record
+
+
+def read_pty(master, sink, seconds):
+    """Collect terminal output for up to `seconds`; answer cursor-position queries like a terminal."""
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        try:
+            ready, _, _ = select.select([master], [], [], 0.05)
+            if ready:
+                chunk = os.read(master, 65536)
+                if not chunk:
+                    return
+                sink.extend(chunk)
+                if b"\x1b[6n" in chunk:
+                    os.write(master, b"\x1b[1;1R")
+        except OSError:  # the slave side is gone
+            return
+
+
+def ui_case(binary, base, template, sig):
+    """`ui` on a pseudo-terminal; records the ending, stderr and whether the terminal was restored."""
+    name = f"ui-{sig.lower()}"
+    home = new_home(base, template, name)
+    env = isolated(home)
+    env["TERM"] = "xterm-256color"
+    master, slave = pty.openpty()
+    screen = bytearray()
+    popen = subprocess.Popen([str(binary), "ui"], cwd=home, env=env, stdin=slave, stdout=slave,
+                             stderr=subprocess.PIPE, start_new_session=True)
+    os.close(slave)
+    err = bytearray()
+    pump = threading.Thread(target=lambda: err.extend(popen.stderr.read()), daemon=True)
+    pump.start()
+    try:
+        deadline = time.monotonic() + 30
+        while ALT_SCREEN_ON not in screen:
+            assert popen.poll() is None, ("ui exited before ready", bytes(err)[-500:])
+            assert time.monotonic() < deadline, "ui never entered the alternate screen"
+            read_pty(master, screen, 0.2)
+        read_pty(master, screen, 0.5)  # let the first frame settle; handlers are installed before it
+        raw = termios.tcgetattr(master)[3]
+        assert not raw & termios.ICANON and not raw & termios.ECHO, "control: ui must run in raw mode"
+        assert popen.poll() is None, "control: ui must run until signalled"
+        popen.send_signal(getattr(signal, sig))
+        deadline = time.monotonic() + 15
+        while popen.poll() is None and time.monotonic() < deadline:
+            read_pty(master, screen, 0.1)
+        assert popen.poll() is not None, "ui did not stop after the signal"
+        read_pty(master, screen, 0.3)
+        pump.join(timeout=3)
+        cooked = termios.tcgetattr(master)[3]
+        record = dict(case=name, command="ui", signal=sig, ending=ending(popen.returncode), stdout="",
+                      stderr="<not compared: Go SIGQUIT goroutine dump>" if sig == "SIGQUIT" else normal(bytes(err), home),
+                      terminal_restored=bool(cooked & termios.ICANON and cooked & termios.ECHO),
+                      alt_screen_left=ALT_SCREEN_OFF in screen, state=snapshot(home))
+    finally:
+        if popen.poll() is None:
+            popen.kill()
+            popen.wait()
+        os.close(master)
+    return record
+
+
+HTTP_BINDING_MARKER = b"without TLS; bearer tokens travel in cleartext"
+HTTP_CLIPBOARD_CASES = (  # (armed copy, signal, SIGHUP inherited as SIG_IGN)
+    (True, "SIGINT", False), (True, "SIGTERM", False), (True, "SIGHUP", False),
+    (False, "SIGHUP", False), (True, "SIGHUP", True), (False, "SIGHUP", True),
+)
+
+
+GO_EXPECTED_CLIPBOARD = {  # (serving after the signal, ending when it stopped)
+    "SIGINT": (False, ["exit", 0]), "SIGTERM": (False, ["exit", 0]), "SIGHUP": (True, None),
+}
+# `ui` with an armed copy: (serving after the signal, ending, ending after a second SIGHUP, events).
+# SIGQUIT is not part of Go's auto-clear subscription, so Go leaves the secret on the clipboard.
+GO_EXPECTED_UI_CLIPBOARD = {
+    "SIGINT": (False, ["exit", 1], None, ["secret", "clear"]),
+    "SIGTERM": (False, ["exit", 0], None, ["secret", "clear"]),
+    "SIGHUP": (True, None, ["signal", signal.SIGHUP], ["secret", "clear"]),
+    "SIGQUIT": (False, ["exit", 2], None, ["secret"]),
+}
+# HTTP `mcp` (real Go process): (armed copy, signal, SIGHUP inherited as SIG_IGN) ->
+# (serving after the signal, ending when it stopped, ending after a second SIGHUP, ending after the
+# follow-up SIGTERM, fake-tool event logs that are acceptable). Go exits 0 on SIGINT/SIGTERM
+# usually before its timer's clear reaches the tool (13 of 14 measured runs), so both logs are
+# acceptable there; Rust always clears (declared Rust-safer difference). SIGHUP is subscribed by
+# the armed timer only: it clears and the server keeps serving, nothing armed it kills the process
+# by the signal, and an inherited SIG_IGN is overridden while armed and back in force afterwards.
+SECRET, SECRET_CLEAR = ["secret"], ["secret", "clear"]
+GO_EXPECTED_HTTP_CLIPBOARD = {
+    (True, "SIGINT", False): (False, ["exit", 0], None, None, (SECRET, SECRET_CLEAR)),
+    (True, "SIGTERM", False): (False, ["exit", 0], None, None, (SECRET, SECRET_CLEAR)),
+    (True, "SIGHUP", False): (True, None, ["signal", signal.SIGHUP], None, (SECRET_CLEAR,)),
+    (False, "SIGHUP", False): (False, ["signal", signal.SIGHUP], None, None, ([],)),
+    (True, "SIGHUP", True): (True, None, None, ["exit", 0], (SECRET_CLEAR,)),
+    (False, "SIGHUP", True): (True, None, None, ["exit", 0], ([],)),
+}
+
+
 def exercise(binary, base, template):
     binary = Path(binary)
     records = []
@@ -365,28 +541,41 @@ def exercise(binary, base, template):
             records.append(foreground_case(binary, base, template, command, sig, ignored=True))
         else:
             records.append(run_case(binary, base, template, command, sig, False, ignored=True))
+    for sig in KILLING:
+        records.append(locked_case(binary, base, template, sig))
+    for sig in KILLING:
+        records.append(ui_case(binary, base, template, sig))
     return records
 
 
-def compare(go, rust):
-    """Raise AssertionError on the first observable difference."""
-    assert [r["case"] for r in go] == [r["case"] for r in rust], "different case lists"
-    for left, right in zip(go, rust):
-        name = left["case"]
-        keys = ["ending", "stdout", "stderr", "listener_closed", "orphaned_child_alive",
-                "ignored", "survived", "listener_open_after_ignored_signal"]
-        if name in KNOWN_DIVERGENCES:
-            assert (left["orphaned_child_alive"], right["orphaned_child_alive"]) == (False, True), \
-                (name, "known divergence changed; remove the exemption", left["orphaned_child_alive"], right["orphaned_child_alive"])
-            keys.remove("orphaned_child_alive")
-        for key in keys:
-            assert left.get(key) == right.get(key), (name, key, left.get(key), right.get(key))
-        go_state, rust_state = list(left["state"]), list(right["state"])
-        if left["command"].startswith(("broker", "run-broker")):
-            # Documented difference: Go leaves its persistent public CA file in the vault.
-            go_state = [n for n in go_state if n != f"vault/{CA_NAME}"]
-        assert go_state == rust_state, (name, "on-disk state", go_state, rust_state)
-        assert not any(".broker-ca-" in n for n in right["state"]), (name, "temporary CA left behind", right["state"])
+def check_go_only(records):
+    """The Go clipboard records must show clear-then-shutdown (SIGINT/SIGTERM) or clear-and-serve (SIGHUP)."""
+    mcp = [r for r in records if r["command"] == "mcp-clipboard-armed"]
+    ui = [r for r in records if r["command"] == "ui-clipboard-armed"]
+    http = [r for r in records if r["command"] == "mcp-http-clipboard"]
+    assert len(mcp) + len(ui) + len(http) == len(records), ("go_only commands", [r["case"] for r in records])
+    assert [(r["armed"], r["signal"], r["ignored"]) for r in http] == list(GO_EXPECTED_HTTP_CLIPBOARD), \
+        ("go_only http cases", [r["case"] for r in http])
+    assert [r["signal"] for r in mcp] == list(GO_EXPECTED_CLIPBOARD), ("go_only mcp cases", [r["case"] for r in mcp])
+    assert [r["signal"] for r in ui] == list(GO_EXPECTED_UI_CLIPBOARD), ("go_only ui cases", [r["case"] for r in ui])
+    for record in mcp:
+        serving, final = GO_EXPECTED_CLIPBOARD[record["signal"]]
+        assert record["serving_after_signal"] is serving, ("oracle drifted: clipboard signal", record)
+        assert record["ending"] == final, ("oracle drifted: clipboard signal", record)
+        assert record["clipboard_events"] == ["secret", "clear"], ("oracle drifted: clipboard clear", record)
+    for record in ui:
+        serving, final, second, events = GO_EXPECTED_UI_CLIPBOARD[record["signal"]]
+        assert record["serving_after_signal"] is serving, ("oracle drifted: ui clipboard signal", record)
+        assert record["ending"] == final, ("oracle drifted: ui clipboard signal", record)
+        assert record["second_ending"] == second, ("oracle drifted: ui second SIGHUP", record)
+        assert record["clipboard_events"] == events, ("oracle drifted: ui clipboard clear", record)
+    for record in http:
+        serving, final, second, after, events = GO_EXPECTED_HTTP_CLIPBOARD[(record["armed"], record["signal"], record["ignored"])]
+        assert record["serving_after_signal"] is serving, ("oracle drifted: http clipboard signal", record)
+        assert record["ending"] == final, ("oracle drifted: http clipboard signal", record)
+        assert record["second_ending"] == second, ("oracle drifted: http second SIGHUP", record)
+        assert record["final_ending"] == after, ("oracle drifted: http follow-up SIGTERM", record)
+        assert record["clipboard_events"] in events, ("oracle drifted: http clipboard clear", record)
 
 
 def check_oracle_expectations(go):
@@ -401,67 +590,81 @@ def check_oracle_expectations(go):
                 assert record["listener_open_after_ignored_signal"] is True, ("listener must survive", key)
         elif key in GO_EXPECTED:
             assert record["ending"] == list(GO_EXPECTED[key]), ("oracle drifted", key, record["ending"])
+        if record["command"] == "mcp-locked":
+            assert record["state"].count("vault/.runtime-port") == (record["signal"] == "SIGHUP"), \
+                ("Go clears the runtime port record on a handled signal only", record["case"], record["state"])
+            quit_line = "Received SIGQUIT, shutting down gracefully...\n"
+            assert record["stderr"] == LOCKED_WARNING + (quit_line if record["signal"] == "SIGQUIT" else ""), \
+                ("oracle drifted: locked stderr", record["case"], record["stderr"])
+        if record["command"] == "ui":
+            assert record["terminal_restored"] is GO_EXPECTED_UI_TERMINAL[record["signal"]], ("oracle drifted: terminal", record["case"])
+            assert record["alt_screen_left"] is GO_EXPECTED_UI_TERMINAL[record["signal"]], ("oracle drifted: alt screen", record["case"])
+            if record["signal"] == "SIGINT":
+                assert record["stderr"] == UI_INTERRUPTED * 2, ("oracle drifted: ui interrupt message", record["stderr"])
+            elif record["signal"] != "SIGQUIT":
+                assert record["stderr"] == "", ("oracle drifted: ui stderr", record["case"], record["stderr"])
         if record["command"] in ("broker", "run-broker") and "group" not in record["case"]:
             assert record["state"].count(f"vault/{CA_NAME}") == 1, ("Go keeps its persistent CA file", record["case"])
         if record["command"] in ("run", "run-broker"):
             assert record["orphaned_child_alive"] is True, ("Go leaves the child running", record["case"])
-        if record["command"].endswith("-group") and record["case"] not in KNOWN_DIVERGENCES:
+        if record["command"].endswith("-group"):
             assert record["ending"] == ["signal", getattr(signal, record["signal"])]
             assert record["orphaned_child_alive"] is False
 
 
-def build_oracle(destination):
-    archive = checked(["git", "archive", ORACLE])
-    source = destination / "src"
-    source.mkdir()
-    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
-        tar.extractall(source, filter="data")
-    binary = destination / "symvault-go"
-    env = dict(os.environ, GOWORK="off")
-    checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", binary, "."], cwd=source, env=env, timeout=600)
-    return binary
-
-
-def make_template(go, base):
-    template = base / "template"
-    template.mkdir()
-    checked([go, "init", "--auth", "passphrase"], cwd=template, env=isolated(template))
-    shutil.rmtree(template / "tmp")
-    return template
+def compare(go, rust):
+    """Raise AssertionError on the first observable difference."""
+    assert [r["case"] for r in go] == [r["case"] for r in rust], "different case lists"
+    for left, right in zip(go, rust):
+        name = left["case"]
+        keys = ["ending", "stdout", "stderr", "listener_closed", "orphaned_child_alive",
+                "ignored", "survived", "listener_open_after_ignored_signal",
+                "terminal_restored", "alt_screen_left"]
+        for key in keys:
+            assert left.get(key) == right.get(key), (name, key, left.get(key), right.get(key))
+        go_state, rust_state = list(left["state"]), list(right["state"])
+        if left["command"].startswith(("broker", "run-broker")):
+            # Documented difference: Go leaves its persistent public CA file in the vault.
+            go_state = [n for n in go_state if n != f"vault/{CA_NAME}"]
+        assert go_state == rust_state, (name, "on-disk state", go_state, rust_state)
+        assert not any(".broker-ca-" in n for n in right["state"]), (name, "temporary CA left behind", right["state"])
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--rust", required=True, type=Path)
-    parser.add_argument("--receipt", required=True, type=Path)
-    parser.add_argument("--go", type=Path, help="prebuilt oracle (development only; default builds ORACLE)")
+    parser.add_argument("--rust", type=Path)
+    parser.add_argument("--receipt", type=Path)
     parser.add_argument("--expect-mismatch", action="store_true",
-                        help="negative control: PASS only if the Rust binary differs from Go")
+                        help="negative control: PASS only if the Rust binary differs from the recorded Go observations")
     parser.add_argument("--allow-dirty-for-development", action="store_true")
     args = parser.parse_args()
     if os.name == "nt":
         sys.exit("signal_process_contract.py is Unix-only; Windows Ctrl-Break evidence lives in "
                  "egress_contract.py and intake_watch_contract.py. Refusing to report a vacuous pass.")
+    assert args.rust and args.receipt, "--rust and --receipt are required"
     rust = args.rust.resolve()
     assert rust.is_file(), "a real Rust CLI binary is required"
+    document = observations.load("signal-process-contract", oracle_commit=ORACLE)
+    recorded, material = document["observations"], document["material"]["template"]
+    check_oracle_expectations(recorded["go"])
+    check_go_only(recorded["go_only"])
     clean = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()
     assert clean or args.allow_dirty_for_development or args.expect_mismatch, "commit the candidate first"
     receipt = dict(oracle_commit=ORACLE, candidate_commit=checked(["git", "rev-parse", "HEAD"]).decode().strip(),
                    candidate_worktree_clean=clean, native_os=platform.system(), architecture=platform.machine(),
                    rust_binary_sha256=hashlib.sha256(rust.read_bytes()).hexdigest(),
                    driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                   keyring="memory", expect_mismatch=args.expect_mismatch, go=[], rust=[], passed=False)
+                   seed_sha256=recorded["seed_sha256"], go_binary_sha256=recorded["go_binary_sha256"],
+                   go_observation="replayed from scripts/rust-port/fixtures/go-observations/signal-process-contract.%s.json" % observations.host_goos(),
+                   keyring="memory", expect_mismatch=args.expect_mismatch, go=[], rust=[], go_only=[], passed=False)
     args.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
     with tempfile.TemporaryDirectory(prefix="symvault-signals-") as raw:
         base = Path(raw)
-        go = args.go.resolve() if args.go else build_oracle(base)
-        receipt["go_binary_sha256"] = hashlib.sha256(go.read_bytes()).hexdigest()
-        template = make_template(go, base)
-        go_root, rust_root = base / "go", base / "rust"
-        go_root.mkdir()
+        template = base / "template"
+        observations.unpack_tree(material, template)
+        rust_root = base / "rust"
         rust_root.mkdir()
-        receipt["go"] = exercise(go, go_root, template)
-        check_oracle_expectations(receipt["go"])
+        receipt["go"], receipt["go_only"] = recorded["go"], recorded["go_only"]
         receipt["rust"] = exercise(rust, rust_root, template)
         try:
             compare(receipt["go"], receipt["rust"])
@@ -476,7 +679,8 @@ def main():
     if args.expect_mismatch:
         print(f"PASS (negative control): mutant rejected: {mismatch}")
     else:
-        print(f"PASS: {len(receipt['go'])} actual Go/Rust signal observations on {platform.system()}")
+        print(f"PASS: {len(receipt['go'])} recorded Go / live Rust signal observations and {len(receipt['go_only'])} "
+              f"Go-only clipboard observations on {platform.system()}")
 
 
 if __name__ == "__main__":
