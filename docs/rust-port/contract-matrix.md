@@ -276,3 +276,8 @@ invitation generation, join response generation, acceptance re-encryption with m
   they never copy data from a real vault.
 - Go bugs are not silently preserved or silently fixed. Record a versioned
   contract change first, then update both implementations or the oracle.
+
+
+## Platform scope supersession (2026-10-29)
+
+Per the platform-scope decision in [#1550](https://github.com/danieljustus/symaira-vault/issues/1550), supported products target Apple (macOS arm64 and iOS) and Web. Native Windows and macOS Intel are no longer required (platform scope decision 2026-10-29, #1550). Linux remains supported for CI/server operation and CLI. Historical Windows/Intel observations and contract rows below remain evidence, not acceptance requirements.

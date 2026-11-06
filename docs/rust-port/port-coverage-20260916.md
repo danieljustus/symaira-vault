@@ -125,3 +125,8 @@ same run passed the disposable-home macOS LaunchAgent lifecycle. A guarded
 macOS CI clipboard set/read/clear proof is implemented and awaits execution;
 Touch ID and GUI/autotype permission evidence remain open. No percentage is
 inferred from the count of passing contract rows.
+
+
+## Platform scope supersession (2026-10-29)
+
+The platform requirements described in this historical snapshot are superseded by [#1550](https://github.com/danieljustus/symaira-vault/issues/1550): native Windows and macOS Intel parity are no longer required (platform scope decision 2026-10-29, #1550). Supported products target Apple (macOS arm64 and iOS) and Web; Linux remains a CI/server platform and CLI target. Historical counts and Windows/Intel evidence are retained unchanged.
