@@ -25,7 +25,7 @@ qrcode = { version = "=0.14.1", default-features = false }
 rcgen = "=0.14.10"
 tar = "=0.4.46"
 tempfile = "=3.27.0"
-zip = { version = "=9.1.0", default-features = false, features = ["deflate"] }
+zip = { version = "=9.3.0", default-features = false, features = ["deflate"] }
 serde.workspace = true
 serde_json.workspace = true
 reqwest.workspace = true
@@ -56,5 +56,5 @@ symvault-store = { path = "../symvault-store", version = "=0.0.0", features = ["
 
 [target.'cfg(unix)'.dependencies]
 libc = "=0.2.191"
-signal-hook = "=0.4.5"
-rustix = { version = "=1.1.5", features = ["event", "fs", "process", "termios"] }
+signal-hook = "=0.4.6"
+rustix = { version = "=1.1.6", features = ["event", "fs", "process", "termios"] }
