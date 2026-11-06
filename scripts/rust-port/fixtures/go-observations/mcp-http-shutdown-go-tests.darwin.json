@@ -1,0 +1,2350 @@
+{
+ "contract": "mcp-http-shutdown-go-tests",
+ "contract_args": {},
+ "data": {
+  "commands": [
+   [
+    "-race",
+    "-json",
+    "./internal/mcp/serverbootstrap",
+    "./internal/secureui",
+    "./internal/approval",
+    "./internal/policy",
+    "-count=1"
+   ],
+   [
+    "-race",
+    "-json",
+    "./internal/mcp/server",
+    "-count=1",
+    "-run",
+    "TestApprovalCancellation|TestApprovalUninterruptible|^TestAuthorize|TestScopeCheckHook|TestHandleGet_OutsideScope|TestHandleDelete_OutsideScope|TestHandleGetMetadata_OutsideScope"
+   ]
+  ],
+  "events": [
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestApproveWakesAndRecordsDevice"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestApproveWakesWaiter"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestCloseExpiresPending"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestCloseWakesWaiterWithErrClosed"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestDecideTwiceFails"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestDenyRecordsDevice"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestDenyWakesWaiter"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestDoubleDecisionConflict"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestEnqueueListPending"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestEnrollCodeHTTPHandler_MintsCode"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestEnrollCodeHTTPHandler_RejectsNonLoopback"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestEnrollCodeHTTPHandler_RejectsNonPost"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestEnrollCodeHTTPHandler_RejectsStaleProof"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestEnrollCodeHTTPHandler_RejectsWithoutFingerprint"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestEnrollCodeHTTPHandler_RejectsWithoutProof"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestEnrollCodeHTTPHandler_RejectsWrongProof"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestEnrollHTTPHandler_CodeIsSingleUse"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestEnrollHTTPHandler_RejectsInvalidCode"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestEnrollHTTPHandler_RejectsMalformedBody"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestEnrollHTTPHandler_RejectsMissingCode"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestEnrollHTTPHandler_RevocationTakesEffectAcrossStoreInstances"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestEnrollHTTPHandler_Success"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestListOrderPendingFirst"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestListRequiresDeviceToken"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestListReturnsPending"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestLocalHTTPHandlerDenyAndErrorStatuses"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestLocalHTTPHandlerDenyAndErrorStatuses/invalid_id"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestLocalHTTPHandlerDenyAndErrorStatuses/unknown_action"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestLocalHTTPHandlerDenyAndErrorStatuses/wrong_method"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestLocalHTTPHandlerEmptyQueueAndExpiry"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestLocalHTTPHandlerListAndDecide"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestLocalHTTPHandlerRejectsRemoteAndBadProof"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestLocalHTTPHandlerRejectsRemoteAndBadProof/bad_proof"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestLocalHTTPHandlerRejectsRemoteAndBadProof/remote"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestNotFound"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestNotifyOnChange"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestReapExpired"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestRejectsMalformedAuthorization"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestUnknownActionAndMissingID"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestWaitContextCancel"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestWaitSelfEnforcesPerDeviceFailedAttempts"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/approval",
+    "Test": "TestWaitSelfEnforcesShortTTL"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestApprovalCancellationDeniesPendingAndLateReply"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestApprovalCancellationDeniesPendingAndLateReply/blocked-read"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestApprovalCancellationDeniesPendingAndLateReply/late-yes"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestApprovalUninterruptibleTerminalFailsClosed"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestAuthorize"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestAuthorizeApprovalModeDenyRejectsWrites"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestAuthorizeApprovalModeNoneAllowsWrites"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestAuthorizeApprovalModePromptDegradesToDenyInStdio"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestAuthorizeDeniesPathsOutsideAllowedScope"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestAuthorizeDeniesWritesWhenAgentCannotWrite"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestAuthorizeRequiresApprovalForWrites"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestAuthorize_EmptyPath"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestAuthorize_NilServer"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestAuthorize_WriteWithApprovalButNotApproved"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestAuthorize_WriteWithApprovalDeny"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestAuthorize_WriteWithoutPermission"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestHandleDelete_OutsideScope"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestHandleGetMetadata_OutsideScope"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestHandleGet_OutsideScope"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestScopeCheckHook_AllowsAllowedTool"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestScopeCheckHook_DeniesDisallowedTool"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/server",
+    "Test": "TestScopeCheckHook_EmptyListAllowsAll"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestCertFingerprint_ChangesWhenCertRegenerated"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestCertFingerprint_EmptyVaultDir"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestCertFingerprint_StableAcrossRepeatedCalls"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestCertStatus_DoesNotGenerateACert"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestCertStatus_EmptyVaultDir"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestCertStatus_ExistingCert"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestCertStatus_NoCert"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestEnsureEnrollSecret_DistinctPerVaultDir"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestEnsureEnrollSecret_EmptyVaultDir"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestEnsureEnrollSecret_FilePermissions"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestEnsureEnrollSecret_PersistsAcrossCalls"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestEnsureTLSCert_RegeneratesCertNearExpiry"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestEnsureTLSCert_RegeneratesExpiredCert"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestEnsureTLSCert_ReusesCertOutsideRenewalWindow"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestGenerateSelfSignedCert_ECDSA_P256"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHTTPShutdownActiveFactoryContract"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHTTPShutdownActiveFactoryContract/deadline"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHTTPShutdownActiveFactoryContract/drain"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHTTPShutdownCleanupRetainsActiveOwnership"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHTTPShutdownIdleTransportContract"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHTTPShutdownPartialRequestDoesNotReachFactory"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHandleOAuthAuthorize_EmptyChallengeMethod"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHandleOAuthAuthorize_FullFlowConsentPage"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHandleOAuthAuthorize_InvalidRedirectURI"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHandleOAuthAuthorize_MissingAllParams"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHandleOAuthAuthorize_MissingClientID"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHandleOAuthAuthorize_MissingCodeChallenge"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHandleOAuthAuthorize_MissingRedirectURI"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHandleOAuthAuthorize_MissingResponseType"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHandleOAuthAuthorize_NoStateConsentPage"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHandleOAuthAuthorize_NoTTYRendersConsentPage"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHandleOAuthAuthorize_NonS256ChallengeMethod"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestHandleOAuthAuthorize_UnknownClientID"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestIsTLSEnabled"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestIsTLSEnabled/insecure_bind_allowed_with_certs"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestIsTLSEnabled/insecure_bind_allowed_without_certs"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestIsTLSEnabled/insecure_bind_disabled_with_certs"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestIsTLSEnabled/insecure_bind_disabled_without_certs"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestIsTLSEnabled/nil_MCP_config"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestIsTLSEnabled/nil_config"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestIsTLSEnabled/nil_vault"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestIssueAuthCode_CodeIsUnique"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestIssueAuthCode_InvalidRedirectURI"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestIssueAuthCode_StoresCodeWithExpiry"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestIssueAuthCode_ValidRedirectWithState"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestIssueAuthCode_ValidRedirectWithoutState"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestMTLSRejectsUnauthenticatedClient"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthClientStore_CleanupExpired"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthClientStore_ExpiredClientNotReturnedByGet"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthClientStore_FileFormat"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthClientStore_InMemoryNoFileCreated"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthClientStore_LoadSaveRoundtrip"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthClientStore_LoadWithInvalidJSON"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthClientStore_MissingFileIsNoOp"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthClientStore_SaveDoesNotBlockOnError"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthClientStore_SaveWithoutPathIsNoOp"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthConfirm_GetNotAllowed"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthConfirm_InvalidClientShowsError"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthConfirm_InvalidPassphraseShowsError"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthConfirm_MissingPassphraseShowsError"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRefreshToken_ExpiredRefreshDenied"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRefreshToken_FullFlow"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRefreshToken_MissingRefreshToken"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRefreshToken_RegisterResponseIncludesRefresh"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRefreshToken_UnsupportedGrantType"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRefreshToken_WellKnownIncludesRefresh"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRegisterAcceptsCustomSchemeWithoutUserinfo"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRegisterBoundsPersistentClientStore"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRegisterRejectsExternalRedirectURI"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRegisterValidationCases"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRegisterValidationCases/custom_scheme_userinfo"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRegisterValidationCases/empty_redirects"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRegisterValidationCases/external_redirect"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRegisterValidationCases/first_JSON_value_only"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRegisterValidationCases/malformed_metadata"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRegisterValidationCases/missing_redirects"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRegisterValidationCases/userinfo_redirect"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestOAuthRegisterValidationCases/wrong_content_type"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRenderConsentPage"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRenderConsentPage_AllFields"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRenderConsentPage_DaemonModeWarning"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRenderConsentPage_WithError"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRenderConsentPage_WithErrorMessage"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestResolveServerTimeouts_Defaults"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestResolveServerTimeouts_Defaults/empty_mcp_cfg"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestResolveServerTimeouts_Defaults/nil_mcp_config"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestResolveServerTimeouts_Defaults/nil_vault"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestResolveServerTimeouts_Overrides"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestResolveServerTimeouts_PartialOverrideKeepsDefaults"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_ContextCancelled"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_CustomConfig"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_HTTP10ErrorFramingAndKeepAlive"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_HTTP10ErrorFramingAndKeepAlive/default_close"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_HTTP10ErrorFramingAndKeepAlive/explicit_keep-alive"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_HandlerCache"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_HealthEndpoint"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_InitializeAndToolsList"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_MCPFactoryError"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_MCPInvalidJSON"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_MCPMediaTypeAndAccept"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_MCPMediaTypeAndAccept/bad_accept_header"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_MCPMediaTypeAndAccept/missing_content-type"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_MCPMethodNotAllowed"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_MTLS"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_MTLS/no_client_cert_is_rejected"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_MTLS/valid_client_cert_succeeds"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_MTLS/wrong_client_cert_is_rejected"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_NonLoopbackWithoutTLSRefused"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_NotificationReturnsAccepted"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_OAuthAuthorizationServer"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_OAuthClientPersistenceAcrossRestart"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_OAuthEndpoints"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_OAuthEndpoints/authorize_rejects_missing_params"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_OAuthEndpoints/register_endpoint_empty_redirect_uris"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_OAuthEndpoints/register_endpoint_invalid_JSON"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_OAuthEndpoints/register_endpoint_missing_redirect_uris"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_OAuthEndpoints/register_endpoint_success_application/json"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_OAuthEndpoints/register_endpoint_success_application/json;_charset=utf-8"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_OAuthEndpoints/register_endpoint_wrong_content_type"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_OAuthEndpoints/token_rejects_missing_code"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_OAuthProtectedResource"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_SecurityHeaders"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_SecurityHeaders/bad_origin_forbidden"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunHTTPServer_SecurityHeaders/unsupported_protocol_version"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunStdioServer_FactoryError"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunStdioServer_NilVault"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestRunStdioServer_Success"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestSetupRateLimiter"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestSetupRateLimiter/custom_positive_limit_enabled"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestSetupRateLimiter/default_enabled"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestSetupRateLimiter/disabled_when_limit_is_zero"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestSetupTokenSystem"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestTokenSystemCloseNilSafe"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestValidateMTLSSettingsFailsClosed"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestValidateMTLSSettingsFailsClosed/insecure_bind"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestValidateMTLSSettingsFailsClosed/missing_ca"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap",
+    "Test": "TestValidateMTLSSettingsFailsClosed/no_tls"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestActionIsValid"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestActionIsValid/#00"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestActionIsValid/allow"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestActionIsValid/deny"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestActionIsValid/invalid"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestActionIsValid/prompt"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestActionIsValid/require_biometry"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAgentRateLimiter_AllowExceedsDailyLimit"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAgentRateLimiter_AllowExceedsHourlyLimit"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAgentRateLimiter_AllowUnknownAgent"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAgentRateLimiter_AllowWithinLimit"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAgentRateLimiter_Cleanup"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAgentRateLimiter_DailyWindowReset"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAgentRateLimiter_SetLimitsUpdatesExisting"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAgentRateLimiter_TokenRefill"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestApprovalWaitContextTimeoutAudits"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestApprovedFlagSkipsQueue"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizationCancellationRetiresOwnPendingConsent"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizationCancellationRetiresOwnPendingConsent/late-approval-after-cancel"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizationCancellationRetiresOwnPendingConsent/ordinary-approval"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizeEmptyPath"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizePolicyBiometry"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizePolicyDefaultDeny"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizePolicyDeny"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizePolicyPrompt"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizePolicyScopeDeniedAfterAllow"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizeReadAllow"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizeScopeDenied"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizeWriteApprovalNone"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizeWriteApprovalRequired"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizeWriteApprovalRequiredAfterPolicyAllow"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizeWriteApproved"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizeWriteApprovedAfterPolicyAllow"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizeWriteDenied"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizeWriteDeniedAfterPolicyAllow"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizeWriteDenyMode"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestAuthorizeWriteUnknownMode"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestCheckScope"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestCheckScope/dot_normalized"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestCheckScope/empty_returns_false"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestCheckScope/exact_match"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestCheckScope/multiple_paths"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestCheckScope/no_match"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestCheckScope/prefix_match"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestCheckScope/prefix_no_match_deeper"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestCheckScope/whitespace_trimmed"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestCheckScope/wildcard_matches_all"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestCheckScopeShareStoreExpired"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestCheckScopeShareStoreGrant"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestCheckScopeShareStoreNil"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestCheckScopeShareStoreNoGrant"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestContextProvider"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestDefaultPolicyDir"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestDenyModeNeverBlocks"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestDetectProjectContext"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluate"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluate/admin_read"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluate/admin_write"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluate/any_agent_with_prod_tag"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluate/no_tags"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluate/off_hours_-_higher_priority_allow_wins"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluate/openclaw_with_dev_tag"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluate/openclaw_with_prod_tag"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluate/unknown_agent"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateAllowedTools"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateAllowedTools/allowed_tool"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateAllowedTools/another_allowed_tool"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateAllowedTools/disallowed_tool"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateAllowedTools/empty_tool_name"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateAllowedToolsEmpty"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateAuditLogAllowNoLog"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateAuditLogDefaultDeny"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateAuditLogDenyRule"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateAuditLogMaxSecrets"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateAuditLogRateLimit"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateEmptyRules"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateEnvVars"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateEnvVars/matching_env_var"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateEnvVars/missing_env_var"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateEnvVars/non-matching_env_var"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateMaxSecretsDefaultDeny"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateMaxSecretsExceeded"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateMaxSecretsWithinLimit"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateMaxSecretsZero"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateMultiplePolicies"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateNilEngine"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluatePathMatching"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluatePathMatching/match_exact_path"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluatePathMatching/match_project_a_direct_child"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluatePathMatching/match_project_b_recursive"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluatePathMatching/no_match"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluatePathMatching/no_match_project_a_grandchild"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluatePriority"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateRateLimitDifferentAgents"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateRateLimitExceeded"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateRateLimitNoLimiter"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateRateLimitWithinLimits"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateWorkingDir"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateWorkingDir/exact_match"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateWorkingDir/no_match"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEngineEvaluateWorkingDir/subdirectory_match"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestEnginePerformance"
+   },
+   {
+    "Action": "skip",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestGeneratePolicyBuildContextFixture"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestHomeExpansionUsesSuppliedHomeOnly"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestLoadPoliciesFromDir"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestLoadPolicy"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestLoadPolicyInvalid"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestLoadPolicyRejectsMalformedGlob"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestLogAuditNilLogger"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestLogAuditShareNilLogger"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchAllowedTool"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchAllowedTool/#00"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchAllowedTool/any_tool"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchAllowedTool/get_entry"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchAllowedTool/get_entry#01"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchAllowedTool/list_entries"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchAnyTag"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchAnyTag/[]_[dev]"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchAnyTag/[dev]_[]"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchAnyTag/[dev]_[dev_personal]"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchAnyTag/[dev]_[prod]"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchAnyTag/[dev_prod]_[prod]"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPath"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPath/*_anything"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPath/_anything"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPath/exact_exact"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPath/exact_other"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPath/prefix/*_prefix/sub"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPath/prefix/_prefix/sub"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPath/~/dev/**_/fixture/home/probe/dev/project/sub"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPath/~/dev/*_/fixture/home/probe/dev/project"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPath/~/dev/*_/fixture/home/probe/dev/project/sub"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPath/~/exact/path_/fixture/home/probe/exact/path"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPathGlobContract"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPathGlobContract/backslash_escapes_a_metacharacter"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPathGlobContract/backslash_is_never_a_separator"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPathGlobContract/dot_dot_is_cleaned"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPathGlobContract/literal_directory_prefix"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPathGlobContract/prefix_sibling_is_not_matched"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPathGlobContract/recursive_suffix"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPathGlobContract/star_does_not_cross_separator"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPathGlobContract/trailing_slash_prefix"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPathGlobContract/unicode_class"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPathGlobContract/unicode_question"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMatchPathGlobContract/unicode_star"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestMetacharacterPatternsAreNeverAlsoLiteralPrefixes"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestNewAuthorizerDefaults"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestNewAuthorizerWithOptionsNil"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestNewAuthorizerWithPolicyEngine"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestNormalizeScopePath"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestPolicyValidate"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestPolicyValidate/duplicate_rule_names"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestPolicyValidate/invalid_action"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestPolicyValidate/invalid_action_type"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestPolicyValidate/invalid_time_of_day"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestPolicyValidate/missing_rule_name"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestPolicyValidate/missing_version"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestPolicyValidate/no_rules"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestPolicyValidate/valid_policy"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestPromptWithApprovalQueueBlocksAndApproves"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestPromptWithApprovalQueueDenies"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestPromptWithApprovalQueueExpires"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestPromptWithoutQueueDegradesToDeny"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestRequiresApprovalModes"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestTimeRangeContains"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestTimeRangeContains/after_range"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestTimeRangeContains/before_range"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestTimeRangeContains/exactly_at_start"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestTimeRangeContains/within_range"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestTimeRangeContains/wrap_around_range_-_daytime"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestTimeRangeContains/wrap_around_range_-_early_morning"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestTimeRangeContains/wrap_around_range_-_night_shift"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestTimeRangeParse"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestTimeRangeParse/empty_start"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestTimeRangeParse/invalid_end"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestTimeRangeParse/invalid_start"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestTimeRangeParse/valid"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestToLogicalPathInterpretsTheNativeSeparator"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestTransitionRateLimitBoundaryNeedsAFullToken"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestTransitionRateLimitDailyRolloverAndRejection"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestTransitionRateLimitRefillsAndClampsCapacity"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestTransitionRateLimitSetLimitsInitializesState"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestUNCShapedPatternsMatchAfterCleaning"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestValidateRejectsMalformedPathPatterns"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestYAMLUnmarshal"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/policy",
+    "Test": "TestYAMLUnmarshalExtendedConditions"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestApprovalRequest_Fields"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestApprovalResult_Fields"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestBuildApprovalDescription_DetailsTruncation"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestBuildApprovalDescription_EmptyFields"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestBuildApprovalDescription_WithRemember"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestBuildApprovalDescription_WithoutRemember"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestBuildApprovalPrompt_EmptyFields"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestBuildApprovalPrompt_OperationTruncation"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestBuildApprovalPrompt_WithRemember"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestBuildApprovalPrompt_WithoutRemember"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestBuildPlainTTYPrompt_AllFields"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestBuildPlainTTYPrompt_EmptyFields"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestBuildPlainTTYPrompt_LongPath"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestBuildPlainTTYPrompt_NoBoxDrawing"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestBuildPlainTTYPrompt_PartialFields"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestBuildPlainTTYPrompt_SpecialCharacters"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestBuildTTYPrompt"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestBuildTTYPrompt_NormalMode"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestBuildTTYPrompt_ScreenReaderMode"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestCapabilityString"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestCapsLockWarning_Off"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestCapsLockWarning_On"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestFormatPrompt"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestFormatPrompt/desc-only"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestFormatPrompt/empty"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestFormatPrompt/path-field-desc"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestFormatPrompt/path-field-only"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestOrDefault_EmptyDefault"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestOrDefault_WithDefault"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestOrDefault_WithValue"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestOsaQuote"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestOsascriptBackend_BuildsScript"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestOsascriptBackend_NotHidden"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestOsascriptBackend_Unavailable"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestOsascriptBackend_UserCanceled"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestParseApprovalResponse_No"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestParseApprovalResponse_Remember"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestParseApprovalResponse_Whitespace"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestParseApprovalResponse_Yes"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestParseRememberResponse_NotRemember"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestParseRememberResponse_Remember"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPromptApproval_Approved"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPromptApproval_CustomTimeout"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPromptApproval_DefaultTimeout"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPromptApproval_Denied"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPromptApproval_EmptyResponseIsDenied"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPromptApproval_GUIBackend_UserCanceled"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPromptApproval_NoneBackend"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPromptApproval_Remembered"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPromptApproval_TTYBackend"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPromptApproval_TTYBackend_Denied"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPromptApproval_TTYBackend_NoTTY"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPromptApproval_TTYBackend_Remember"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPrompt_CancelExitStatus_Symvault"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPrompt_DefaultsTimeout_Symvault"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPrompt_EmptyResultIsCanceled_Symvault"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPrompt_NoneBackend_Symvault"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPrompt_TTYBackend_SignalCancel"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPrompt_TTYBackend_SignalCancel/interrupt"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPrompt_TTYBackend_SignalCancel/terminated"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPrompt_TTYBackend_Success_Symvault"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestPrompt_TTYOverride_NoTTY"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestSecurePromptCancellationProcessHelper"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestSecurePromptContextCancelsActualProcess"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestSecurePromptContextRejectsLateAffirmative"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestTTYReadStringRuneEditing"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestTTY_EchoOffOverPty"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestTruncateFunction"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestTruncate_EmptyString"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestTruncate_ExactlyMax"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestTruncate_LongString"
+   },
+   {
+    "Action": "pass",
+    "Package": "github.com/danieljustus/symaira-vault/internal/secureui",
+    "Test": "TestTruncate_ShortString"
+   }
+  ]
+ },
+ "go_version": "go1.26.6",
+ "goarch": "arm64",
+ "goos": "darwin",
+ "normalization": [
+  "go test -json events reduced to Action/Package/Test of the pass, fail and skip events; output, time and elapsed dropped (nothing compares them); events sorted so the recording is independent of test scheduling"
+ ],
+ "oracle_commit": "d1cd0f97ac550bc3020bc86b0514989f8d28d95c",
+ "schema": 1
+}

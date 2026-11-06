@@ -1,0 +1,568 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
+  "tests": {
+    "force_sync_preserves_dirty_config_like_go": {
+      "seeds": [
+        {
+          "name": "init",
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n\tignorecase = true\n\tprecomposeunicode = true\n[user]\n\tname = Symaira Vault\n\temail = symvault@example.com\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/description",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "Unnamed repository; edit this file 'description' to name the repository.\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/info/exclude",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n# For a project mostly in C, the following would be a good set of\n# exclude patterns (uncomment them if you want to use them):\n# *.[oa]\n# *~\n/.symvault-rust\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.gitignore",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault-rust",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"schema\": 1,\n  \"kind\": \"rust-created\",\n  \"created_at\": \"2026-11-03T22:23:04.59967Z\",\n  \"vault_id\": \"9291e7dca0a8cf73d3d4e7561f3b84f545f625e3f065baa460d5373a6befa703\"\n}\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: false\nvaultDir: <ROOT:0>/root\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIFEyVU5rZU5WVXJHanJzVVF3bWd3V0EgdD0zLG09NjU1MzYscD00ClMwejZCc3AzYnRHVGhOVVlZQ09iUDl6amlXQzhxVmlBNkdHUXhvei9DWUg2TC9JNDN3aHBUTURXSHE0Ci0+IEwtZ3JlYXNlID04IERnZjQKdGNuVDY3QkpjVlJhd01WNFA0NEJNU3I4M0ZQTnNGL3dLc2lqMzJaZDhua3dKSmt4MkNid0dKWTE0bU1zcVF0QgpYN1BCNnpOcUNlcGZDK2NRSTdzcFZMT2gxaFM4Yi95MkZSeHR6K1Nld0dzRUNGOAotLS0geHIvczlpZzBNTGF5WkhubVllQ0IxNEVDTlB2NHpzRFd4ZlZVeGlvNlltRQpr+GoszhBmti2OPw67k/56wCrp0TYFCfpSWcw3U+yA3jjbGvJYB8nDRU4SuAw5T4o7SKk4EXE86urxRZq/Xc2vLDsvtp+qbzDXuyCSHoYurgencWeCC4JJ1UA84t/x23Dlwon92jkV1I8m"
+              }
+            }
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age15ywegnxw6gal7y99djhmw7nfz0trncjwsj3rtq324qea59ldwezqnzwt5h\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
+        }
+      ],
+      "calls": [
+        {
+          "key": "8bd2efcfca5525c8572ab7c9df14bbffa972dfea5e7aa1f70c1c9e252c62ed8e",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:2>/root",
+              "sync",
+              "--force"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:2>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Pulled from remote\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 2,
+              "path": "root/.device-id",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "macbook-pro-von-daniel-2"
+              }
+            },
+            {
+              "root": 2,
+              "path": "root/config.conflict-macbook-pro-von-daniel-2.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: false\nvaultDir: <ROOT:0>/root\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nlocal_marker: local\n"
+              }
+            },
+            {
+              "root": 2,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: false\nvaultDir: <ROOT:0>/root\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nremote_marker: remote\n"
+              }
+            },
+            {
+              "root": 2,
+              "path": "root/identity.age",
+              "op": "remove",
+              "mode": null,
+              "content": null
+            }
+          ]
+        }
+      ]
+    },
+    "sync_matches_go_for_no_remote_pull_push_and_offline_local_remote": {
+      "seeds": [
+        {
+          "name": "init",
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n\tignorecase = true\n\tprecomposeunicode = true\n[user]\n\tname = Symaira Vault\n\temail = symvault@example.com\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/description",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "Unnamed repository; edit this file 'description' to name the repository.\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/info/exclude",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n# For a project mostly in C, the following would be a good set of\n# exclude patterns (uncomment them if you want to use them):\n# *.[oa]\n# *~\n/.symvault-rust\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.gitignore",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault-rust",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"schema\": 1,\n  \"kind\": \"rust-created\",\n  \"created_at\": \"2026-11-03T22:23:04.59088Z\",\n  \"vault_id\": \"ed2778740d0ddd2c0d84fec31387d79f996b30d411baec9ee1ec29620bca1edc\"\n}\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: false\nvaultDir: <ROOT:0>/root\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIG1kSXl5WG9TakFVbVN5bmlJQ1hZSkEgdD0zLG09NjU1MzYscD00CnhYT216RkltMm0vdUdYN1JidFlhMlBtVFpvUXJmNnJPOWxMZzZncHFMNmNQYSsvTkh3OVh3UUlOaUxRCi0+IFRvUzBALWdyZWFzZSBzIGUiTnRNXyMgNEdQbiJ7CnEyaUZqeDlBCi0tLSBBb29RQnNGYTIzbG5jWG5pWU95bUJGamRNMmdrSVZhYVlNR0Q4SlY3aXdnCjQHLU55A5+0MRq2DO/+Ypxv3OTb/4RE0zeo7P5ZdTmOrd3BMvxAfo4TxNOinmlgg9tPLMvKn0dXS8P8P+lm/QQ/fP5XDkRW0sGqaS8nJP3Asy2uSDWiqgwwsbp0gF1J7EuifhzO8YzLPhM="
+              }
+            }
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1suex4tslhv8yl8gjthk9heung4hdjdat6zvygynl47tq6pzxydfs242f69\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
+        }
+      ],
+      "calls": [
+        {
+          "key": "bdbfadd435afca58ebf55745a55752b7975601d500d66456742506ae5ca76e03",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "sync"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "No remote configured. Skipping sync.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "bdbfadd435afca58ebf55745a55752b7975601d500d66456742506ae5ca76e03",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "sync"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Pulled from remote\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.device-id",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "macbook-pro-von-daniel-2"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/sync.txt",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "remote-one\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "e74eb1b1df94941b3cb62ae6f9abb550ffcbc985ec7b92519b4a4a14f82d908e",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "sync",
+              "--push"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Already up to date\nPushed to remote\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "bdbfadd435afca58ebf55745a55752b7975601d500d66456742506ae5ca76e03",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "sync"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Warning: could not reach remote — offline\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

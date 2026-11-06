@@ -1,0 +1,192 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
+  "tests": {
+    "approval_pair_rejects_loopback_server_like_go_oracle": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "e8a2341ea87c911ca27d21828bd2cce67d241535505f295524d0f9b1a89e8b87",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/go-vault",
+              "init",
+              "--auth",
+              "passphrase"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/go-vault\nPublic key: age1ut500ky8unqjqe235lymnpe7908a32k0pxhfafskvg5mq0mrly2q75tstz\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  <ROOT:0>/go-vault/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "go-vault/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go-vault/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "go-vault/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\tbare = false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "go-vault/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go-vault/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go-vault/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go-vault/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go-vault/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go-vault/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go-vault/.gitignore",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "go-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT:0>/go-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "go-vault/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go-vault/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkICtRbDdWY3BXR3JHdXZzWWNwUFpIV1EgdD0zLG09NjU1MzYscD00CnZ2YlBKZEgvdFkvakpGVXNhVzZKVzhOSU8ycUI4TVlPbnBleGYwUHRHT0x3SlEyVUtsbEk2bHowcmkwCi0tLSBsUVQ0cVM1aGpKcDRFOFRFaEVBOU1oblBRTU1zV2k5S09Fc0RNNGZaWHpNCoggG1PSe0wTmhgUBc0xEAfZxrwECgsSy5Z0XbFTQPeXAHuzNHFazf5i5n+FffkbjmG6pOEEZTMbgxshC66/uAjOlCTbX+f3dJqsxzmA75EAJls8SVEK8CS2KPnI8ctgAkcJw2GrgSh4wX8="
+              }
+            }
+          ]
+        },
+        {
+          "key": "b271fea98bb0c2353fd54435c2be312ec21a55be8e0450c1c4664198c599744c",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/go-vault",
+              "device",
+              "approval-pair",
+              "--host",
+              "192.168.1.42"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: 'symvault serve' is bound to 127.0.0.1 (loopback-only) — a phone on the LAN cannot reach it. Restart the server with --bind 0.0.0.0 (all interfaces) or --bind <lan-ip>, then run 'approval-pair' again\nError: 'symvault serve' is bound to 127.0.0.1 (loopback-only) — a phone on the LAN cannot reach it. Restart the server with --bind 0.0.0.0 (all interfaces) or --bind <lan-ip>, then run 'approval-pair' again\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

@@ -1,3 +1,6 @@
+// Loads configs through yaml-edit, whose rowan 0.16 thin Arc trips Miri under
+// Stacked and Tree Borrows (rust-analyzer/rowan#108); see `rust-miri` in the Makefile.
+#![cfg(not(miri))]
 //! CFG-003: the config-bytes contract, against the Go oracle.
 //!
 //! Error text is deliberately not part of the contract — Go's yaml.v3 and
@@ -589,10 +592,13 @@ fn go_writer_cases_reload_with_rust_semantics() {
                     auto_pull: false,
                     auto_pull_interval: std::time::Duration::ZERO,
                     commit_template: String::new(),
+                    author: String::new(),
+                    email: String::new(),
                 }),
                 clipboard: Some(symvault_core::config::ClipboardConfig {
                     auto_clear_duration: 0,
                     copy_by_default: false,
+                    print_by_default: None,
                 }),
                 ..Config::default()
             };

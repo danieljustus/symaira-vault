@@ -15,7 +15,7 @@ signal-process-differential`, `rust-signal-process.yml`) builds the pinned Go
 oracle `45b8577e` from `git archive` in a disposable directory and delivers
 SIGINT/SIGTERM/SIGHUP/SIGQUIT to the real Go and Rust processes in disposable
 HOME/XDG/TMPDIR roots with a memory keyring (no operator credentials). It
-compares 33 observations per implementation (21 plain deliveries plus 12 started with the signal inherited as `SIG_IGN`): how the process ended, stdout,
+compares 41 observations per implementation (29 plain deliveries plus 12 started with the signal inherited as `SIG_IGN`): how the process ended, stdout,
 stderr, listener closed, orphaned child alive, and signal-relevant names left
 on disk. Each case first asserts that the process runs until signalled. The
 Go record is itself checked against expected endings so a vacuous oracle fails.
@@ -46,15 +46,23 @@ at `broker-ignored-sighup`.
 
 Negative controls: the pre-fix Rust binary (`--expect-mismatch`) is rejected at
 `broker-sighup`; `test_signal_process_contract.py` mutates each compared field.
-One divergence is asserted rather than hidden: `run --timeout` keeps the child
-in its own process group for tree-kill (#1199), so a group-wide Ctrl-C does not
-reach it (`KNOWN_DIVERGENCES`; the check fails if Rust starts matching).
+`run --timeout` keeps the child in its own process group for tree-kill (#1199)
+and forwards a fatal signal to that group before the parent dies, so a
+group-wide Ctrl-C ends the child as in Go (the former `KNOWN_DIVERGENCES`
+exemption is removed; see `cli-gap-inventory.md` "CLI-007").
 
 Residuals added by review: the per-instance broker CA directory is created in
 `prepare()` before the signal handler (which needs its path) can be installed, so
 a catchable signal in that short window, like SIGKILL, leaves it; the stdio
 approval prompt in `symvault-platform` (`approval.rs`) runs its own `signal-hook`
-thread during prompts and is not covered by this module or the driver.
+thread during prompts and is not covered by this module or the driver (since
+#1472 it is held by `make mcp-approval-pty-acceptance` and the process tests).
+
+Residual packet (2026-11-03): `mcp --stdio --allow-locked` (4 cases) and `ui` on a
+pseudo-terminal (4 cases) join the compared set (41 observations per implementation),
+and thirteen Go-only armed-clipboard records (3 stdio `mcp`, 4 `ui`, 6 HTTP `mcp` incl. SIGHUP armed/idle/inherited-ignored) pin Go's clipboard signal behavior; see
+`cli-gap-inventory.md` "CLI-007: residual packet". The `sync`/git push and in-flight
+intake spool signals stay bounded claims there.
 
 Status: local Darwin/arm64 PASS. Native Linux CI, native macOS CI and every
 Windows console case are pending; this driver refuses to run on Windows rather
@@ -298,8 +306,10 @@ The approval-denial regression now uses an isolated loopback template rather
 than public GitHub DNS, preserving production target validation order.
 
 This evidence concerns entry/action authorization. Go's shared policy helper
-still supplies an empty tool name; tool-name conditions and prompt/biometry
-diagnostic equivalence are not claimed. Public DNS, native platform gates,
+supplies an empty tool name and Rust's `policy_context::build_context` mirrors that, so
+`allowed_tools` conditions match every tool in both (`upstream-go-bugs.md` section 12;
+prompt/biometry diagnostics match Go, see `cli-gap-inventory.md`
+"MCP-AUDIT-IDS, OAUTH-EXPIRY, API-POLICY-DIAG"). Public DNS, native platform gates,
 MCP-003/BROKER-002 promotion, releases and cutover remain separate work.
 
 
@@ -842,7 +852,7 @@ budget evidence is recorded before cutover.
 **Objective:** Decide whether the representative Rust implementation earns cutover.
 
 **Files:**
-- Create: `scripts/rust-port/cmd/valuegate/`
+- Create: `scripts/rust-port/valuegate.py` (Go-free, stdlib Python; see `value-gate.md`)
 - Create: `docs/rust-port/value-gate-<date>.json`
 - Modify: release workflow and packaging only after the gate passes
 

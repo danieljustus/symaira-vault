@@ -7,7 +7,6 @@ import json
 import os
 from pathlib import Path
 import platform
-import shutil
 import socket
 import ssl
 import struct
@@ -16,7 +15,8 @@ import tempfile
 import threading
 import time
 
-from build_timeout import oracle_build_timeout, remove_worktree
+
+import go_observations_common as observations
 
 ROOT = Path(__file__).resolve().parents[2]
 ORACLE = 'd1cd0f97ac550bc3020bc86b0514989f8d28d95c'
@@ -265,88 +265,93 @@ def assert_pair(case, go, rust, host, native_os):
     return {'case': case, 'decision': 'opaque-transport-diagnostic', 'go': left, 'rust': right}
 
 
+def api_template(base_url, private):
+    return ('base_url: ' + base_url + '\nauth_type: bearer\nentry_ref: api-fixture\nallowed_endpoints: [/v1/*]\n'
+            'allowed_methods: [GET]\nallow_private: ' + ('true' if private else 'false') + '\n')
+
+
+def prepare_root(material, root, base_url, private):
+    """A vault the Go seed mode wrote (kept as material) plus this case's template."""
+    observations.unpack_tree(material, root)
+    (root / 'templates').mkdir(mode=0o700)
+    (root / 'templates' / 'fixture.yaml').write_text(api_template(base_url, private))
+    os.chmod(root / 'templates' / 'fixture.yaml', 0o600)
+    return inventory(root, sorted(str(p.relative_to(root)) for p in root.rglob('*') if p.is_file()))
+
+
+def drive_case(case, base, certs, material, binary, is_go, label):
+    """One case against one implementation with fresh owned DNS and TLS fixtures."""
+    upstream = Upstream(certs, case)
+    try:
+        host = 'wrong-api.example.test' if case == 'wrong-hostname' else 'dns-api.example.test'
+        base_url = f'https://{host}:{upstream.port}'
+        private = case not in {'private-answer', 'mixed-family-answer', 'pending-dns-cancel'}
+        root = base / (case + '-' + label + '-vault')
+        seed_inventory = prepare_root(material, root, base_url, private)
+        addresses = ['192.0.2.7', '::1'] if case == 'mixed-family-answer' else ['127.0.0.1']
+        dns = DNS(addresses, stall=case == 'pending-dns-cancel')
+        spec = {'mode': 'call', 'root': str(root), 'output': str(base / (case + '-' + label + '.json')),
+                'dns_server': dns.address, 'ca_file': None if case == 'untrusted-root' else str(certs / 'ca.pem'),
+                'timeout_ms': 350 if case == 'progressing-body-deadline' else 5000}
+        event = dns.observed if case == 'pending-dns-cancel' else upstream.request if case == 'pending-headers-cancel' else None
+        try:
+            observation = execute(binary, spec, base / (case + '-' + label + '-home'), is_go, event)
+            if case in {'pending-headers-cancel', 'progressing-body-deadline'}:
+                assert upstream.eof.wait(2), 'real upstream closure missing'
+            observation.update(case=case, seeded_files=seed_inventory, dns=dns.records, upstream=list(upstream.records))
+            requests = [r for r in observation['upstream'] if 'request_base64' in r]
+            expected = case in {'verified-dns-https', 'pending-headers-cancel', 'progressing-body-deadline'}
+            assert len(requests) == int(expected), 'real upstream request count differs'
+            assert observation['dns'] and {r['qtype'] for r in observation['dns']} <= {1, 28}
+            return observation, host
+        finally:
+            dns.close()
+    finally:
+        upstream.close()
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rust-probe', type=Path, required=True)
-    parser.add_argument('--receipt', type=Path, required=True)
+    parser.add_argument('--rust-probe', type=Path)
+    parser.add_argument('--receipt', type=Path)
     parser.add_argument('--allow-dirty-for-development', action='store_true')
     args = parser.parse_args()
+    assert args.rust_probe and args.receipt, '--rust-probe and --receipt are required'
     rust = args.rust_probe.resolve()
+    document = observations.load('api-transport-contract', oracle_commit=ORACLE)
+    recorded, material = document['observations'], document['material']['seed_vault']
     commit = checked(['git', 'rev-parse', 'HEAD']).decode().strip()
     clean = not checked(['git', 'status', '--porcelain=v1', '--untracked-files=normal']).strip()
     assert clean or args.allow_dirty_for_development
     names = sorted(x for x in checked(['git', 'ls-files', '--cached', '--others', '--exclude-standard']).decode().splitlines()
-                   if x.startswith(('crates/', 'third_party/', 'testdata/', 'internal/mcp/apitemplates/builtin/'))
+                   if x.startswith(('crates/', 'third_party/', 'testdata/'))
                    or x in {'Cargo.toml', 'Cargo.lock', '.gitattributes', 'scripts/rust-port/api_transport_contract.py',
                             'scripts/rust-port/api_transport_probe.go.txt', 'scripts/rust-port/test_api_transport_contract.py',
                             '.github/workflows/rust-api-transport.yml'})
     before = inventory(ROOT, names)
     receipt = {'schema_version': 1, 'candidate_commit': commit, 'candidate_worktree_clean': clean,
                'native_os': platform.system(), 'candidate_sources': before, 'rust_executable_sha256': digest(rust),
-               'oracle_commit': ORACLE, 'go': [], 'rust': [], 'processes': PROBE_RUNS, 'declared_differences': [], 'passed': False}
+               'oracle_commit': ORACLE, 'go': [], 'rust': [], 'processes': PROBE_RUNS, 'declared_differences': [], 'passed': False,
+               'oracle_sources': recorded['oracle_sources'], 'go_probe_sha256': recorded['go_probe_sha256'],
+               'go_executable_sha256': recorded['go_executable_sha256'],
+               'go_observation': 'replayed from scripts/rust-port/fixtures/go-observations/api-transport-contract.%s.json' % observations.host_goos()}
     with tempfile.TemporaryDirectory(prefix='symvault-api-native-') as raw:
         base = Path(raw)
-        tree = base / 'oracle'
-        checked(['git', 'worktree', 'add', '--detach', tree, ORACLE])
         try:
-            oracle_names = sorted(x for x in checked(['git', 'ls-tree', '-r', '--name-only', ORACLE]).decode().splitlines()
-                                  if x in {'go.mod', 'go.sum'} or x.endswith('.go') or x.startswith('internal/mcp/apitemplates/builtin/'))
-            receipt['oracle_sources'] = inventory(tree, oracle_names)
-            helper = ROOT / 'scripts/rust-port/api_transport_probe.go.txt'
-            receipt['go_probe_sha256'] = digest(helper)
-            (tree / 'internal/mcp/server/api_native_probe_test.go').write_bytes(helper.read_bytes())
-            go = base / ('go-api-native.exe' if os.name == 'nt' else 'go-api-native')
-            checked(['go', 'test', '-c', '-trimpath', '-buildvcs=false', '-o', go, './internal/mcp/server'],
-                    cwd=tree, timeout=oracle_build_timeout())
-            receipt['go_executable_sha256'] = digest(go)
             certs = base / 'certs'
             certs.mkdir()
-            execute(go, {'mode': 'cert', 'root': str(certs), 'output': str(base/'cert-result.json')}, base/'cert-home', True)
+            observations.mint_api_chain(certs, base / 'cert-scratch')
             receipt['fixture_certificates'] = {x.name: digest(x) for x in certs.iterdir() if x.suffix == '.pem' and 'key' not in x.name}
+            by_case = {row['case']: row for row in recorded['go']}
+            assert list(by_case) == CASES, 'recorded Go observation lacks cases'
             for case in CASES:
-                upstream = Upstream(certs, case)
-                try:
-                    host = 'wrong-api.example.test' if case == 'wrong-hostname' else 'dns-api.example.test'
-                    base_url = f'https://{host}:{upstream.port}'
-                    private = case not in {'private-answer', 'mixed-family-answer', 'pending-dns-cancel'}
-                    seed = base / ('seed-' + case)
-                    seed.mkdir()
-                    execute(go, {'mode': 'seed', 'root': str(seed), 'output': str(base/(case+'-seed.json')),
-                                 'base_url': base_url, 'allow_private': private}, base/(case+'-seed-home'), True)
-                    seed_inventory = inventory(seed, sorted(str(p.relative_to(seed)) for p in seed.rglob('*') if p.is_file()))
-                    results = []
-                    for is_go, binary, label in [(True, go, 'go'), (False, rust, 'rust')]:
-                        root = base / (case+'-'+label+'-vault')
-                        shutil.copytree(seed, root)
-                        assert inventory(root, list(seed_inventory)) == seed_inventory
-                        addresses = ['192.0.2.7', '::1'] if case == 'mixed-family-answer' else ['127.0.0.1']
-                        dns = DNS(addresses, stall=case == 'pending-dns-cancel')
-                        upstream.request.clear()
-                        upstream.eof.clear()
-                        first = len(upstream.records)
-                        spec = {'mode': 'call', 'root': str(root), 'output': str(base/(case+'-'+label+'.json')),
-                                'dns_server': dns.address, 'ca_file': None if case == 'untrusted-root' else str(certs/'ca.pem'),
-                                'timeout_ms': 350 if case == 'progressing-body-deadline' else 5000}
-                        event = dns.observed if case == 'pending-dns-cancel' else upstream.request if case == 'pending-headers-cancel' else None
-                        try:
-                            observation = execute(binary, spec, base/(case+'-'+label+'-home'), is_go, event)
-                            if case in {'pending-headers-cancel', 'progressing-body-deadline'}:
-                                assert upstream.eof.wait(2), 'real upstream closure missing'
-                            observation.update(case=case, seeded_files=seed_inventory, dns=dns.records,
-                                               upstream=upstream.records[first:])
-                            receipt[label].append(observation)
-                            requests = [r for r in observation['upstream'] if 'request_base64' in r]
-                            expected = case in {'verified-dns-https', 'pending-headers-cancel', 'progressing-body-deadline'}
-                            assert len(requests) == int(expected), 'real upstream request count differs'
-                            assert observation['dns'] and {r['qtype'] for r in observation['dns']} <= {1,28}
-                            results.append(observation)
-                        finally:
-                            dns.close()
-                    difference = assert_pair(case, results[0], results[1], host, receipt['native_os'])
-                    if difference:
-                        receipt['declared_differences'].append(difference)
-                finally:
-                    upstream.close()
+                observation, host = drive_case(case, base, certs, material, rust, False, 'rust')
+                go_row = dict(by_case[case], seeded_files=observation['seeded_files'])
+                receipt['go'].append(go_row)
+                receipt['rust'].append(observation)
+                difference = assert_pair(case, go_row, observation, host, receipt['native_os'])
+                if difference:
+                    receipt['declared_differences'].append(difference)
             assert checked(['git', 'rev-parse', 'HEAD']).decode().strip() == commit
             assert inventory(ROOT, names) == before and digest(rust) == receipt['rust_executable_sha256']
             receipt['candidate_worktree_clean_at_end'] = not checked(['git', 'status', '--porcelain=v1', '--untracked-files=normal']).strip()
@@ -358,8 +363,7 @@ def main():
         finally:
             args.receipt.parent.mkdir(parents=True, exist_ok=True)
             args.receipt.write_text(json.dumps(receipt, indent=2) + '\n')
-            remove_worktree(lambda: checked(['git', 'worktree', 'remove', '--force', tree]), 'oracle worktree')
-    print('PASS: eight actual Go/Rust encrypted API DNS/TLS/cancellation cases on ' + platform.system())
+    print('PASS: eight recorded Go / live Rust encrypted API DNS/TLS/cancellation cases on ' + platform.system())
 
 
 if __name__ == '__main__':

@@ -134,7 +134,9 @@ fn actual_dns_accepts_public_answers_and_rejects_mixed_private_and_oversize() {
         let result = runtime.block_on(resolve_addresses(
             &target,
             false,
-            &RequestContext::default().with_timeout(Duration::from_secs(2)),
+            // Setup bound, not the behavior under test: generous so load and coverage
+            // instrumentation cannot win the race (#1564-#1567).
+            &RequestContext::default().with_timeout(Duration::from_secs(15)),
             Some(dns.address),
         ));
         if let Some(error) = expected {
@@ -172,7 +174,7 @@ fn cancelled_dns_releases_the_actual_owned_udp_socket() {
                 Some(server),
             ))
     });
-    let peer = dns.observed.recv_timeout(Duration::from_secs(2)).unwrap();
+    let peer = dns.observed.recv_timeout(Duration::from_secs(15)).unwrap();
     let started = Instant::now();
     context.cancel();
     assert_eq!(
@@ -204,7 +206,11 @@ fn stopping_egress_during_dns_joins_workers_and_releases_socket() {
         std::fs::write(root.path().join("templates/fixture.yaml"),
             "base_url: https://waiting-broker.example.test\nauth_type: bearer\nentry_ref: missing-entry\nallowed_methods: [GET]\nallowed_endpoints: [/safe/*]\n").unwrap();
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(root.path(), &identity).unwrap();
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root.path()),
+            &identity,
+        )
+        .unwrap();
         let broker = EgressBroker::new(root.path(), &store, &identity, EgressOptions::default())
             .unwrap()
             .with_dns_server(dns.address);
@@ -217,7 +223,7 @@ fn stopping_egress_during_dns_joins_workers_and_releases_socket() {
             .with_running(listener, || {
                 let mut client = std::net::TcpStream::connect(address).unwrap();
                 client
-                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .set_read_timeout(Some(Duration::from_secs(15)))
                     .unwrap();
                 let first = if connect_request {
                     "CONNECT waiting-broker.example.test:443 HTTP/1.1"
@@ -229,7 +235,7 @@ fn stopping_egress_during_dns_joins_workers_and_releases_socket() {
                     "{first}\r\nHost: waiting-broker.example.test\r\n\r\n"
                 )
                 .unwrap();
-                dns_peer = Some(dns.observed.recv_timeout(Duration::from_secs(2)).unwrap());
+                dns_peer = Some(dns.observed.recv_timeout(Duration::from_secs(15)).unwrap());
                 stopped_at = Some(Instant::now());
                 stop.cancel().unwrap();
                 let mut byte = [0];
@@ -261,7 +267,7 @@ fn stopping_egress_during_dns_joins_workers_and_releases_socket() {
 
 fn read_request(stream: &mut std::net::TcpStream) -> String {
     stream
-        .set_read_timeout(Some(Duration::from_secs(2)))
+        .set_read_timeout(Some(Duration::from_secs(15)))
         .unwrap();
     let mut reader = BufReader::new(stream.try_clone().unwrap());
     let mut request = String::new();
@@ -292,7 +298,7 @@ fn cancelling_pending_api_headers_closes_upstream_and_joins() {
         )));
         send.send(()).unwrap();
         stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(15)))
             .unwrap();
         match stream.read(&mut [0u8]) {
             Ok(0) => {}
@@ -318,7 +324,7 @@ fn cancelling_pending_api_headers_closes_upstream_and_joins() {
             &ApiTransportOptions::default(),
         )
     });
-    observed.recv_timeout(Duration::from_secs(2)).unwrap();
+    observed.recv_timeout(Duration::from_secs(15)).unwrap();
     let started = Instant::now();
     context.cancel();
     let error = worker.join().unwrap().unwrap_err();
@@ -332,21 +338,38 @@ fn cancelling_pending_api_headers_closes_upstream_and_joins() {
 fn progressing_api_body_still_reaches_absolute_deadline() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
+    // A deadline that expires before the client connects must fail the
+    // test, not leave join() waiting on an accept that never comes (seen
+    // once under coverage on a loaded host: 1h43m in inet_csk_accept).
+    listener.set_nonblocking(true).unwrap();
     let upstream = thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
+        let waiting = Instant::now();
+        let mut stream = loop {
+            match listener.accept() {
+                Ok((stream, _)) => break stream,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    if waiting.elapsed() > Duration::from_secs(15) {
+                        return 0;
+                    }
+                    thread::sleep(Duration::from_millis(5));
+                }
+                Err(error) => panic!("accept failed: {error}"),
+            }
+        };
+        stream.set_nonblocking(false).unwrap();
         read_request(&mut stream);
         stream
             .set_read_timeout(Some(Duration::from_millis(10)))
             .unwrap();
         stream
-            .set_write_timeout(Some(Duration::from_secs(1)))
+            .set_write_timeout(Some(Duration::from_secs(15)))
             .unwrap();
         stream
             .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n")
             .unwrap();
         let started = Instant::now();
         let mut sent = 0;
-        while started.elapsed() < Duration::from_secs(2) {
+        while started.elapsed() < Duration::from_secs(15) {
             if stream.write_all(b"x").is_err() {
                 return sent;
             }
@@ -382,7 +405,9 @@ fn progressing_api_body_still_reaches_absolute_deadline() {
         &BTreeMap::new(),
         b"",
         None,
-        &RequestContext::default().with_timeout(Duration::from_millis(150)),
+        // Long enough to connect and read headers on a loaded, instrumented
+        // host; still far below the 15 s the upstream keeps sending.
+        &RequestContext::default().with_timeout(Duration::from_millis(500)),
         &ApiTransportOptions::default(),
     )
     .unwrap_err();
@@ -391,7 +416,7 @@ fn progressing_api_body_still_reaches_absolute_deadline() {
         upstream.join().unwrap() >= 2,
         "response must make progress before timing out"
     );
-    assert!(started.elapsed() < Duration::from_secs(1));
+    assert!(started.elapsed() < Duration::from_secs(3));
 }
 
 #[test]
@@ -429,10 +454,10 @@ fn actual_dns_https_verifies_chain_hostname_and_redacts_positive_control() {
         let server = thread::spawn(move || {
             let (socket, _) = listener.accept().unwrap();
             socket
-                .set_read_timeout(Some(Duration::from_secs(2)))
+                .set_read_timeout(Some(Duration::from_secs(15)))
                 .unwrap();
             socket
-                .set_write_timeout(Some(Duration::from_secs(2)))
+                .set_write_timeout(Some(Duration::from_secs(15)))
                 .unwrap();
             let mut stream = rustls::StreamOwned::new(
                 rustls::ServerConnection::new(server_config).unwrap(),
@@ -470,7 +495,9 @@ fn actual_dns_https_verifies_chain_hostname_and_redacts_positive_control() {
             &BTreeMap::new(),
             b"",
             Some("public-TLS-canary"),
-            &RequestContext::default().with_timeout(Duration::from_secs(2)),
+            // Certificate rejections must surface as "failed", not "timed out";
+            // 2 s let the deadline win the race on a loaded host (#1566).
+            &RequestContext::default().with_timeout(Duration::from_secs(15)),
             &options,
         );
         assert_eq!(server.join().unwrap(), expected_request);
@@ -484,6 +511,87 @@ fn actual_dns_https_verifies_chain_hostname_and_redacts_positive_control() {
             assert!(response.sanitized);
         } else {
             assert_eq!(result.unwrap_err(), "upstream request failed");
+        }
+    }
+}
+
+/// ADR 0034 item 13 (MCP-003/BROKER-002): the `execute_api_request` transport
+/// returns a 302 to the caller and never contacts the redirect target, so the
+/// credential cannot reach a second authority. Go follows the redirect
+/// (`internal/ssrf/ssrf.go`); this is a ratified, Rust-only pin.
+#[test]
+fn execute_api_request_transport_returns_302_without_following_redirect() {
+    let target_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let target_address = target_listener.local_addr().unwrap();
+    target_listener.set_nonblocking(true).unwrap();
+    let origin_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin_address = origin_listener.local_addr().unwrap();
+    assert_ne!(origin_address, target_address);
+
+    let location = format!("http://{target_address}/safe/landed");
+    let response_location = location.clone();
+    let origin = thread::spawn(move || {
+        // Serve exactly one connection; a followed redirect would target the
+        // other listener, so a second origin hit is also counted below.
+        let (mut stream, _) = origin_listener.accept().unwrap();
+        let request = read_request(&mut stream);
+        let body = "moved";
+        write!(
+            stream,
+            "HTTP/1.1 302 Found\r\nLocation: {response_location}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+        .unwrap();
+        request
+    });
+
+    let request_headers = BTreeMap::from([(
+        "Authorization".to_string(),
+        "Bearer redirect-canary".to_string(),
+    )]);
+    let response = execute_http_for_api(
+        &template(format!("http://{origin_address}"), true),
+        "GET",
+        "/safe/item",
+        &format!("http://{origin_address}/safe/item"),
+        &request_headers,
+        b"",
+        ApiResponseBounds {
+            timeout: Duration::from_secs(10),
+            response_limit: API_RESPONSE_LIMIT,
+            context: RequestContext::default(),
+            options: &ApiTransportOptions::default(),
+        },
+    )
+    .expect("a redirect response is returned, not an error");
+
+    assert_eq!(response.status, 302);
+    assert_eq!(response.body, b"moved");
+    assert_eq!(
+        response
+            .headers
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case("location"))
+            .map(|(_, value)| value.as_str()),
+        Some(location.as_str())
+    );
+    let origin_request = origin.join().unwrap();
+    assert!(origin_request.starts_with("GET /safe/item HTTP/1.1\r\n"));
+    assert!(origin_request.contains("authorization: Bearer redirect-canary\r\n"));
+
+    // Give a (wrongly) followed redirect time to connect; the target must see
+    // no connection at all, hence no request and no credential.
+    let deadline = Instant::now() + Duration::from_millis(500);
+    while Instant::now() < deadline {
+        match target_listener.accept() {
+            Ok((mut stream, _)) => {
+                let request = read_request(&mut stream);
+                panic!("redirect target received a request: {request}");
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => panic!("accept failed: {error}"),
         }
     }
 }

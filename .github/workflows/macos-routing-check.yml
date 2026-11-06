@@ -1,0 +1,40 @@
+name: macOS routing check
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/macos-runner.yml'
+      - '.github/workflows/macos-routing-check.yml'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  decide:
+    uses: ./.github/workflows/macos-runner.yml
+    secrets:
+      RUNNER_INVENTORY_TOKEN: ${{ secrets.RUNNER_INVENTORY_TOKEN }}
+  native:
+    name: macOS routing smoke
+    needs: decide
+    runs-on: ${{ fromJSON(needs.decide.outputs.runs_on) }}
+    timeout-minutes: 5
+    steps:
+      - name: Verify native execution and selected environment
+        shell: bash
+        env:
+          SELECTED: ${{ needs.decide.outputs.runs_on }}
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Darwin
+          printf 'Selected: %s\nRunner: %s\nEnvironment: %s\n' "$SELECTED" "$RUNNER_NAME" "$RUNNER_ENVIRONMENT"
+          if [[ "$SELECTED" == *self-hosted* ]]; then
+            test "$RUNNER_ENVIRONMENT" = self-hosted
+            test "$(uname -m)" = arm64
+          else
+            test "$RUNNER_ENVIRONMENT" = github-hosted
+          fi

@@ -23,8 +23,6 @@ use std::{
 };
 
 use crate::run_commands::McpCommandExecutor;
-#[cfg(not(target_os = "macos"))]
-use symvault_core::platform::UnavailablePlatform;
 use symvault_core::{
     config::{AgentProfile, Config, McpConfig},
     platform::Clipboard,
@@ -34,13 +32,45 @@ use symvault_core::{
 use symvault_crypto::{Identity, SecretBytes};
 use symvault_mcp::{
     ProtocolHandler, ReadOnlyRuntimeConfig, SharedAuditLogger, StoreReadOnlyRuntime,
-    ToolListConfig, read_only_tool_names, run_stdio, run_stdio_until, unavailable_tool,
+    ToolListConfig, read_only_tool_names, run_stdio_until, unavailable_tool,
 };
 use symvault_platform::approval::is_tty_present;
 
+/// Biometric seams for the MCP runtimes this process builds: the Touch ID
+/// authenticator behind Go's `authguard.Challenger` (`require_biometry`
+/// policies, `set_auth_method`) and the session/keychain side of
+/// `set_auth_method`. Installed once by the dispatcher; when nothing is
+/// installed (library-style callers, contract tests) every runtime keeps its
+/// fail-closed defaults: no authenticator, no Touch ID store.
+#[derive(Clone)]
+pub struct AuthGuardSeams {
+    pub touch_id: Arc<dyn symvault_core::platform::TouchId>,
+    pub backend: Arc<dyn symvault_mcp::authguard::AuthMethodBackend>,
+}
+
+static AUTH_GUARD: std::sync::OnceLock<AuthGuardSeams> = std::sync::OnceLock::new();
+
+/// Installs the process-wide biometric seams (first call wins).
+#[allow(dead_code)] // The contract-test harness includes this file without a dispatcher.
+pub fn install_auth_guard(seams: AuthGuardSeams) {
+    let _ = AUTH_GUARD.set(seams);
+}
+
 /// Go's locked stdio bootstrap owns no vault runtime. Keep protocol input
 /// intact and deny every tool call through the existing locked handler.
-pub fn run_locked_stdio() -> Result<(), String> {
+///
+/// Go subscribes SIGINT/SIGTERM/SIGQUIT in `serve` before it branches on the
+/// vault, so a locked stdio server shuts down like an unlocked one (real Go
+/// process: exit 0, SIGQUIT warns first, SIGHUP keeps its default action).
+pub fn run_locked_stdio(root: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        symvault_platform::approval::install_stdio_secure_input_signal_router()
+            .map_err(|error| format!("install MCP stdio signal router: {error}"))?;
+        mcp_shutdown::install_stdio(root.to_path_buf())?;
+    }
+    #[cfg(not(unix))]
+    let _ = root;
     // Go lists host-capable secure input metadata even with a nil vault. This
     // handler still owns no tool runtime: listing cannot enable a prompt/read.
     let available = locked_secure_input_metadata_available();
@@ -55,8 +85,16 @@ pub fn run_locked_stdio() -> Result<(), String> {
     );
     let stdin = io::stdin();
     let stdout = io::stdout();
-    run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)
-        .map_err(|error| format!("MCP stdio: {error}"))
+    let result = run_stdio_until(
+        BufReader::new(stdin.lock()),
+        stdout.lock(),
+        &mut handler,
+        mcp_shutdown::requested,
+    );
+    mcp_shutdown::stdio_finished();
+    // A signal-driven shutdown is a success and finishes in its own thread.
+    mcp_shutdown::park_if_requested();
+    result.map_err(|error| format!("MCP stdio: {error}"))
 }
 
 fn locked_secure_input_metadata_available() -> bool {
@@ -123,14 +161,12 @@ pub fn run(
     let root = vault.as_ref();
     let config = Config::load(root.join("config.yaml"))
         .map_err(|error| format!("load vault config: {error}"))?;
-    let clipboard_auto_clear_duration = Duration::from_secs(
-        config
-            .clipboard
-            .as_ref()
-            .map(|clipboard| clipboard.auto_clear_duration)
-            .unwrap_or(30)
-            .max(0) as u64,
-    );
+    // Go hands the configured value to the handlers unchanged (a negative one
+    // starts no timer and is reported as is by `generate_totp`).
+    let clipboard_auto_clear_seconds = config
+        .clipboard
+        .as_ref()
+        .map_or(30, |clipboard| clipboard.auto_clear_duration);
     let clipboard = clipboard_backend();
     let (touch_id_available, backend, persistent, message) = status();
     // Go clears a stale TLS discovery record for every transport before
@@ -147,8 +183,25 @@ pub fn run(
         // Go subscribes SIGINT/SIGTERM/SIGQUIT here, after the cleartext
         // confirmation and before the listener exists.
         let runtime_metadata = Arc::new(Mutex::new(RuntimeMetadataGuard::new(root)));
+        // Go drains for MCP.shutdown_timeout (5 s unless configured positive).
         #[cfg(unix)]
-        mcp_shutdown::install_http(http_signal_cleanup(&runtime_metadata))?;
+        let drain = {
+            let drain = symvault_mcp::http::HttpShutdown::for_process();
+            let timeout = config
+                .mcp
+                .as_ref()
+                .map(|mcp| mcp.shutdown_timeout)
+                .filter(|timeout| !timeout.is_zero())
+                .unwrap_or(Duration::from_secs(5));
+            mcp_shutdown::install_http(
+                drain.clone(),
+                timeout,
+                http_signal_cleanup(&runtime_metadata),
+            )?;
+            Some(drain)
+        };
+        #[cfg(not(unix))]
+        let drain: Option<symvault_mcp::http::HttpShutdown> = None;
         let (tls_cert, tls_key, tls_ca, mtls_enabled) =
             effective_tls(config.mcp.as_ref(), tls_cert, tls_key, tls_ca);
         let generated = if !config
@@ -161,16 +214,22 @@ pub fn run(
         } else {
             None
         };
-        if generated.is_none()
-            && let Err(error) = mcp_tls_cert::ensure_tls_cert(root)
-        {
-            // Go caches the vault certificate for device pairing even when it
-            // serves cleartext or a configured certificate; failure only
-            // disables pairing.
-            eprintln!(
-                "could not compute TLS certificate fingerprint; device pairing is disabled: {error}"
-            );
-        }
+        // Go caches the vault certificate for device pairing even when it
+        // serves cleartext or a configured certificate, and hands its SHA-256
+        // fingerprint (computed once, here) to every minted pairing code;
+        // failure only disables pairing (an empty fingerprint refuses mints).
+        let vault_certificate = match generated.as_ref() {
+            Some((cert, _)) => Ok(cert.clone()),
+            None => mcp_tls_cert::ensure_tls_cert(root).map(|(cert, _)| cert),
+        };
+        let pairing_fingerprint = vault_certificate
+            .and_then(|cert| mcp_tls_cert::certificate_fingerprint(&cert))
+            .unwrap_or_else(|error| {
+                eprintln!(
+                    "could not compute TLS certificate fingerprint; device pairing is disabled: {error}"
+                );
+                String::new()
+            });
         let (tls_cert, tls_key) = match generated.as_ref() {
             Some((cert, key)) => (
                 cert.to_str()
@@ -179,17 +238,17 @@ pub fn run(
             ),
             None => (tls_cert, tls_key),
         };
-        validate_tls(config.mcp.as_ref(), tls_cert, tls_key, tls_ca, mtls_enabled)?;
+        // Go returns every `RunHTTPServer` error wrapped as `http server: %w`.
+        validate_tls(config.mcp.as_ref(), tls_cert, tls_key, tls_ca, mtls_enabled)
+            .map_err(|error| format!("http server: {error}"))?;
         let tls = if tls_cert.is_empty() {
             None
+        } else if mtls_enabled {
+            Some(load_mtls_server_config(tls_cert, tls_key, tls_ca)?)
         } else {
             Some(
-                symvault_mcp::http::load_tls_server_config(
-                    tls_cert,
-                    tls_key,
-                    mtls_enabled.then(|| Path::new(tls_ca)),
-                )
-                .map_err(|error| format!("MCP HTTP TLS: {error}"))?,
+                symvault_mcp::http::load_tls_server_config(tls_cert, tls_key, None)
+                    .map_err(|error| format!("MCP HTTP TLS: {error}"))?,
             )
         };
         let address = if bind == "localhost" {
@@ -206,28 +265,14 @@ pub fn run(
         if !address.is_loopback() && tls.is_none() {
             return Err("MCP HTTP listener requires TLS when binding off loopback".to_owned());
         }
+        // Go creates the vault-ownership secret while building the server's
+        // dependencies, before it binds and announces the port, so a client that
+        // waits for "listening" always finds the secret on disk.
+        let enroll_secret = ensure_enroll_secret(root)?;
         let listener = TcpListener::bind((address, port))
             .map_err(|error| format!("bind MCP HTTP loopback {address}:{port}: {error}"))?;
-        eprintln!(
-            "MCP server listening on {bind}:{}",
-            listener
-                .local_addr()
-                .map_err(|error| format!("inspect MCP HTTP listener: {error}"))?
-                .port()
-        );
-        // Go opens the approval-device store before serving; this creates the
-        // private empty store on first start.
-        ensure_device_session_store(root).map_err(|error| format!("MCP HTTP: {error}"))?;
-        if tls.is_none() {
-            let loopback_note = if address.is_loopback() {
-                " Even on loopback, a local attacker or compromised process on the same machine can sniff traffic."
-            } else {
-                ""
-            };
-            eprintln!(
-                "MCP server is binding \"{address}\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true).{loopback_note}"
-            );
-        }
+        // Go saves the runtime port (`cli.SaveRuntimePort`) before it prints
+        // "listening", so a client started on that line finds the server.
         let server_working_dir = std::env::current_dir()
             .map_err(|error| format!("inspect server working directory: {error}"))?;
         let (approval_client_cert, approval_client_key) =
@@ -248,8 +293,31 @@ pub fn run(
                 approval_client_key,
                 server_working_dir,
             })?;
+        eprintln!(
+            "MCP server listening on {bind}:{}",
+            listener
+                .local_addr()
+                .map_err(|error| format!("inspect MCP HTTP listener: {error}"))?
+                .port()
+        );
+        // Go opens the approval-device store before serving; this creates the
+        // private empty store on first start.
+        ensure_device_session_store(root).map_err(|error| format!("MCP HTTP: {error}"))?;
+        let device_sessions = Arc::new(
+            symvault_sync::DeviceSessionStore::new(Some(root))
+                .map_err(|error| format!("MCP HTTP: load device session store: {error}"))?,
+        );
+        if tls.is_none() {
+            let loopback_note = if address.is_loopback() {
+                " Even on loopback, a local attacker or compromised process on the same machine can sniff traffic."
+            } else {
+                ""
+            };
+            eprintln!(
+                "MCP server is binding \"{address}\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true).{loopback_note}"
+            );
+        }
         let approval_queue = Arc::new(symvault_mcp::approval::ApprovalQueue::default());
-        let enroll_secret = ensure_enroll_secret(root)?;
         let expected_recipient = symvault_crypto::recipient_string(&identity);
         let encrypted_identity = fs::read(root.join("identity.age")).ok();
         let identity_text = symvault_crypto::identity_string(&identity);
@@ -262,6 +330,17 @@ pub fn run(
                 refresh_token_ttl: oauth.refresh_token_ttl,
             }
         });
+        let legacy_token = load_token_system(
+            root,
+            config
+                .mcp
+                .as_ref()
+                .map_or("", |mcp| mcp.http_token_file.as_str()),
+        )?;
+        if let Some(token) = legacy_token.as_deref() {
+            symvault_mcp::http::set_legacy_bearer(token);
+        }
+        symvault_mcp::http::set_health_version(option_env!("SYMVAULT_VERSION").unwrap_or("dev"));
         let mut http_options = symvault_mcp::http::HttpServerOptions {
             token_ttls,
             ..symvault_mcp::http::HttpServerOptions::default()
@@ -270,6 +349,10 @@ pub fn run(
             http_options.read_header_timeout = mcp.read_header_timeout;
             http_options.read_timeout = mcp.read_timeout;
             http_options.write_timeout = mcp.write_timeout;
+            http_options.rate_limit = mcp.rate_limit;
+            http_options
+                .trusted_proxy_ips
+                .clone_from(&mcp.trusted_proxy_ips);
         }
         let runtime_status = (touch_id_available, backend, persistent, message);
         let approval_queue_for_agent = approval_queue.clone();
@@ -289,7 +372,7 @@ pub fn run(
                 &auth_method,
                 &runtime_status,
                 Some(approval_queue_for_agent.clone()),
-                clipboard_auto_clear_duration,
+                clipboard_auto_clear_seconds,
                 clipboard.clone(),
             )
         };
@@ -309,7 +392,7 @@ pub fn run(
                 })
             })
         };
-        let result = symvault_mcp::http::serve_with_oauth_and_approval_options(
+        let result = symvault_mcp::http::serve_with_oauth_and_approval_options_until(
             listener,
             registry_path,
             handler_for_agent,
@@ -317,9 +400,18 @@ pub fn run(
             consent,
             verify_passphrase,
             tls,
-            symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret),
+            symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret)
+                .with_device_sessions(device_sessions)
+                .with_device_enrollment(
+                    Arc::new(symvault_mcp::enroll::PairingCodes::new()),
+                    pairing_fingerprint,
+                ),
             http_options,
+            drain,
         );
+        // A signal-driven shutdown is a success and finishes in its own thread:
+        // it clears the runtime records after the drain and exits 0.
+        mcp_shutdown::park_if_requested();
         result.map_err(|error| format!("MCP HTTP: {error}"))
     } else {
         #[cfg(unix)]
@@ -344,7 +436,7 @@ pub fn run(
             config.effective_auth_method().as_str(),
             &(touch_id_available, backend, persistent, message),
             None,
-            clipboard_auto_clear_duration,
+            clipboard_auto_clear_seconds,
             clipboard,
         )
         .map_err(|error| format!("failed to create MCP server: {error}"))?;
@@ -435,6 +527,84 @@ impl RuntimeMetadataGuard {
 /// Creates `<vault>/.symvault/device-sessions.json` (`{}`) when it is absent,
 /// matching Go's `NewDeviceSessionStore` on first start. An existing store is
 /// left to the approval commands that own its schema and migration.
+/// Go's `auth.LoadTokenSystem` for the HTTP server: a non-empty scoped registry
+/// is used as is; otherwise the single legacy bearer token (file, environment
+/// or freshly generated) is migrated into a wildcard-scoped registry entry and
+/// the file removed. The raw token is returned so it keeps authenticating, like
+/// Go's returned `legacyToken`, without ever being written to the registry.
+fn load_token_system(
+    root: &Path,
+    configured_file: &str,
+) -> Result<Option<zeroize::Zeroizing<String>>, String> {
+    use zeroize::Zeroizing;
+
+    let registry_path = root.join("mcp-tokens.json");
+    if symvault_mcp::http::registry_has_entries(&registry_path)
+        .map_err(|error| format!("load token system: {error}"))?
+    {
+        return Ok(None);
+    }
+    let legacy_path = if configured_file.is_empty() || configured_file == "auto" {
+        root.join("mcp-token")
+    } else {
+        PathBuf::from(configured_file)
+    };
+    let env_token = std::env::var("SYMVAULT_MCP_TOKEN")
+        .ok()
+        .filter(|token| !token.is_empty())
+        .map(Zeroizing::new);
+    let file_token = fs::read(&legacy_path)
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .map(|text| Zeroizing::new(text.trim().to_owned()))
+        .filter(|token| !token.is_empty());
+    let (token, generated) = match (file_token, env_token) {
+        (Some(token), env) => {
+            if env.is_some() {
+                eprintln!(
+                    "Warning: SYMVAULT_MCP_TOKEN is set but file token exists at {}; using file token",
+                    legacy_path.display()
+                );
+            }
+            (token, false)
+        }
+        // The environment token serves only this process: Go neither writes
+        // it to the registry nor to a file.
+        (None, Some(token)) => return Ok(Some(token)),
+        (None, None) => {
+            let mut bytes = Zeroizing::new([0_u8; 32]);
+            getrandom::fill(bytes.as_mut_slice())
+                .map_err(|error| format!("load legacy token: generate token: {error}"))?;
+            let hex = bytes
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>();
+            (Zeroizing::new(hex), true)
+        }
+    };
+    let migrated = symvault_store::token_registry::import_legacy(
+        root,
+        &token,
+        time::OffsetDateTime::now_utc(),
+    )
+    .map_err(|error| format!("load token system: load legacy token: {error}"))?;
+    if let Some(id) = migrated {
+        eprintln!(
+            "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id={id}).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy {id}"
+        );
+        if !generated
+            && let Err(error) = fs::remove_file(&legacy_path)
+            && error.kind() != io::ErrorKind::NotFound
+        {
+            eprintln!(
+                "failed to remove legacy token file {} after migration: {error}",
+                legacy_path.display()
+            );
+        }
+    }
+    Ok(Some(token))
+}
+
 fn ensure_device_session_store(root: &Path) -> Result<(), String> {
     let path = root.join(".symvault").join("device-sessions.json");
     let existing = symvault_sync::safeio::read(&path)
@@ -506,6 +676,14 @@ impl RuntimeMetadataGuard {
         remove_if_unchanged(&self.port_path, self.port_record.take().as_deref());
         remove_if_unchanged(&self.tls_path, self.tls_record.take().as_deref());
     }
+
+    /// Go's signal shutdown clears both records unconditionally once the
+    /// server returned (`ClearRuntimePort` / `ClearRuntimeTLSCert`).
+    fn clear_all(&mut self) {
+        self.release();
+        let _ = fs::remove_file(&self.port_path);
+        let _ = fs::remove_file(&self.tls_path);
+    }
 }
 
 /// Signal-time cleanup for the HTTP transport.
@@ -525,7 +703,7 @@ fn http_signal_cleanup(
             let mut guard = runtime_metadata
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            guard.release();
+            guard.clear_all();
             // ponytail: leaking the guard keeps the mutex locked until the
             // imminent process::exit; only the signal path calls this.
             std::mem::forget(guard);
@@ -618,6 +796,51 @@ fn confirm_insecure_bind(input: impl BufRead, output: &mut impl Write) -> Result
         return Err("insecure bind not confirmed; set MCP.allow_insecure_bind=false to use TLS (auto-generated self-signed certificate)".to_owned());
     }
     Ok(())
+}
+
+/// Loads the mTLS listener identity in the order and wording of Go's
+/// `RunHTTPServerOnListener`: the client CA is read, then parsed, then the
+/// server key pair is loaded, and each failure is `http server: <text>`. The
+/// key pair failure deliberately carries no cause, as in Go.
+fn load_mtls_server_config(
+    cert: &str,
+    key: &str,
+    ca: &str,
+) -> Result<Arc<rustls::ServerConfig>, String> {
+    use rustls::pki_types::{CertificateDer, pem::PemObject};
+
+    let ca = ca.trim();
+    let ca_path = Path::new(ca);
+    let ca_pem = fs::read(ca_path).map_err(|error| {
+        // Go's `*fs.PathError`: `open <path>: <errno text>`. (This file is also
+        // compiled into a test crate without the `config` module, so the
+        // wording of the common causes is spelled out here.)
+        let cause = match error.kind() {
+            io::ErrorKind::NotFound => "no such file or directory".to_owned(),
+            io::ErrorKind::PermissionDenied => "permission denied".to_owned(),
+            io::ErrorKind::IsADirectory => "is a directory".to_owned(),
+            _ => error.to_string(),
+        };
+        let verb = if error.kind() == io::ErrorKind::IsADirectory {
+            "read"
+        } else {
+            "open"
+        };
+        format!(
+            "http server: read client CA certificate: {verb} {}: {cause}",
+            ca_path.display()
+        )
+    })?;
+    let has_certificate = CertificateDer::pem_slice_iter(&ca_pem).any(|item| item.is_ok());
+    if !has_certificate {
+        return Err(format!(
+            "http server: parse client CA certificate: no valid PEM block found in {ca:?}"
+        ));
+    }
+    symvault_mcp::http::load_tls_server_config(cert, key, None)
+        .map_err(|_| "http server: load server TLS key pair failed".to_owned())?;
+    symvault_mcp::http::load_tls_server_config(cert, key, Some(ca_path))
+        .map_err(|error| format!("http server: configure TLS client authentication: {error}"))
 }
 
 fn validate_tls(
@@ -754,7 +977,7 @@ fn build_handler(
     auth_method: &str,
     runtime_status: &(bool, String, bool, String),
     approval_queue: Option<Arc<symvault_mcp::approval::ApprovalQueue>>,
-    clipboard_auto_clear_duration: Duration,
+    clipboard_auto_clear_seconds: i64,
     clipboard: Arc<dyn Clipboard>,
 ) -> Result<ProtocolHandler, String> {
     let audit = symvault_store::audit::open_with_keyring(
@@ -782,17 +1005,33 @@ fn build_handler(
             .map_err(|error| format!("create MCP runtime: {error}"))?
             .with_grant_signing_key(signing_key)
             .with_command_executor(command_executor)
-            .with_clipboard_auto_clear_duration(clipboard_auto_clear_duration);
-    let mut runtime = runtime.with_clipboard(clipboard);
+            .with_clipboard_auto_clear_seconds(clipboard_auto_clear_seconds);
+    let config_path = root.join("config.yaml");
+    let mut runtime = runtime
+        .with_clipboard(clipboard)
+        .with_can_manage_config(profile.can_manage_config)
+        .with_payment_enforcer(symvault_mcp::payment::load_enforcer(
+            &config_path,
+            agent_name,
+            &root.to_string_lossy(),
+        ))
+        .with_perplexity_config(symvault_mcp::perplexity::load_perplexity_config(
+            &config_path,
+        ));
+    if let Some(autotype) = autotype_backend() {
+        runtime = runtime.with_autotype(autotype);
+    }
+    if let Some(seams) = AUTH_GUARD.get() {
+        runtime = runtime
+            .with_touch_id(seams.touch_id.clone())
+            .with_auth_method_backend(seams.backend.clone());
+    }
     if let Some(queue) = approval_queue {
         runtime = runtime.with_approval_queue(queue);
     }
     let mut handler =
         ProtocolHandler::with_tool_call_runtime("symaira", "1.0.0", Arc::new(runtime));
-    handler.set_tool_list_config(tool_list_config(
-        profile,
-        transport == "stdio" && is_tty_present(),
-    ));
+    handler.set_tool_list_config(tool_list_config(profile, secure_input_capable(transport)));
     Ok(handler)
 }
 
@@ -819,20 +1058,31 @@ pub fn build_handler_for_contract_test(
         auth_method,
         runtime_status,
         None,
-        Duration::from_secs(30),
+        30,
         clipboard_backend(),
     )
 }
 
+/// Go's `autotype.DefaultAutotype()`: macOS, Linux and Windows type natively.
+fn autotype_backend() -> Option<Arc<dyn symvault_core::platform::Autotype>> {
+    Some(symvault_platform::native_autotype())
+}
+
+/// Go's `clipboard.DefaultClipboard()`: `pbcopy` on macOS and the atotto
+/// command selection on Linux (`wl-copy`/`xclip`/`xsel`/Termux/`clip.exe`);
+/// unavailable elsewhere.
 fn clipboard_backend() -> Arc<dyn Clipboard> {
-    #[cfg(target_os = "macos")]
-    {
-        Arc::new(symvault_platform::MacOsPlatform)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        Arc::new(UnavailablePlatform)
-    }
+    symvault_platform::native_command_clipboard()
+}
+
+/// Go's `secureui.Detect()` for the tools gated on a prompt (`secure_input`,
+/// `request_credential`): the `SYMVAULT_SECUREUI=none` override disables the
+/// backend even with a controlling terminal. Rust has no GUI backend, so only
+/// a stdio session with a terminal is capable.
+fn secure_input_capable(transport: &str) -> bool {
+    transport == "stdio"
+        && std::env::var("SYMVAULT_SECUREUI").as_deref() != Ok("none")
+        && is_tty_present()
 }
 
 fn runtime_config(
@@ -845,13 +1095,20 @@ fn runtime_config(
     // Keep direct calls subject to the same actionable capability check as
     // Go; tools/list separately hides the tool when the profile lacks access.
     available_tools.push("execute_api_request".into());
+    // Go registers these without an availability predicate or capability
+    // gate; tier, allowed_tools and approval remain per-call checks.
+    available_tools.extend(
+        ["prepare_payment", "perplexity_search", "perplexity_ask"]
+            .into_iter()
+            .map(str::to_owned),
+    );
     if profile.can_run_commands {
         // This CLI always installs McpCommandExecutor in build_handler. Keep
         // the secret-aware command tool opt-in to the profile capability and
         // let the normal allowed_tools filter below further restrict it.
         available_tools.push("execute_with_secret".into());
     }
-    let secure_input_available = transport == "stdio" && is_tty_present();
+    let secure_input_available = secure_input_capable(transport);
     let mut unavailable_tools = Vec::new();
     if !profile.can_run_commands {
         unavailable_tools.push(unavailable_tool(
@@ -1415,7 +1672,9 @@ mod tests {
         );
         writer.write_all(b"y\n").unwrap();
         assert_eq!(
-            wait_for_fd_readable(&reader, Duration::from_secs(1)),
+            // Setup bound, not the behavior under test: generous so load and coverage
+            // instrumentation cannot win the race (#1564-#1567).
+            wait_for_fd_readable(&reader, Duration::from_secs(30)),
             Some(true)
         );
     }

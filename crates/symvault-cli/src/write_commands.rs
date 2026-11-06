@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::{collections::BTreeMap, path::Path};
 use symvault_core::{password, totp};
 use symvault_crypto::Identity;
-use symvault_store::{Entry, Store, StoreError, WriteRecord};
+use symvault_store::{Entry, SecretMetadata, SecretType, Store, StoreError, WriteRecord};
 use symvault_sync::GoTime;
 
 pub fn sensitive_field(field: &str) -> bool {
@@ -25,6 +25,31 @@ pub fn set_entry(
     totp_issuer: Option<&str>,
     totp_account: Option<&str>,
 ) -> Result<String, String> {
+    let (path, data) = set_entry_data(
+        query,
+        value,
+        allow_empty,
+        force,
+        totp_secret,
+        totp_issuer,
+        totp_account,
+    )?;
+    set_fields(root, identity, &path, data)?;
+    Ok(path)
+}
+
+/// Validates a `set` request and builds the fields it writes, without
+/// touching the vault: Go runs every one of these checks before `WithVault`
+/// resolves and unlocks it (cmd/crud/set.go).
+pub fn set_entry_data(
+    query: &str,
+    value: String,
+    allow_empty: bool,
+    force: bool,
+    totp_secret: Option<&str>,
+    totp_issuer: Option<&str>,
+    totp_account: Option<&str>,
+) -> Result<(String, BTreeMap<String, Value>), String> {
     let (path, field) = query
         .rsplit_once('.')
         .filter(|(path, _)| !path.is_empty())
@@ -38,11 +63,23 @@ pub fn set_entry(
     if !force && field == "password" && !value.is_empty() {
         password::validate_password_strength(&value)?;
     }
-    let mut data = BTreeMap::from([(field.to_owned(), Value::String(value))]);
+    let data = BTreeMap::from([(field.to_owned(), Value::String(value))]);
+    let data = apply_totp_flags(data, totp_secret, totp_issuer, totp_account)?;
+    Ok((path.to_owned(), data))
+}
+
+/// Go's `set` tail before `WithVault`: the `--totp-secret` flags replace the
+/// collected `totp` object, then `ValidateTOTPData` checks whichever `totp`
+/// object the data holds.
+pub fn apply_totp_flags(
+    mut data: BTreeMap<String, Value>,
+    totp_secret: Option<&str>,
+    totp_issuer: Option<&str>,
+    totp_account: Option<&str>,
+) -> Result<BTreeMap<String, Value>, String> {
     if let Some(secret) = totp_secret
         && !secret.is_empty()
     {
-        totp::validate_totp_secret(secret).map_err(|error| error.to_string())?;
         let mut totp_data = serde_json::Map::new();
         totp_data.insert("secret".to_owned(), Value::String(secret.to_owned()));
         if let Some(issuer) = totp_issuer
@@ -57,8 +94,13 @@ pub fn set_entry(
         }
         data.insert("totp".to_owned(), Value::Object(totp_data));
     }
-    set_fields(root, identity, path, data)?;
-    Ok(path.to_owned())
+    if let Some(Value::Object(totp_data)) = data.get("totp")
+        && let Some(Value::String(secret)) = totp_data.get("secret")
+        && !secret.is_empty()
+    {
+        totp::validate_totp_secret(secret).map_err(|error| error.to_string())?;
+    }
+    Ok(data)
 }
 
 #[allow(dead_code)]
@@ -89,16 +131,20 @@ pub fn set_fields(
     path: &str,
     data: BTreeMap<String, Value>,
 ) -> Result<(), String> {
-    write_fields(root, identity, path, data, false, "set")
+    write_fields(root, identity, path, data, &BTreeMap::new(), false, "set")
 }
 
+/// Imports one entry. `raw_lengths` holds the exact Go byte length of the
+/// string values whose stored text differs in length (Go's field limit counts
+/// the bytes of the imported string, not of its JSON text).
 pub fn import_fields(
     root: &Path,
     identity: &Identity,
     path: &str,
     data: BTreeMap<String, Value>,
+    raw_lengths: &BTreeMap<String, usize>,
 ) -> Result<(), String> {
-    write_fields(root, identity, path, data, false, "import")
+    write_fields(root, identity, path, data, raw_lengths, false, "import")
 }
 
 pub fn replace_fields(
@@ -106,8 +152,39 @@ pub fn replace_fields(
     identity: &Identity,
     path: &str,
     data: BTreeMap<String, Value>,
+    raw_lengths: &BTreeMap<String, usize>,
 ) -> Result<(), String> {
-    write_fields(root, identity, path, data, true, "import")
+    write_fields(root, identity, path, data, raw_lengths, true, "import")
+}
+
+/// Go's `ValidateFieldLengths`: no string value may exceed 4096 bytes, nested
+/// objects included. `raw_lengths` overrides the length of a top-level string
+/// whose Go byte string was longer or shorter than its stored text.
+pub fn validate_field_lengths(
+    data: &BTreeMap<String, Value>,
+    raw_lengths: &BTreeMap<String, usize>,
+) -> Result<(), String> {
+    fn validate(key: &str, value: &Value, raw: Option<usize>) -> Result<(), String> {
+        match value {
+            Value::String(text) if raw.unwrap_or(text.len()) > 4096 => {
+                return Err(format!(
+                    "field {} exceeds maximum length of 4096 characters",
+                    symvault_core::go_quote(key)
+                ));
+            }
+            Value::Object(map) => {
+                for (key, value) in map {
+                    validate(key, value, None)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    for (key, value) in data {
+        validate(key, value, raw_lengths.get(key).copied())?;
+    }
+    Ok(())
 }
 
 pub fn set_secret_type(
@@ -121,7 +198,15 @@ pub fn set_secret_type(
     let mut entry = store
         .get(path, identity)
         .map_err(|error| format!("cannot read entry {path}: {error}"))?;
-    entry.secret_metadata.secret_type = secret_type.to_owned();
+    // Go's SetSecretMetadata replaces the whole metadata with the importer's
+    // type and the type's usage hint.
+    entry.secret_metadata = SecretMetadata {
+        secret_type: secret_type.to_owned(),
+        usage_hint: SecretType::from_name(secret_type)
+            .map_or("", SecretType::usage_hint)
+            .to_owned(),
+        ..SecretMetadata::default()
+    };
     store
         .write_entry_with_recipients_at(
             path,
@@ -140,28 +225,11 @@ fn write_fields(
     identity: &Identity,
     path: &str,
     data: BTreeMap<String, Value>,
+    raw_lengths: &BTreeMap<String, usize>,
     replace: bool,
     action: &str,
 ) -> Result<(), String> {
-    fn validate(key: &str, value: &Value) -> Result<(), String> {
-        match value {
-            Value::String(text) if text.len() > 4096 => {
-                return Err(format!(
-                    "field {key:?} exceeds maximum length of 4096 characters"
-                ));
-            }
-            Value::Object(map) => {
-                for (key, value) in map {
-                    validate(key, value)?;
-                }
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-    for (key, value) in &data {
-        validate(key, value)?;
-    }
+    validate_field_lengths(&data, raw_lengths)?;
     let store = symvault_store::Store::open_with_legacy_migration(root, identity)
         .map_err(|error| error.to_string())?;
     let (mut entry, new) = if replace {

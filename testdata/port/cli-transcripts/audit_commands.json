@@ -1,0 +1,116 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
+  "tests": {
+    "audit_tail_filter_and_render_match_go_without_vault_access": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "a2b85349f597edbd7a733c1141f07fbd88f6c742080200db8ebfb2b7c084d8a1",
+          "request": {
+            "args": [
+              "audit",
+              "--agent",
+              "fixture",
+              "--tail",
+              "2",
+              "--json",
+              "--failed"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:0>"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "[\n  {\n    \"ts\": \"2020-01-01T00:00:00Z\",\n    \"agent\": \"fixture\",\n    \"action\": \"failed \\u003c\\u0026\\u003e\",\n    \"path\": \"long/synthetic/attachment/entry/with/more\",\n    \"ok\": false\n  },\n  {\n    \"ts\": \"\",\n    \"agent\": \"\",\n    \"action\": \"partial\",\n    \"ok\": false\n  }\n]\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "abb6be4f6388a3ea342de05719fc964fda2d514fc9073c00b5e750f4b623038d",
+          "request": {
+            "args": [
+              "audit",
+              "--agent",
+              "fixture",
+              "--tail",
+              "2"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:0>"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "TIME                 AGENT        ACTION               TRANSPORT  STATUS   PATH\n------------------------------------------------------------------------------------------\n2020-01-01T00:00:00Z fixture      failed <&>                      FAIL     long/synthetic/attachment/e...\n                                  partial                         FAIL     \n\nTotal: 2 entries\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "3bb145be2564184c423f7facae02cdda717eb712d3917f486ef4495e8cd47b69",
+          "request": {
+            "args": [
+              "audit",
+              "--agent",
+              "fixture",
+              "--tail",
+              "2",
+              "--json",
+              "--since",
+              "1h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:0>"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "null\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,1614 @@
+{
+  "args": [
+    "go",
+    "test",
+    "-race",
+    "./internal/crypto",
+    "-count=1",
+    "-json"
+  ],
+  "contract": "kdf-go-crypto",
+  "go_version": "go1.26.10",
+  "goarch": "arm64",
+  "goos": "darwin",
+  "observations": {
+    "events": [
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "FuzzDecryptAgeEnvelope"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "FuzzDecryptAgeEnvelope/seed#0"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "FuzzDecryptAgeEnvelope/seed#1"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "FuzzDecryptAgeEnvelope/seed#2"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "FuzzParseArgon2idParams"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "FuzzParseArgon2idParams/seed#0"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "FuzzParseArgon2idParams/seed#1"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "FuzzParseArgon2idParams/seed#2"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "FuzzParseArgon2idParams/seed#3"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "FuzzParseArgon2idParams/seed#4"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2BoundedAdmissionRunsRealDerivations"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2LegacyAdmissionExcludesAutomaticDerivation"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2PreflightRejectsWholeEnvelopeBeforeKDF"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2ResourcePolicyLimits"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idDeriveKey"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idDeriveKeyEmptyPassword"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idDeriveKeyEmptySalt"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idIdentityRejectsWrongStanzaType"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idParamsValidCombinations"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idParamsValidation"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idParamsValidation/memory_too_low_for_threads"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idParamsValidation/zero_memory"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idParamsValidation/zero_threads"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idParamsValidation/zero_time"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idParams_UpperBounds"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idParams_UpperBounds/memory_below_min_4*threads"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idParams_UpperBounds/memory_over_ceiling"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idParams_UpperBounds/threads_over_ceiling"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idParams_UpperBounds/time_over_ceiling"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idParams_UpperBounds/valid_default"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idParams_UpperBounds/valid_max_memory"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idParams_UpperBounds/valid_max_threads"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idParams_UpperBounds/valid_max_time"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idRecipientCustomParams"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idRecipientIdentityRoundTrip"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idRecipientIdentityRoundTrip/binary_data"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idRecipientIdentityRoundTrip/empty_data"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idRecipientIdentityRoundTrip/simple"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestArgon2idRecipientWrongPassword"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestAssessPasswordStrength_Empty"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestAssessPasswordStrength_ExactBoundary"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestAssessPasswordStrength_ShortNonLatin"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestAssessPasswordStrength_Strong"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestAssessPasswordStrength_Unicode"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestAssessPasswordStrength_WeakLowEntropy"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestAssessPasswordStrength_WeakNonLatinLowEntropy"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestAssessPasswordStrength_WeakShort"
+      },
+      {
+        "Action": "skip",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestBenchmarkScryptWorkFactor"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestBenchmarkScryptWorkFactorShortTarget"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestBinaryDataEncryption"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDecryptEmptyCiphertext"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDecryptNilIdentity"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDecryptWithPassphraseArgon2idEmptyInputs"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDecryptWithPassphraseEmptyCiphertext"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDecryptWithPassphraseEmptyPassphrase"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDecryptWithPassphraseWrongPassphrase"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDecryptWithPassphraseWrongPassword"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDecryptWithPassphrase_CorruptedCiphertext"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDecryptWithPassphrase_EmptyCiphertext"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDecryptWithPassphrase_EmptyPassphrase"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDecryptWithPassphrase_NonEncryptedData"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDecryptWithWrongIdentity"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDecrypt_EmptyCiphertext"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDecrypt_NilIdentity"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDecrypt_WrongIdentity"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDefaultArgon2idParams"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDefaultScryptWorkFactor"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDetectEncryptedIdentityFormat"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDetectEncryptedIdentityFormat/argon2id"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDetectEncryptedIdentityFormat/empty"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDetectEncryptedIdentityFormat/random_data"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDetectEncryptedIdentityFormat/scrypt"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDetectEncryptedIdentityFormat/unknown"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestDicewareWordlist"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptDecryptEmptyPlaintext"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptDecryptNilRecipient"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptDecryptRoundTrip"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptDecryptWithKeyEmpty"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptDecryptWithKeyRoundTrip"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptDecryptWithKeyWrongKey"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptDecryptWithKeyWrongSize"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptDecryptWithPassphrase"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptDecryptWithRecipients_Roundtrip"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptDecrypt_10MB"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptDecrypt_1MB"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithMultipleRecipients"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithMultipleRecipients/identity1"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithMultipleRecipients/identity2"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithMultipleRecipients/identity3"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithNilRecipient"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithNoRecipients"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithPassphraseArgon2idEmptyInputs"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithPassphraseArgon2idRoundTrip"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithPassphraseArgon2idWrongPassword"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithPassphraseEmptyPassphrase"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithPassphraseEmptyPlaintext"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithPassphrase_EmptyPassphrase"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithPassphrase_EmptyPlaintext"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithPassphrase_Success"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithRecipientsNilInList"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithRecipients_EmptyRecipientsList"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithRecipients_NilRecipientInMiddle"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptWithRecipients_SingleRecipient"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptZeroKeyFixtureRejectsInvalidInputs"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptZeroKeyFixtureRejectsInvalidInputs/above_bound"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptZeroKeyFixtureRejectsInvalidInputs/nil_identity"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptZeroKeyFixtureRejectsInvalidInputs/zero_length"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncryptZeroKeyFixtureRoundTrip"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncrypt_EmptyPlaintext"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEncrypt_NilRecipient"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestEntropyPerWord"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateArgon2idSalt"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateDicewarePassphrase_ErrorPath"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateDicewarePassphrase_InvalidCount"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateDicewarePassphrase_InvalidCount/wordCount_-1"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateDicewarePassphrase_InvalidCount/wordCount_0"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateDicewarePassphrase_OutputFormat"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateDicewarePassphrase_Randomness"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateDicewarePassphrase_WordCount"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateDicewarePassphrase_WordCount/wordCount_1"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateDicewarePassphrase_WordCount/wordCount_10"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateDicewarePassphrase_WordCount/wordCount_3"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateDicewarePassphrase_WordCount/wordCount_6"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateGrantID_ConcurrentNonceUniqueness"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateGrantID_DifferentKeys"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateGrantID_EmptyKey"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateGrantID_NonceUniqueness"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateGrantID_ProducesValidFormat"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateGrantID_ProvidedNonce"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateIdentityCreatesValidX25519Identity"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateIdentityString"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateIdentityString_Success"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateIdentity_NonDeterministic"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGeneratePassword_AtMaxLength"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGeneratePassword_ErrorPath"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGeneratePassword_Length"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGeneratePassword_Length/length_1"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGeneratePassword_Length/length_16"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGeneratePassword_Length/length_32"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGeneratePassword_Length/length_64"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGeneratePassword_Length/length_8"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGeneratePassword_NegativeLengthDefaultsTo16"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGeneratePassword_NoAmbiguousChars"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGeneratePassword_OverMaxLength"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGeneratePassword_Randomness"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGeneratePassword_WithSymbols"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGeneratePassword_WithoutSymbols"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGeneratePassword_ZeroLengthDefaultsTo16"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTPDifferentAlgorithms"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTPDifferentAlgorithms/SHA1"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTPDifferentAlgorithms/SHA256"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTPDifferentAlgorithms/SHA512"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTPDifferentDigits"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTPDifferentDigits/6_digits"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTPDifferentDigits/8_digits"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTPInvalidSecret"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_AlgorithmCaseInsensitive"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_AllBase32Variants"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_Base32NoPadding"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_CustomDigits"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_CustomPeriod"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_Defaults"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_Deterministic"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_DifferentAlgorithmsDifferentCodes"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_Digits8"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_EmptyDecodedSecret"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_ExpiresAtCalculation"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_InvalidBase32Secret"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_InvalidSecret"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_LowercaseSecret"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_SHA256"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_SHA512"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_SecretWithSpaces"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_ZeroDigitsEdgeCase"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGenerateTOTP_ZeroPeriodEdgeCase"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestGetRecipientFromIdentity"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestHistoricalGoKDFPolicyEnvelopes"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestIdentityExists"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestIsEncryptedKeyFile_NotFound"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestIsEncryptedKeyFile_Plaintext"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestIsHMACFormat"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestIsValidIdentity"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestIsValidIdentity_InvalidStrings"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestIsValidRecipient"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestIsValidRecipient_InvalidStrings"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestLargeDataEncryptionWithArgon2id"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestLargePlaintextEncryption"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestLoadEncryptedKey_LegacyPlaintext"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestLoadEncryptedKey_NilIdentityWithEncrypted"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestLoadEncryptedKey_NotFound"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestLoadIdentityCorruptContent"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestLoadIdentityEmptyPassphrase"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestLoadIdentityNonExistentFile"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestLoadIdentityPathTraversal"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestLoadIdentityWrongPassphrase"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestLoadIdentity_CorruptedFile"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestLoadIdentity_FileReadError"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestLoadIdentity_PathTraversal"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestLoadIdentity_WrongPassphrase"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestMaxPasswordLength"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestMockCryptoCustomBehavior"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestMockCryptoDecryptFailure"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestMockCryptoDecryptWithPassphraseFailure"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestMockCryptoEmptyCiphertext"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestMockCryptoEmptyPlaintext"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestMockCryptoEncryptDecrypt"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestMockCryptoEncryptWithPassphrase"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestMockCryptoEncryptWithRecipients"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestMockCryptoNilIdentity"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestMockCryptoNilRecipient"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestParseArgon2idParams"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestParseArgon2idParams/full_params"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestParseArgon2idParams/incomplete_missing_threads"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestParseArgon2idParams/invalid_format_no_equals"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestParseArgon2idParams/large_values"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestParseArgon2idParams/minimal"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestParseArgon2idParams/non-numeric_value"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestParseArgon2idParams_UnboundedMemory"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestParseNonceFromID"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestParseNonceFromID_NonHMAC"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestParseRecipients"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestParseRecipients_EmptyList"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestParseRecipients_InvalidRecipient"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestPower10"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestPublicKeyFingerprint"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestPublicKeyFingerprint/FingerprintRecipient_matches_PublicKeyFingerprint"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestPublicKeyFingerprint/determinism_-_same_key_produces_same_fingerprint"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestPublicKeyFingerprint/distinct_keys_produce_distinct_fingerprints"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestPublicKeyFingerprint/empty_string_returns_empty"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestPublicKeyFingerprint/format_is_8_groups_of_4_uppercase_hex_characters"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestPublicKeyFingerprint/nil_recipient_returns_empty"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestRealCryptoVsMock"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestRecipientsToStrings"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestRecipientsToStrings_NilRecipients"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestRecoverZeroKeyIdentity"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestRecoverZeroKeyIdentityRejectsNonArgon2id"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestRecoverZeroKeyIdentityRejectsZeroLength"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestRecoverZeroKeyIdentityRequiresAuthorityAndBounds"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestRecoverZeroKeyIdentityWrongLength"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestResolveArgon2idParams"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestSaveEncryptedKey_NilIdentity"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestSaveEncryptedKey_Roundtrip"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestSaveIdentityEmptyPassphrase"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestSaveIdentityNilIdentity"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestSaveIdentityNonWritablePath"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestSaveIdentityPathTraversal"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestSaveIdentity_PathTraversal"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestSaveLoadIdentityWithArgon2id"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestSaveLoadIdentityWithArgon2idWrongPassphrase"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestSaveLoadIdentityWithArgon2idWrongPassphraseSameLength"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestSaveLoadIdentityWithPassphrase"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestSecureStringCleansUp"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestSecureStringEmpty"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestSecureStringScrypt"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestUnwrapArgon2id_RejectsOverLimitStanza"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateIdentity"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateIdentity/empty_string"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateIdentity/invalid_bech32"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateIdentity/invalid_prefix"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateIdentity/valid_identity"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateIdentityPathAbsolute"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateIdentityPathAllowsLiteralDotsInName"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateIdentityPathTraversal"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateIdentity_EmptyString"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateIdentity_WrongPrefix"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidatePasswordStrength_Empty"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidatePasswordStrength_ShortNonLatin"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidatePasswordStrength_Strong"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidatePasswordStrength_Unicode"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidatePasswordStrength_WeakLowEntropy"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidatePasswordStrength_WeakShort"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateRecipient"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateRecipient/empty_string"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateRecipient/invalid_bech32"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateRecipient/invalid_prefix"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateRecipient/valid_recipient"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateRecipient_EmptyString"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateRecipient_WrongPrefix"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPData_EmptySecret_ValidParams"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPData_InvalidParams"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPData_InvalidSecret"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPData_NoTOTPKey"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPData_ValidTOTP"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPParams_InvalidAlgo"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPParams_InvalidAlgorithm"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPParams_InvalidDigits"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPParams_InvalidPeriod"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPParams_ValidCases"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPSecret_AllSameChar"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPSecret_Exactly16Bytes"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPSecret_InvalidRejected"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPSecret_Lowercase"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPSecret_MaxLength"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPSecret_SequentialBytes"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPSecret_TooLong"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPSecret_TooShort"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPSecret_ValidPadded"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPSecret_ValidStrong"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPSecret_ValidUnpadded"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestValidateTOTPSecret_WithSpaces"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestVerifyGrantID_ConstantTimeBehavior"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestVerifyGrantID_EmptyKey"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestVerifyGrantID_InvalidHMACHex"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestVerifyGrantID_InvalidNonceHex"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestVerifyGrantID_NonHMACFormat"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestVerifyGrantID_PreservesSecretFieldEmpty"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestVerifyGrantID_RoundtripJSONPreservesTime"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestVerifyGrantID_TamperedCreatedAt"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestVerifyGrantID_TamperedField"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestVerifyGrantID_TamperedFromAgent"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestVerifyGrantID_Valid"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestVerifyGrantID_WrongKey"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestWipeDoesNotPanicOnEmptySlice"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestWipeMultipleSecrets"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestWipeSurvivesAliasing"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestWipeUsesUnsafePointer"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/crypto",
+        "Test": "TestWipeZeroesBytes"
+      }
+    ]
+  },
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "schema": 1
+}

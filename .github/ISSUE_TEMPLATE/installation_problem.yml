@@ -14,10 +14,9 @@ body:
       label: Installation method
       description: How did you try to install Symaira Vault?
       options:
-        - Quick install script (curl / PowerShell)
+        - Quick install script (curl)
         - Homebrew
-        - Scoop
-        - Go install
+        - Cargo install
         - Linux package (.deb / .rpm / .apk)
         - Manual download from GitHub Releases
         - Build from source
@@ -34,7 +33,7 @@ body:
     id: os
     attributes:
       label: Operating system and architecture
-      placeholder: "macOS 15.4 arm64, Ubuntu 24.04 amd64, Windows 11 amd64"
+      placeholder: "macOS 15.4 arm64, Ubuntu 24.04 amd64"
     validations:
       required: true
   - type: textarea

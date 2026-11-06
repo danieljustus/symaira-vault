@@ -61,7 +61,15 @@ fn classify<T>(result: Result<T, impl std::fmt::Display>) -> String {
 fn run() -> Result<Outcome, String> {
     let request: Request = serde_json::from_reader(io::stdin()).map_err(|e| e.to_string())?;
     let identity = parse_identity(&request.identity).map_err(|e| e.to_string())?;
-    let store = Store::open(&request.root, &identity).map_err(|e| e.to_string())?;
+    // Differential adapters test store semantics against Go, not decision D1 (the
+    // pre-mutation backup): the root is declared Rust-created so the gate does not
+    // refuse the Go-created vault. The `.symvault-rust` marker is a declared D1
+    // artifact and is ignored by tree comparisons.
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&request.root),
+        &identity,
+    )
+    .map_err(|e| e.to_string())?;
     let actual_root = store.root().to_path_buf();
     let mut outcome = Outcome {
         case_id: request.case_id.clone(),

@@ -343,6 +343,16 @@ pub fn open_with_keyring(
     )
 }
 
+/// D1 gate for the audit helpers' destructive steps (unlinking the legacy key
+/// file, renaming or deleting a log or key generation): a vault without a Rust
+/// marker is backed up before the first one. Appending to the log stays
+/// ungated: it only adds bytes (the backup restores to a prefix of the log).
+/// Outside a vault (no `identity.age` in a nearby ancestor) this is a no-op.
+fn gate(path: &Path) -> io::Result<()> {
+    crate::data_safety::ensure_marker_for_path(path)
+        .map_err(|error| io::Error::other(error.to_string()))
+}
+
 /// Loads the Go-compatible audit HMAC key without opening or creating a log.
 ///
 /// The keyring value is lowercase hexadecimal. If it is unavailable, the
@@ -380,7 +390,8 @@ pub fn load_or_create_key_with_keyring(
     let saved = keyring.set(&address, encoded.as_bytes());
     bytes.zeroize();
     if migrate {
-        if saved.is_ok() {
+        // The key is in the keyring; without a backup the legacy file stays.
+        if saved.is_ok() && gate(&legacy).is_ok() {
             let _ = fs::remove_file(legacy);
         }
     } else {
@@ -510,7 +521,9 @@ pub fn rotate_key_with_keyring(
             "store new HMAC key in keyring: {error}"
         )));
     }
-    if let Some(legacy) = legacy_to_remove {
+    if let Some(legacy) = legacy_to_remove
+        && gate(&legacy).is_ok()
+    {
         let _ = fs::remove_file(legacy);
     }
     let new_key = AuditKey::new(new_bytes)?;
@@ -564,6 +577,9 @@ impl KeyStore {
             Err(error) => return Err(error),
         };
         fs::create_dir_all(&self.directory)?;
+        if old.is_some() {
+            gate(&current)?;
+        }
         let archive = old.as_ref().map(|key| {
             self.directory.join(format!(
                 "{KEY_FILE}{ROTATED_MARKER}{}",
@@ -630,10 +646,15 @@ impl KeyStore {
         files.sort_by_key(|(_, modified)| *modified);
         let now = SystemTime::now();
         let delete_count = files.len().saturating_sub(max_backups);
+        let mut gated = false;
         for (index, (path, modified)) in files.into_iter().enumerate() {
             let too_old =
                 max_age.is_some_and(|age| now.duration_since(modified).unwrap_or_default() >= age);
             if index < delete_count || too_old {
+                if !gated {
+                    gate(&path)?;
+                    gated = true;
+                }
                 let _ = fs::remove_file(path);
             }
         }
@@ -775,6 +796,9 @@ impl Logger {
         {
             return Ok(());
         }
+        // The rename moves the log out from under its name: back the vault up
+        // first, while the handle is still open and nothing has changed.
+        gate(&self.path)?;
         if let Some(file) = self.file.take() {
             file.sync_all()?;
             drop(file);

@@ -66,7 +66,7 @@ prepare_auth() {
 usage() {
   printf '%s\n' \
     "Usage: $0 {preflight|archive|export|upload}" \
-    "  preflight  generate Vaultcore/project and build an unsigned iPhone app" \
+    "  preflight  generate SymvaultFFI/project and build an unsigned iPhone app" \
     "  archive    build a signed archive with Xcode automatic signing" \
     "  export     export the signed archive as an App Store IPA" \
     "  upload     export and upload the archive to App Store Connect"

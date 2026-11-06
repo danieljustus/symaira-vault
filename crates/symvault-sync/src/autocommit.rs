@@ -54,5 +54,10 @@ pub fn auto_commit_entry(
 fn relative_path(root: &Path, path: &Path) -> Result<String, String> {
     path.strip_prefix(root)
         .map_err(|error| error.to_string())
-        .map(|path| path.to_string_lossy().replace('\\', "/"))
+        // Go's filepath.ToSlash: only the platform separator becomes `/`; a
+        // backslash is an ordinary file-name character on Unix.
+        .map(|path| {
+            path.to_string_lossy()
+                .replace(std::path::MAIN_SEPARATOR, "/")
+        })
 }

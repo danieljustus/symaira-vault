@@ -1,3 +1,5 @@
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
 
@@ -12,19 +14,20 @@ fn temporary_root(name: &str) -> test_temp_root::TempRoot {
 }
 
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
-    Command::new(binary)
-        .args(args)
-        .env("HOME", home)
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .env("XDG_DATA_HOME", home.join("data"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("SYMVAULT_VAULT", root)
-        .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
-        .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
-        .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .output()
-        .expect("run CLI")
+    go_oracle::output(
+        Command::new(binary)
+            .args(args)
+            .env("HOME", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("SYMVAULT_VAULT", root)
+            .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
+            .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+            .env("CI", "1")
+            .env("NO_COLOR", "1"),
+    )
+    .expect("run CLI")
 }
 
 fn assert_same(go: &Output, rust: &Output, case: &str) {
@@ -48,30 +51,38 @@ fn assert_success(output: &Output, case: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn remote_status_matches_go_for_local_repository_states() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "remote_differential",
+        "remote_status_matches_go_for_local_repository_states",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let bare = temporary_root("bare");
     fs::create_dir_all(&home).expect("home");
 
-    let init = run(
-        &rust_binary,
-        &[
-            "--vault",
-            vault.to_str().expect("vault path"),
-            "init",
-            "--auth",
-            "passphrase",
-        ],
-        &vault,
-        &home,
-    );
+    // `init` generates random keys: record it once as a frozen seed.
+    let init = oracle.seed_run("init", &[&vault, &home], || {
+        run(
+            &rust_binary,
+            &[
+                "--vault",
+                vault.to_str().expect("vault path"),
+                "init",
+                "--auth",
+                "passphrase",
+            ],
+            &vault,
+            &home,
+        )
+    });
     assert_success(&init, "Rust init");
 
     let no_remote_args = [
@@ -121,6 +132,8 @@ fn remote_status_matches_go_for_local_repository_states() {
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .output()
         .expect("init bare remote");
+    // The Go process prints the bare remote's path.
+    oracle.track(&bare);
     let remote_url = bare.to_str().expect("bare path");
     let add_remote = Command::new("git")
         .args([
@@ -233,12 +246,17 @@ fn initialized_remote_fixture(name: &str) -> (test_temp_root::TempRoot, test_tem
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn remote_init_matches_go_for_target_forms_and_rejects_empty_target() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "remote_differential",
+        "remote_init_matches_go_for_target_forms_and_rejects_empty_target",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
 
     let (go_home, go_vault) = initialized_remote_fixture("default-go");

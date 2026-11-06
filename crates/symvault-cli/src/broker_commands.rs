@@ -33,7 +33,7 @@ fn prepare<'a>(
         identity,
         EgressOptions {
             strict,
-            passthrough: parse_hosts(passthrough)?,
+            passthrough: passthrough.to_vec(),
             ..EgressOptions::default()
         },
     )?;
@@ -142,7 +142,7 @@ pub(crate) fn run(
         environment,
         ca_directory,
     } = prepare(root, store, identity, addr, strict, passthrough)?;
-    let hosts = parse_hosts(passthrough)?;
+    let hosts = passthrough;
     let (sender, receiver) = mpsc::channel();
     let stop = broker.shutdown();
     crate::process_signals::install(
@@ -192,48 +192,4 @@ pub(crate) fn run(
         }
     });
     finish_ca(result, ca_directory)
-}
-
-// pflag StringSlice is CSV, including doubled quotes and repeated flag values.
-fn parse_hosts(arguments: &[String]) -> Result<Vec<String>, String> {
-    let mut hosts = Vec::new();
-    for argument in arguments {
-        if argument.is_empty() {
-            continue;
-        }
-        let mut characters = argument.chars().peekable();
-        loop {
-            let mut field = String::new();
-            if characters.peek() == Some(&'"') {
-                characters.next();
-                loop {
-                    match characters.next() {
-                        Some('"') if characters.peek() == Some(&'"') => {
-                            characters.next();
-                            field.push('"');
-                        }
-                        Some('"') => break,
-                        Some(c) => field.push(c),
-                        None => return Err("invalid broker passthrough CSV".into()),
-                    }
-                }
-                if characters.peek().is_some_and(|c| *c != ',') {
-                    return Err("invalid broker passthrough CSV".into());
-                }
-            } else {
-                while let Some(c) = characters.peek().copied().filter(|c| *c != ',') {
-                    characters.next();
-                    if c == '"' {
-                        return Err("invalid broker passthrough CSV".into());
-                    }
-                    field.push(c);
-                }
-            }
-            hosts.push(field);
-            if characters.next().is_none() {
-                break;
-            }
-        }
-    }
-    Ok(hosts)
 }

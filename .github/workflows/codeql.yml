@@ -30,11 +30,11 @@ jobs:
         include:
           - language: actions
             build-mode: none
-          - language: go
-            build-mode: autobuild
           - language: javascript-typescript
             build-mode: none
           - language: ruby
+            build-mode: none
+          - language: rust
             build-mode: none
           - language: swift
             build-mode: autobuild
@@ -44,6 +44,20 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up Rust (pinned toolchain + Apple targets for SymvaultFFI)
+        if: matrix.language == 'swift'
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.98.0 --profile minimal \
+            --target aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim
+          rustc --version
+
+      # Before the appkit token is written to the global git config: cargo
+      # runs third-party build scripts and proc macros.
+      - name: Build the SymvaultFFI framework the Swift package links against
+        if: matrix.language == 'swift'
+        run: scripts/build-vaultcore.sh
+
       - name: Allow SwiftPM to clone the private symaira-appkit dependency
         if: matrix.language == 'swift'
         run: |
@@ -51,28 +65,17 @@ jobs:
         env:
           APPKIT_TOKEN: ${{ secrets.SYMAIRA_APPKIT_GITHUB_TOKEN }}
 
-      - name: Set up Go
-        if: matrix.language == 'swift'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.26.10'
-          cache: true
-
-      - name: Build the Vaultcore framework the Swift package links against
-        if: matrix.language == 'swift'
-        run: scripts/build-vaultcore.sh
-
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
 
       - name: Autobuild
         if: matrix.build-mode == 'autobuild'
-        uses: github/codeql-action/autobuild@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/autobuild@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           category: "/language:${{ matrix.language }}"

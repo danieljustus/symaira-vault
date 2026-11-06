@@ -3,6 +3,8 @@ import Testing
 
 @testable import SymvaultKit
 
+// The intake models are macOS-only (IntakeModels.swift), so are their tests.
+#if os(macOS)
 @Test func decodesIntakeDryRunResponse() throws {
   let data = Data(
     #"""
@@ -169,3 +171,4 @@ import Testing
   // Suggestions only carry field names + confidence; no value key exists.
   #expect(result.suggestions.first?.field == "username")
 }
+#endif

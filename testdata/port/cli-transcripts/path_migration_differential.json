@@ -1,0 +1,299 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
+  "tests": {
+    "migration_preview_matches_go_for_empty_marker_and_complete_tree": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "ba0718ee90df38bfdc9529d5add356b76e8b2b9ce57e77b0b617330316b6833f",
+          "request": {
+            "args": [
+              "migrate",
+              "paths"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/empty",
+              "NO_COLOR": "1",
+              "XDG_CACHE_HOME": "<ROOT:0>/xdg-cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/xdg-config",
+              "XDG_DATA_HOME": "<ROOT:0>/xdg-data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "No legacy path migration is needed.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "35421ff8df741da2c125ce766590bff7301cff8034cc1c3faf755c0ca04b6777",
+          "request": {
+            "args": [
+              "--quiet",
+              "migrate",
+              "xdg"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/empty",
+              "NO_COLOR": "1",
+              "XDG_CACHE_HOME": "<ROOT:0>/xdg-cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/xdg-config",
+              "XDG_DATA_HOME": "<ROOT:0>/xdg-data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "bf0f84c01e5ebece68d2a21c74b75884c42c990ace9c0fd2c1630aa22af89172",
+          "request": {
+            "args": [
+              "migrate",
+              "paths"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/tree",
+              "NO_COLOR": "1",
+              "XDG_CACHE_HOME": "<ROOT:1>/xdg-cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/xdg-config",
+              "XDG_DATA_HOME": "<ROOT:1>/xdg-data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Legacy path migration would copy 11 item(s):\n  <ROOT:1>/tree/.symvault/update-cache.json -> <ROOT:1>/xdg-cache/symaira-vault/update-cache.json (3 bytes)\n  <ROOT:1>/tree/.symvault/config.yaml -> <ROOT:1>/xdg-config/symaira-vault/config.yaml (18 bytes)\n  <ROOT:1>/tree/.symvault/audit -> <ROOT:1>/xdg-data/symaira-vault/audit (0 bytes)\n  <ROOT:1>/tree/.symvault/audit/log.jsonl -> <ROOT:1>/xdg-data/symaira-vault/audit/log.jsonl (6 bytes)\n  <ROOT:1>/tree/.symvault/devices.json -> <ROOT:1>/xdg-data/symaira-vault/devices.json (3 bytes)\n  <ROOT:1>/tree/.symvault/pairing -> <ROOT:1>/xdg-data/symaira-vault/pairing (0 bytes)\n  <ROOT:1>/tree/.symvault/pairing/invite.json -> <ROOT:1>/xdg-data/symaira-vault/pairing/invite.json (6 bytes)\n  <ROOT:1>/tree/.symvault/vault -> <ROOT:1>/xdg-data/symaira-vault/vault (0 bytes)\n  <ROOT:1>/tree/.symvault/vault/identity.age -> <ROOT:1>/xdg-data/symaira-vault/vault/identity.age (8 bytes)\n  <ROOT:1>/tree/.symvault/vault/nested -> <ROOT:1>/xdg-data/symaira-vault/vault/nested (0 bytes)\n  <ROOT:1>/tree/.symvault/vault/nested/entry.age -> <ROOT:1>/xdg-data/symaira-vault/vault/nested/entry.age (10 bytes)\nPreview only: no changes written.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "bf0f84c01e5ebece68d2a21c74b75884c42c990ace9c0fd2c1630aa22af89172",
+          "request": {
+            "args": [
+              "migrate",
+              "paths"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/tree",
+              "NO_COLOR": "1",
+              "XDG_CACHE_HOME": "<ROOT:1>/xdg-cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/xdg-config",
+              "XDG_DATA_HOME": "<ROOT:1>/xdg-data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "No legacy path migration is needed.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "migration_preview_matches_go_for_legacy_symlink_errors": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "0422af6789d0d8e7e5301d349b0ace299f985cd06466cf95ef2c6aff3747ef6e",
+          "request": {
+            "args": [
+              "migrate",
+              "paths"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/symlink",
+              "NO_COLOR": "1",
+              "XDG_CACHE_HOME": "<ROOT:0>/xdg-cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/xdg-config",
+              "XDG_DATA_HOME": "<ROOT:0>/xdg-data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: preview path migration: legacy path is not a directory: <ROOT:0>/symlink/.symvault\nError: preview path migration: legacy path is not a directory: <ROOT:0>/symlink/.symvault\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "e8d86066a3e48a0471779ea5ae9d55d68d30eac58f77c11a008e6fbd358d2a31",
+          "request": {
+            "args": [
+              "migrate",
+              "xdg"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/symlink",
+              "NO_COLOR": "1",
+              "XDG_CACHE_HOME": "<ROOT:0>/xdg-cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/xdg-config",
+              "XDG_DATA_HOME": "<ROOT:0>/xdg-data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: preview path migration: legacy path is not a directory: <ROOT:0>/symlink/.symvault\nError: preview path migration: legacy path is not a directory: <ROOT:0>/symlink/.symvault\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b9a5d8125a90832df61459d25487bf77632c2ccbe6cb5218a89cb35164b9e9f7",
+          "request": {
+            "args": [
+              "--quiet",
+              "migrate",
+              "paths"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/symlink",
+              "NO_COLOR": "1",
+              "XDG_CACHE_HOME": "<ROOT:0>/xdg-cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/xdg-config",
+              "XDG_DATA_HOME": "<ROOT:0>/xdg-data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: preview path migration: legacy path is not a directory: <ROOT:0>/symlink/.symvault\nError: preview path migration: legacy path is not a directory: <ROOT:0>/symlink/.symvault\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "bb603e950fcb3f41f9d9a34401cac4b6fa2f4474e97a8330d0755c511499b175",
+          "request": {
+            "args": [
+              "migrate",
+              "paths"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/nested-symlink",
+              "NO_COLOR": "1",
+              "XDG_CACHE_HOME": "<ROOT:1>/xdg-cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/xdg-config",
+              "XDG_DATA_HOME": "<ROOT:1>/xdg-data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: preview path migration: refusing symlink: <ROOT:1>/nested-symlink/.symvault/vault/nested-link\nError: preview path migration: refusing symlink: <ROOT:1>/nested-symlink/.symvault/vault/nested-link\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "682d3f5bc8dab9e9ea3a599b335944bc0ad29b48cbe964d20ff1ec69db1ef7e4",
+          "request": {
+            "args": [
+              "--quiet",
+              "migrate",
+              "xdg"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/nested-symlink",
+              "NO_COLOR": "1",
+              "XDG_CACHE_HOME": "<ROOT:1>/xdg-cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/xdg-config",
+              "XDG_DATA_HOME": "<ROOT:1>/xdg-data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: preview path migration: refusing symlink: <ROOT:1>/nested-symlink/.symvault/vault/nested-link\nError: preview path migration: refusing symlink: <ROOT:1>/nested-symlink/.symvault/vault/nested-link\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

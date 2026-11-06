@@ -415,7 +415,9 @@ mod tests {
     fn connect(address: SocketAddr, target: SocketAddr) -> BufReader<TcpStream> {
         let mut client = TcpStream::connect(address).unwrap();
         client
-            .set_read_timeout(Some(Duration::from_secs(3)))
+            // Setup bound, not the behavior under test: generous so load and coverage
+            // instrumentation cannot win the race (#1564-#1567).
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .unwrap();
         write!(
             client,
@@ -443,7 +445,7 @@ mod tests {
             client.set_nonblocking(true).unwrap();
             configure_accepted_client(&client).unwrap();
             client
-                .set_read_timeout(Some(Duration::from_secs(3)))
+                .set_read_timeout(Some(Duration::from_secs(30)))
                 .unwrap();
             let mut bytes = [0; 4];
             client.read_exact(&mut bytes).unwrap();
@@ -462,7 +464,7 @@ mod tests {
         let responder = thread::spawn(move || {
             let (mut client, _) = upstream.accept().unwrap();
             client
-                .set_read_timeout(Some(Duration::from_secs(3)))
+                .set_read_timeout(Some(Duration::from_secs(30)))
                 .unwrap();
             let mut bytes = [0; 4];
             client.read_exact(&mut bytes).unwrap();
@@ -489,7 +491,7 @@ mod tests {
         let responder = thread::spawn(move || {
             let (mut client, _) = upstream.accept().unwrap();
             client
-                .set_read_timeout(Some(Duration::from_secs(3)))
+                .set_read_timeout(Some(Duration::from_secs(30)))
                 .unwrap();
             let mut byte = [0];
             assert_eq!(client.read(&mut byte).unwrap(), 0);
@@ -536,7 +538,7 @@ mod tests {
         });
         let mut client = TcpStream::connect(address).unwrap();
         client
-            .set_read_timeout(Some(Duration::from_secs(3)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .unwrap();
         write!(
             client,

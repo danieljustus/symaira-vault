@@ -194,6 +194,9 @@ pub(crate) fn run_native_process(
     result
 }
 
+/// osascript prints the value of the script's last expression to stdout;
+/// JXA's `console.log` goes to stderr, which is discarded here. Every script
+/// therefore ends in the expression it reports, never in `console.log`.
 fn run_jxa(script: &str, timeout: Duration) -> Result<Vec<u8>, PlatformError> {
     run_stdin_command(
         "/usr/bin/osascript",
@@ -223,13 +226,12 @@ impl MacOsTouchId {
         r#"ObjC.import('LocalAuthentication');
 var context = $.LAContext.alloc.init;
 var error = $();
-var available = context.canEvaluatePolicyError(2, error);
-console.log(available ? 'available' : 'unavailable');"#
+context.canEvaluatePolicyError(1, error) ? 'available' : 'unavailable';"#
     }
 
     fn authentication_script(reason: &str) -> String {
         format!(
-            "ObjC.import('Foundation');\nObjC.import('LocalAuthentication');\nvar context = $.LAContext.alloc.init;\nvar result = null;\nvar error = $();\nif (!context.canEvaluatePolicyError(2, error)) {{ console.log('unavailable'); }} else {{ context.evaluatePolicyLocalizedReasonReply(2, {}, function(success, replyError) {{ result = success; }}); while (result === null) {{ $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.05)); }} console.log(result ? 'authenticated' : 'rejected'); }}\n",
+            "ObjC.import('Foundation');\nObjC.import('LocalAuthentication');\n(function () {{ var context = $.LAContext.alloc.init;\nvar result = null;\nvar error = $();\nif (!context.canEvaluatePolicyError(1, error)) {{ return 'unavailable'; }}\ncontext.evaluatePolicyLocalizedReasonReply(1, {}, function(success, replyError) {{ result = success; }});\nwhile (result === null) {{ $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.05)); }}\nreturn result ? 'authenticated' : 'rejected'; }})();\n",
             js_string(reason)
         )
     }
@@ -307,7 +309,11 @@ impl Autotype for MacOsPlatform {
 
 impl Clipboard for MacOsPlatform {
     fn set(&self, text: &[u8]) -> Result<(), PlatformError> {
-        run_stdin_command("/usr/bin/pbcopy", &[], text, DEFAULT_TIMEOUT).map(|_| ())
+        // Go's macOS clipboard is atotto's `pbcopy`: its error text is the raw
+        // `os/exec` text, which `PasteboardClipboard` reproduces. Unlike
+        // atotto the run has a deadline (30 s, process group killed and
+        // reaped), so a hung `pbcopy` cannot freeze the caller.
+        crate::desktop_commands::PasteboardClipboard::system().set(text)
     }
 
     fn clear(&self) -> Result<(), PlatformError> {
@@ -335,7 +341,7 @@ impl SecureUi for MacOsPlatform {
     ) -> Result<Vec<u8>, PlatformError> {
         let hidden_answer = if hidden { "true" } else { "false" };
         let script = format!(
-            "var app = Application.currentApplication(); app.includeStandardAdditions = true; var answer = app.displayDialog('', {{ withTitle: {}, defaultAnswer: '', hiddenAnswer: {} }}); console.log(answer.textReturned);",
+            "var app = Application.currentApplication(); app.includeStandardAdditions = true; var answer = app.displayDialog('', {{ withTitle: {}, defaultAnswer: '', hiddenAnswer: {} }}); answer.textReturned;",
             js_string(title),
             hidden_answer
         );
@@ -345,7 +351,7 @@ impl SecureUi for MacOsPlatform {
 
     fn approve(&self, operation: &str, timeout: Duration) -> Result<bool, PlatformError> {
         let script = format!(
-            "var app = Application.currentApplication(); app.includeStandardAdditions = true; var answer = app.displayDialog({}, {{ withTitle: 'Symaira Vault', buttons: ['Cancel', 'Allow'], defaultButton: 'Allow', cancelButton: 'Cancel' }}); console.log(answer.buttonReturned);",
+            "var app = Application.currentApplication(); app.includeStandardAdditions = true; var answer = app.displayDialog({}, {{ withTitle: 'Symaira Vault', buttons: ['Cancel', 'Allow'], defaultButton: 'Allow', cancelButton: 'Cancel' }}); answer.buttonReturned;",
             js_string(operation)
         );
         let output = run_jxa(&script, timeout)?;
@@ -503,7 +509,7 @@ mod tests {
             "/bin/sh",
             &["-c", "head -c 131072 /dev/zero >&2; cat"],
             &input,
-            Duration::from_secs(5),
+            Duration::from_secs(30),
         )
         .expect("large bidirectional pipe traffic completes");
         assert_eq!(output, input);
@@ -526,7 +532,9 @@ mod tests {
                 bytes.len()
             );
             assert!(
-                start.elapsed() < Duration::from_secs(3),
+                // Child is `sleep 30`: 10 s still proves the 100 ms deadline killed it,
+                // without losing to a loaded host.
+                start.elapsed() < Duration::from_secs(10),
                 "script={script:?}"
             );
         }
@@ -538,7 +546,7 @@ mod tests {
             "/bin/sh",
             &["-c", "cat >/dev/null; printf eof"],
             b"",
-            Duration::from_secs(3),
+            Duration::from_secs(30),
         )
         .expect("empty input delivers EOF");
         assert_eq!(output, b"eof");
@@ -557,14 +565,15 @@ mod tests {
                 PlatformErrorKind::TimedOut,
                 "attempt={attempt}: {error:?}"
             );
-            assert!(start.elapsed() < Duration::from_secs(3));
+            // `sleep 30` background child: see above.
+            assert!(start.elapsed() < Duration::from_secs(10));
         }
 
         let error = run_stdin_command(
             "/bin/sh",
             &["-c", "exec 0<&-; sleep 30"],
             &vec![b'x'; 256 * 1024],
-            Duration::from_secs(3),
+            Duration::from_secs(30),
         )
         .expect_err("a real nonempty write failure remains an error");
         assert_eq!(error.kind, PlatformErrorKind::Failed);
@@ -620,6 +629,43 @@ mod tests {
             MacOsKeyring.get("not-a-composite-key"),
             Err(SessionError::Keyring(_))
         ));
+    }
+
+    #[test]
+    fn jxa_reports_through_the_last_expression_on_stdout() {
+        if !Path::new("/usr/bin/osascript").is_file() {
+            return;
+        }
+        // console.log writes to stderr and would read back as empty here.
+        assert_eq!(
+            run_jxa("(function () { return 'ok'; })();", DEFAULT_TIMEOUT).unwrap(),
+            b"ok\n"
+        );
+        let probe = run_jxa(MacOsTouchId::availability_script(), DEFAULT_TIMEOUT).unwrap();
+        assert!(
+            probe == b"available\n" || probe == b"unavailable\n",
+            "{probe:?}"
+        );
+        assert_eq!(MacOsTouchId.is_available(), probe == b"available\n");
+    }
+
+    #[test]
+    fn jxa_scripts_never_report_through_console_log() {
+        let scripts = [
+            MacOsTouchId::availability_script().to_owned(),
+            MacOsTouchId::authentication_script("fixture reason"),
+        ];
+        for script in &scripts {
+            assert!(!script.contains("console.log"), "{script}");
+            // Go asks for biometrics only (LAPolicyDeviceOwnerAuthenticationWithBiometrics).
+            assert!(!script.contains("PolicyError(2") && !script.contains("ReasonReply(2"));
+        }
+        assert!(
+            !include_str!("macos.rs")
+                .lines()
+                .filter(|line| !line.trim_start().starts_with("//") && !line.contains("assert"))
+                .any(|line| line.contains(concat!("console", ".log(")))
+        );
     }
 
     #[test]

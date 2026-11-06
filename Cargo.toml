@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/symvault-cli", "crates/symvault-core", "crates/symvault-crypto", "crates/symvault-gojson", "crates/symvault-mcp", "crates/symvault-platform", "crates/symvault-store", "crates/symvault-sync"]
+members = ["crates/symvault-cli", "crates/symvault-core", "crates/symvault-crypto", "crates/symvault-ffi", "crates/symvault-gojson", "crates/symvault-mcp", "crates/symvault-platform", "crates/symvault-store", "crates/symvault-sync"]
 # .worktrees holds nested Git worktrees of this repository; each is its own
 # workspace and must not be claimed by the canonical checkout (#1497).
 exclude = ["third_party/argon2", ".worktrees"]
@@ -25,6 +25,13 @@ lto = "thin"
 panic = "abort"
 strip = true
 
+# Release-grade staticlib for the Swift framework (FFI-001). Unlike `release` it
+# keeps `panic = "unwind"` so the C ABI's `catch_unwind` can contain a bug
+# instead of aborting the host app.
+[profile.ffi]
+inherits = "release"
+panic = "unwind"
+
 # Keep real KDF parameters in integration tests without debug-mode crypto cost.
 [profile.test.package.scrypt]
 opt-level = 3
@@ -36,6 +43,18 @@ opt-level = 3
 opt-level = 3
 
 [profile.test.package.blake2]
+opt-level = 3
+
+# libyaml's simple-key scan and rowan's node offsets are O(depth) per step
+# (libyaml as in Go's yaml.v3); the 10000-level config cases take minutes per
+# run unoptimized.
+[profile.test.package.unsafe-libyaml]
+opt-level = 3
+
+[profile.test.package.rowan]
+opt-level = 3
+
+[profile.test.package.yaml-edit]
 opt-level = 3
 
 # Preserve encoded Go legacy memory while retaining upstream block filling.

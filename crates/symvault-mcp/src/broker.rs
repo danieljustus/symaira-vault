@@ -1111,7 +1111,9 @@ mod tests {
             };
             let response = if case_name == "wrong_hostname_tls" {
                 let client = build_http_client(
-                    Duration::from_secs(3),
+                    // Setup bound, not the behavior under test: generous so load and coverage
+                    // instrumentation cannot win the race (#1564-#1567).
+                    Duration::from_secs(15),
                     host,
                     &[SocketAddr::new(
                         IpAddr::V4(Ipv4Addr::LOCALHOST),
@@ -1139,7 +1141,7 @@ mod tests {
                     &BTreeMap::new(),
                     b"",
                     None,
-                    Duration::from_secs(3),
+                    Duration::from_secs(15),
                     MAX_BODY_BYTES,
                     false,
                     false,
@@ -1168,7 +1170,7 @@ mod tests {
         use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
         listener.set_nonblocking(true).unwrap();
-        let deadline = std::time::Instant::now() + Duration::from_secs(4);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         let (stream, _) = loop {
             match listener.accept() {
                 Ok(pair) => break pair,
@@ -1182,8 +1184,8 @@ mod tests {
             }
         };
         stream.set_nonblocking(false).unwrap();
-        let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
-        let _ = stream.set_write_timeout(Some(Duration::from_secs(3)));
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
+        let _ = stream.set_write_timeout(Some(Duration::from_secs(30)));
         let cert = decode_pem_fixture(
             include_str!("../tests/fixtures/tls-server.pem"),
             "CERTIFICATE",
@@ -1334,7 +1336,7 @@ mod tests {
                 }
             };
             stream.set_nonblocking(false).unwrap();
-            let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
+            let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
             let mut reader = BufReader::new(stream.try_clone().unwrap());
             loop {
                 let mut line = String::new();

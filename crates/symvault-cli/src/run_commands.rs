@@ -270,7 +270,24 @@ pub(crate) fn format_go_value(value: &Value) -> String {
     match value {
         Value::Null => "<nil>".to_owned(),
         Value::Bool(value) => value.to_string(),
-        Value::Number(value) => value.to_string(),
+        Value::Number(value) => {
+            let value = value.as_f64().expect("finite JSON number");
+            if value == 0.0 && value.is_sign_negative() {
+                return "-0".to_owned();
+            }
+            let scientific = format!("{value:e}");
+            let (mantissa, exponent) = scientific.split_once('e').expect("scientific float");
+            let exponent: i32 = exponent.parse().expect("float exponent");
+            if !(-4..6).contains(&exponent) {
+                format!(
+                    "{mantissa}e{}{:02}",
+                    if exponent < 0 { "-" } else { "+" },
+                    exponent.abs()
+                )
+            } else {
+                value.to_string()
+            }
+        }
         Value::String(value) => value.clone(),
         Value::Array(values) => {
             let values = values.iter().map(format_go_value).collect::<Vec<_>>();
@@ -334,6 +351,125 @@ fn parse_env_file_contents(
     Ok(result)
 }
 
+/// The process group of a bounded `run` child, so a fatal signal can be
+/// forwarded to it (see `process_signals`). Single slot: the CLI runs one
+/// command; the MCP server never reads it.
+#[cfg(unix)]
+pub(crate) mod child_group {
+    use std::sync::atomic::{AtomicI32, Ordering};
+    use std::time::{Duration, Instant};
+
+    const NONE: i32 = 0;
+    const SPAWNING: i32 = -1;
+    /// Upper bound for a signal that lands between `begin` and the child's pid
+    /// being known (fork/exec is microseconds; this only guards a stalled box).
+    const SPAWN_WAIT: Duration = Duration::from_secs(2);
+
+    /// One process-group slot. The production code uses the single `SLOT`;
+    /// tests build their own so they never touch the shared one (a test that
+    /// signalled the shared slot would kill another test's child).
+    struct Slot(AtomicI32);
+
+    impl Slot {
+        const fn new() -> Self {
+            Self(AtomicI32::new(NONE))
+        }
+
+        fn begin(&self) {
+            self.0.store(SPAWNING, Ordering::SeqCst);
+        }
+
+        fn set(&self, pid: u32) {
+            self.0
+                .store(i32::try_from(pid).unwrap_or(NONE), Ordering::SeqCst);
+        }
+
+        fn clear(&self) {
+            self.0.store(NONE, Ordering::SeqCst);
+        }
+
+        fn forward(&self, signal: i32) {
+            let deadline = Instant::now() + SPAWN_WAIT;
+            let mut group = self.0.load(Ordering::SeqCst);
+            while group == SPAWNING && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(1));
+                group = self.0.load(Ordering::SeqCst);
+            }
+            if group > 0
+                && let Some(pid) = rustix::process::Pid::from_raw(group)
+                && let Some(signal) = rustix::process::Signal::from_named_raw(signal)
+            {
+                let _ = rustix::process::kill_process_group(pid, signal);
+            }
+        }
+    }
+
+    static SLOT: Slot = Slot::new();
+
+    /// Registration of one child's group; cleared on drop.
+    pub(crate) struct Guard(());
+
+    /// Marks a spawn as imminent. A signal arriving before [`Guard::set`]
+    /// waits for the pid instead of dying with the child unreachable.
+    pub(crate) fn begin() -> Guard {
+        SLOT.begin();
+        Guard(())
+    }
+
+    impl Guard {
+        /// Registers the spawned child (its own group leader).
+        pub(crate) fn set(&self, pid: u32) {
+            SLOT.set(pid);
+        }
+    }
+
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            SLOT.clear();
+        }
+    }
+
+    /// Delivers `signal` to the registered child group, if any.
+    pub(crate) fn forward(signal: i32) {
+        SLOT.forward(signal);
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::os::unix::process::{CommandExt, ExitStatusExt};
+
+        #[test]
+        fn slot_registers_and_clears_the_group() {
+            let slot = Slot::new();
+            slot.begin();
+            assert_eq!(slot.0.load(Ordering::SeqCst), SPAWNING);
+            slot.set(4242);
+            assert_eq!(slot.0.load(Ordering::SeqCst), 4242);
+            slot.clear();
+            assert_eq!(slot.0.load(Ordering::SeqCst), NONE);
+        }
+
+        #[test]
+        fn forward_signals_the_registered_child_group_only() {
+            let mut child = std::process::Command::new("sleep")
+                .arg("30")
+                .process_group(0)
+                .spawn()
+                .expect("spawn sleep");
+            let slot = Slot::new();
+            // Nothing registered: the signal goes nowhere.
+            slot.forward(libc::SIGTERM);
+            assert!(child.try_wait().expect("try_wait").is_none());
+            slot.begin();
+            slot.set(child.id());
+            slot.forward(libc::SIGTERM);
+            let status = child.wait().expect("child ends");
+            assert_eq!(status.signal(), Some(libc::SIGTERM));
+        }
+    }
+}
+
 /// Execute a command using the caller-selected environment policy.
 ///
 /// The process itself is deliberately kept behind this small seam so `run`
@@ -346,6 +482,9 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
         return Err("command must contain at least one element".to_owned());
     }
     let mut materialized_files = materialize_secret_files(options.files)?;
+    // Go creates the timeout context here, before it builds the environment, and
+    // `exec.Cmd.Start` refuses to start a process whose context already expired.
+    let deadline_began = Instant::now();
 
     let mut child_command = Command::new(&options.command[0]);
     child_command.args(&options.command[1..]);
@@ -358,10 +497,15 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
         // then reaches the child instead of orphaning it, and the child keeps
         // terminal reads. ponytail: process-group scope; detached descendants
         // need OS-specific supervision.
-        // Residual (#1242): Ctrl-C does not reach a child started with
-        // --timeout/MCP execute, which Go would also have signalled.
+        // A terminal Ctrl-C then reaches only this process, so the CLI's
+        // signal thread forwards SIGINT/SIGTERM/SIGHUP/SIGQUIT to this group
+        // before dying (`run_commands::child_group`, ADR 0034 item 12).
         child_command.process_group(0);
     }
+    // Registered before the spawn so a signal in the fork window still waits
+    // for the pid; cleared on every exit path when the guard drops.
+    #[cfg(unix)]
+    let group_guard = options.timeout.is_some().then(child_group::begin);
     child_command.env_clear();
     for &key in options.whitelist {
         if let Some(value) = std::env::var_os(key) {
@@ -413,15 +557,35 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
     }
     child_command.stdout(Stdio::piped()).stderr(Stdio::piped());
 
+    if options
+        .timeout
+        .is_some_and(|limit| deadline_began.elapsed() >= limit)
+    {
+        return Err(cleanup_after_command_error(
+            &mut materialized_files,
+            "failed to run command: context deadline exceeded".to_owned(),
+        ));
+    }
     let mut child = match child_command.spawn() {
         Ok(child) => child,
         Err(error) => {
             return Err(cleanup_after_command_error(
                 &mut materialized_files,
-                format!("failed to run command: {error}"),
+                format!(
+                    "failed to run command: {}",
+                    go_exec_error(
+                        &options.command[0],
+                        options.working_directory.is_none_or(Path::exists),
+                        &error
+                    )
+                ),
             ));
         }
     };
+    #[cfg(unix)]
+    if let Some(guard) = &group_guard {
+        guard.set(child.id());
+    }
     let stdout = match child.stdout.take() {
         Some(stdout) => stdout,
         None => {
@@ -936,6 +1100,23 @@ fn format_fraction(whole: u128, fraction: u128, unit: u128) -> String {
     format!("{whole}.{digits}")
 }
 
+/// Renders a spawn failure the way Go's `os/exec` does: a name without a path
+/// separator that is not on `PATH` is `exec.ErrNotFound`, a missing path is the
+/// `fork/exec` error. A missing working directory keeps the system text.
+fn go_exec_error(program: &str, working_directory_exists: bool, error: &std::io::Error) -> String {
+    if error.kind() != std::io::ErrorKind::NotFound || !working_directory_exists {
+        return error.to_string();
+    }
+    if program.contains(std::path::is_separator) {
+        return format!("fork/exec {program}: no such file or directory");
+    }
+    let path_variable = if cfg!(windows) { "%PATH%" } else { "$PATH" };
+    format!(
+        "exec: {}: executable file not found in {path_variable}",
+        symvault_core::go_quote(program)
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -1006,7 +1187,11 @@ mod tests {
         path: &str,
         data: BTreeMap<String, Value>,
     ) {
-        let store = Store::open(root, identity).expect("open temporary vault");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root),
+            identity,
+        )
+        .expect("open temporary vault");
         store
             .write_new_entry(
                 path,
@@ -1217,7 +1402,9 @@ mod tests {
                 &BTreeMap::new(),
                 &known_secret,
                 None,
-                Duration::from_secs(2),
+                // Setup bound, not the behavior under test: generous so load and coverage
+                // instrumentation cannot win the race (#1564-#1567).
+                Duration::from_secs(30),
             )
             .expect("fake child process");
 
@@ -1319,7 +1506,7 @@ mod tests {
                 &files,
                 &[b"synthetic-file-pin".to_vec()],
                 None,
-                Duration::from_secs(2),
+                Duration::from_secs(30),
             )
             .expect("child should read its temporary secret file");
 
@@ -1465,7 +1652,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn bounded_run_isolates_the_child_so_a_timeout_can_kill_the_tree() {
-        let (parent, child) = child_process_group(Some(Duration::from_secs(5)));
+        let (parent, child) = child_process_group(Some(Duration::from_secs(30)));
         assert_ne!(parent, child);
     }
 
@@ -1487,7 +1674,7 @@ mod tests {
             extra_environment: &[],
             passthrough: &[],
             working_directory: None,
-            timeout: Some(Duration::from_secs(2)),
+            timeout: Some(Duration::from_secs(30)),
             redactions: &redactions,
             generic_redaction: false,
             whitelist: &[],
@@ -1519,5 +1706,23 @@ mod tests {
             format_timeout(Duration::from_secs(3_661) + Duration::from_nanos(2)),
             "1h1m1.000000002s"
         );
+    }
+
+    #[test]
+    fn spawn_failures_read_like_go_os_exec() {
+        let missing = std::io::Error::from(std::io::ErrorKind::NotFound);
+        let path_variable = if cfg!(windows) { "%PATH%" } else { "$PATH" };
+        assert_eq!(
+            go_exec_error("x", true, &missing),
+            format!("exec: \"x\": executable file not found in {path_variable}")
+        );
+        assert_eq!(
+            go_exec_error("./x", true, &missing),
+            "fork/exec ./x: no such file or directory"
+        );
+        // A missing working directory is not a missing program.
+        assert_eq!(go_exec_error("x", false, &missing), missing.to_string());
+        let denied = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+        assert_eq!(go_exec_error("x", true, &denied), denied.to_string());
     }
 }

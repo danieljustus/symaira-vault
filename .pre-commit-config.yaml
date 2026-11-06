@@ -21,30 +21,16 @@ repos:
 
   - repo: local
     hooks:
-      - id: go-fmt
-        name: Go Format
-        entry: bash -c 'make fmt-check'
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all --check
         language: system
-        files: \.go$
+        files: \.rs$
         pass_filenames: false
-        
-      - id: go-vet
-        name: Go Vet
-        entry: bash -c 'make vet'
+
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: bash -c 'make rust-lint'
         language: system
-        files: \.go$
-        pass_filenames: false
-        
-      - id: golangci-lint
-        name: golangci-lint
-        entry: bash -c 'make lint'
-        language: system
-        files: \.go$
-        pass_filenames: false
-        
-      - id: go-test-fast
-        name: Go Test (Fast)
-        entry: bash -c 'make test-fast'
-        language: system
-        files: \.go$
+        files: \.(rs|toml)$
         pass_filenames: false

@@ -77,10 +77,13 @@ fn delete_entry_policy_uses_delete_action_before_storage() {
     assert!(error.is_error);
     assert!(error.text.contains("policy denied tool \"delete_entry\""));
     assert!(
-        Store::open(root.path(), &_verifier)
-            .unwrap()
-            .get("github", &_verifier)
-            .is_ok()
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root.path()),
+            &_verifier
+        )
+        .unwrap()
+        .get("github", &_verifier)
+        .is_ok()
     );
 }
 
@@ -125,7 +128,11 @@ fn delete_entry_matches_source_bound_go_fixture_and_persists() {
             .collect::<Vec<_>>();
         assert_eq!(actual, case.output, "case {}", case.name);
 
-        let store = Store::open(root.path(), &verifier).expect("reopen synthetic vault");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root.path()),
+            &verifier,
+        )
+        .expect("reopen synthetic vault");
         let exists = !matches!(
             store.get("github", &verifier),
             Err(StoreError::EntryNotFound(_))
@@ -189,7 +196,11 @@ fn write_synthetic_vault() -> (
         recipient_string(&verifier),
     )
     .expect("synthetic recipients");
-    let store = Store::open(root.path(), &identity).expect("open synthetic vault");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(root.path()),
+        &identity,
+    )
+    .expect("open synthetic vault");
     let mut data = BTreeMap::new();
     data.insert("password".into(), Value::String("StrongP@ssw0rd123".into()));
     data.insert("username".into(), Value::String("fixture-user".into()));
@@ -277,7 +288,11 @@ fn symaira_delete_alias_dispatches_like_delete_entry_and_keeps_the_tier_gate() {
     assert!(!deleted.is_error, "alias must not report an error");
     assert_eq!(deleted.text, "Successfully deleted entry: github");
 
-    let store = Store::open(root.path(), &verifier).expect("reopen synthetic vault");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(root.path()),
+        &verifier,
+    )
+    .expect("reopen synthetic vault");
     assert!(
         matches!(
             store.get("github", &verifier),

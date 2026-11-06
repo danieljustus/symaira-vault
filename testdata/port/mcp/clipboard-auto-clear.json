@@ -1,0 +1,475 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "58d978bb",
+    "commit_sha": "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9",
+    "source_files": [
+      "go.mod",
+      "go.sum",
+      "internal/approval/enroll.go",
+      "internal/approval/http.go",
+      "internal/approval/local.go",
+      "internal/approval/queue.go",
+      "internal/clipboard/clipboard.go",
+      "internal/clipboard/clipboard_signal_unix.go",
+      "internal/clipboard/clipboard_signal_windows.go",
+      "internal/clipboard/interface.go",
+      "internal/clipboard/null_clipboard.go",
+      "internal/clipboard/provider.go",
+      "internal/clipboard/system_clipboard.go",
+      "internal/config/config.go",
+      "internal/config/config_load.go",
+      "internal/config/config_merge.go",
+      "internal/config/config_save.go",
+      "internal/config/config_validate.go",
+      "internal/config/dottedpath.go",
+      "internal/config/migrate.go",
+      "internal/config/migrate_copy_unix.go",
+      "internal/config/migrate_copy_windows.go",
+      "internal/config/migrate_source_unix.go",
+      "internal/config/migrate_source_windows.go",
+      "internal/config/paths.go",
+      "internal/config/presets.go",
+      "internal/config/schema.go",
+      "internal/config/warn.go",
+      "internal/crypto/age.go",
+      "internal/crypto/argon2_resources.go",
+      "internal/crypto/argon2id.go",
+      "internal/crypto/diceware.go",
+      "internal/crypto/hmac.go",
+      "internal/crypto/interop.go",
+      "internal/crypto/keygen.go",
+      "internal/crypto/keystore.go",
+      "internal/crypto/password.go",
+      "internal/crypto/secstring_other.go",
+      "internal/crypto/secstring_unix.go",
+      "internal/crypto/symmetric.go",
+      "internal/crypto/totp.go",
+      "internal/fsutil/createsensitiveoutput.go",
+      "internal/fsutil/doc.go",
+      "internal/fsutil/reexport.go",
+      "internal/fsutil/safepath/doc.go",
+      "internal/fsutil/safepath/manager_unix.go",
+      "internal/fsutil/safepath/manager_windows.go",
+      "internal/fsutil/safepath/safepath.go",
+      "internal/fsutil/safewrite_windows.go",
+      "internal/mcp/apitemplates/auth.go",
+      "internal/mcp/apitemplates/template.go",
+      "internal/mcp/auth/auth.go",
+      "internal/mcp/auth/token.go",
+      "internal/mcp/auth/token_ratelimit.go",
+      "internal/mcp/errors/codes.go",
+      "internal/mcp/install/agent.go",
+      "internal/mcp/install/config.go",
+      "internal/mcp/install/detect.go",
+      "internal/mcp/install/installer.go",
+      "internal/mcp/masking/doc.go",
+      "internal/mcp/masking/sanitizer.go",
+      "internal/mcp/masking/validator.go",
+      "internal/mcp/mcptypes.go",
+      "internal/mcp/server/approval.go",
+      "internal/mcp/server/approval_helper.go",
+      "internal/mcp/server/command_policy.go",
+      "internal/mcp/server/grant_keys.go",
+      "internal/mcp/server/grant_keys_fallback.go",
+      "internal/mcp/server/hooks.go",
+      "internal/mcp/server/hooks_builtin.go",
+      "internal/mcp/server/http_helpers.go",
+      "internal/mcp/server/leanmode.go",
+      "internal/mcp/server/prompt_registry.go",
+      "internal/mcp/server/protocol.go",
+      "internal/mcp/server/render.go",
+      "internal/mcp/server/secure_input.go",
+      "internal/mcp/server/server.go",
+      "internal/mcp/server/server_approval.go",
+      "internal/mcp/server/server_authorize.go",
+      "internal/mcp/server/server_dispatch.go",
+      "internal/mcp/server/setup.go",
+      "internal/mcp/server/sharing_store.go",
+      "internal/mcp/server/tool_registry.go",
+      "internal/mcp/server/tools_audit_self.go",
+      "internal/mcp/server/tools_auth.go",
+      "internal/mcp/server/tools_autotype.go",
+      "internal/mcp/server/tools_clipboard.go",
+      "internal/mcp/server/tools_delete.go",
+      "internal/mcp/server/tools_execute_api_request.go",
+      "internal/mcp/server/tools_execute_with_secret.go",
+      "internal/mcp/server/tools_find.go",
+      "internal/mcp/server/tools_generate.go",
+      "internal/mcp/server/tools_get.go",
+      "internal/mcp/server/tools_health.go",
+      "internal/mcp/server/tools_list.go",
+      "internal/mcp/server/tools_perplexity.go",
+      "internal/mcp/server/tools_prepare_payment.go",
+      "internal/mcp/server/tools_request_credential.go",
+      "internal/mcp/server/tools_run.go",
+      "internal/mcp/server/tools_sanitize.go",
+      "internal/mcp/server/tools_search.go",
+      "internal/mcp/server/tools_search_openai.go",
+      "internal/mcp/server/tools_secure_input.go",
+      "internal/mcp/server/tools_set.go",
+      "internal/mcp/server/tools_sharing.go",
+      "internal/mcp/server/tools_template.go",
+      "internal/mcp/server/tools_test_helpers.go",
+      "internal/mcp/server/tools_totp.go",
+      "internal/mcp/server/tools_unseal.go",
+      "internal/mcp/server/tools_whoami.go",
+      "internal/mcp/serverbootstrap/http.go",
+      "internal/mcp/serverbootstrap/http_lifecycle.go",
+      "internal/mcp/serverbootstrap/http_metrics.go",
+      "internal/mcp/serverbootstrap/http_nometrics.go",
+      "internal/mcp/serverbootstrap/http_setup.go",
+      "internal/mcp/serverbootstrap/oauth.go",
+      "internal/mcp/serverbootstrap/stdio.go",
+      "internal/mcp/serverbootstrap/tls.go",
+      "internal/mcp/serverbootstrap/wellknown.go",
+      "internal/mcp/sharing_types.go",
+      "internal/mcp/toolhash.go",
+      "internal/mcp/transport/stdio.go",
+      "internal/mcp/transport/transport.go",
+      "internal/mcp/util.go",
+      "internal/policy/authorizer.go",
+      "internal/policy/context.go",
+      "internal/policy/engine.go",
+      "internal/policy/parser.go",
+      "internal/policy/ratelimit.go",
+      "internal/policy/ratelimit_transition.go",
+      "internal/policy/types.go",
+      "internal/secureui/backend.go",
+      "internal/secureui/backend_darwin.go",
+      "internal/secureui/backend_other.go",
+      "internal/secureui/backend_tty.go",
+      "internal/secureui/backend_unix.go",
+      "internal/secureui/backend_windows.go",
+      "internal/secureui/capslock.go",
+      "internal/secureui/capslock_darwin.go",
+      "internal/secureui/capslock_linux.go",
+      "internal/secureui/capslock_other.go",
+      "internal/secureui/runner.go",
+      "internal/secureui/secureui.go",
+      "internal/template/builtins.go",
+      "internal/template/engine.go",
+      "internal/template/funcs.go",
+      "internal/template/resolver.go",
+      "internal/vault/backup_codes.go",
+      "internal/vault/cache.go",
+      "internal/vault/devices.go",
+      "internal/vault/entry.go",
+      "internal/vault/entry_canary.go",
+      "internal/vault/entry_metadata.go",
+      "internal/vault/entry_readwrite.go",
+      "internal/vault/entry_resources.go",
+      "internal/vault/entry_validate.go",
+      "internal/vault/file_digest.go",
+      "internal/vault/git.go",
+      "internal/vault/index_resources.go",
+      "internal/vault/kdf_resource_migration.go",
+      "internal/vault/lock_unix.go",
+      "internal/vault/lock_windows.go",
+      "internal/vault/manifest.go",
+      "internal/vault/manifest_updater.go",
+      "internal/vault/metrics.go",
+      "internal/vault/payment.go",
+      "internal/vault/read_admission.go",
+      "internal/vault/recipients.go",
+      "internal/vault/reencrypt.go",
+      "internal/vault/reencrypt_journal.go",
+      "internal/vault/reencrypt_journal_unix.go",
+      "internal/vault/reencrypt_journal_windows.go",
+      "internal/vault/reencrypt_unix.go",
+      "internal/vault/reencrypt_windows.go",
+      "internal/vault/retention_budget.go",
+      "internal/vault/search.go",
+      "internal/vault/search_index.go",
+      "internal/vault/service.go",
+      "internal/vault/symlink_harden.go",
+      "internal/vault/symlink_harden_windows.go",
+      "internal/vault/sync/sync.go",
+      "internal/vault/taint/taint.go",
+      "internal/vault/types.go",
+      "internal/vault/url.go",
+      "internal/vault/vault.go",
+      "internal/vault/vault_sync_reconcile.go"
+    ],
+    "source_hash": "43eff147baf0f585b3a625a08111eb7677aafa6170f6872d119d8a96b2c0ed35",
+    "source_pin_digest": "798428363aedeee244a170abf19b98f8e811794ff253389005c0842690f00fd4",
+    "go_version": "go1.26.6",
+    "corekit_version": "v0.18.2",
+    "generator_files": [
+      "internal/mcp/server/mcp_clipboard_auto_clear_fixture_generator_test.go",
+      "internal/mcp/server/mcp_copy_clipboard_fixture_generator_test.go",
+      "internal/mcp/server/mcpgeneratetotp_fixture_generator_test.go",
+      "internal/mcp/server/mcp_local_fixture_provenance_test.go",
+      "internal/mcp/server/tools_test_helpers.go"
+    ],
+    "generator_hash": "dd5554c133f811a3baa39cfc4e3f7262309952bc63a1140ebbad7f7e7f64ba06"
+  },
+  "server_name": "symvault",
+  "server_version": "0.0.0-clipboard-auto-clear-fixture",
+  "cases": [
+    {
+      "name": "copy_to_clipboard_auto_clear_-5",
+      "tool": "copy_to_clipboard",
+      "auto_clear_duration": -5,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"copy_to_clipboard\",\"arguments\":{\"path\":\"login\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-clipboard-auto-clear-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "{\"success\": true}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "clipboard_events": [
+        "secret"
+      ]
+    },
+    {
+      "name": "generate_totp_auto_clear_-5",
+      "tool": "generate_totp",
+      "auto_clear_duration": -5,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"generate_totp\",\"arguments\":{\"path\":\"totp\",\"destination\":\"clipboard\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-clipboard-auto-clear-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "{\"clipboard_clears_in\":-5,\"destination\":\"clipboard\",\"success\":true}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "clipboard_events": [
+        "secret"
+      ]
+    },
+    {
+      "name": "copy_to_clipboard_auto_clear_-1",
+      "tool": "copy_to_clipboard",
+      "auto_clear_duration": -1,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"copy_to_clipboard\",\"arguments\":{\"path\":\"login\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-clipboard-auto-clear-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "{\"success\": true}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "clipboard_events": [
+        "secret"
+      ]
+    },
+    {
+      "name": "generate_totp_auto_clear_-1",
+      "tool": "generate_totp",
+      "auto_clear_duration": -1,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"generate_totp\",\"arguments\":{\"path\":\"totp\",\"destination\":\"clipboard\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-clipboard-auto-clear-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "{\"clipboard_clears_in\":-1,\"destination\":\"clipboard\",\"success\":true}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "clipboard_events": [
+        "secret"
+      ]
+    },
+    {
+      "name": "copy_to_clipboard_auto_clear_0",
+      "tool": "copy_to_clipboard",
+      "auto_clear_duration": 0,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"copy_to_clipboard\",\"arguments\":{\"path\":\"login\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-clipboard-auto-clear-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "{\"success\": true}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "clipboard_events": [
+        "secret"
+      ]
+    },
+    {
+      "name": "generate_totp_auto_clear_0",
+      "tool": "generate_totp",
+      "auto_clear_duration": 0,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"generate_totp\",\"arguments\":{\"path\":\"totp\",\"destination\":\"clipboard\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-clipboard-auto-clear-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "{\"clipboard_clears_in\":0,\"destination\":\"clipboard\",\"success\":true}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "clipboard_events": [
+        "secret"
+      ]
+    }
+  ]
+}

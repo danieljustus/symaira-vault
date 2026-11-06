@@ -1,0 +1,23 @@
+{
+  "direction": "Go NewOSKeyring writes a native item, the Rust adapter updates it, Go reads it back and deletes it",
+  "go_verdict": {
+    "accepted": true,
+    "command": [
+      "native_closeout.py",
+      "keyring",
+      "--attest-go"
+    ],
+    "exit_code": 0,
+    "output_sha256": "2acd009d0f2ac0692f8c61e536301fc830d2d276e5bd318eaa8973acabf3380f"
+  },
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "linux",
+  "name": "native-keyring-interop",
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "rust_artifacts_sha256": {
+    "rust-native-keyring-test": "ee36c8d6920b496ab2ec40d5b9425888d5a7e20907416c1e0bedbf4eb39f74c1"
+  },
+  "rust_commit": "aa0f0ad942bd456409719e13888deeac1ef1a066",
+  "schema": 1
+}

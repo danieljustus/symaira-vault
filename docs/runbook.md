@@ -7,7 +7,7 @@
 ## Table of Contents
 
 1. [CI/CD Overview](#cicd-overview)
-2. [govulncheck Failures](#govulncheck-failures)
+2. [Dependency Audit Failures](#dependency-audit-failures)
 3. [Dependabot Alerts](#dependabot-alerts)
 4. [Release Workflow Errors](#release-workflow-errors)
 5. [Backup & Recovery](#backup--recovery)
@@ -22,31 +22,30 @@ Symaira Vault uses GitHub Actions for CI/CD:
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `ci.yml` | Push to main, PRs | Tests, lint, govulncheck, builds |
+| `ci.yml` | Push to main, PRs | Rust tests, lint, dependency scan, builds |
 | `release.yml` | Version tags (`v*`) | Release artifacts, checksums |
 
 ### CI Pipeline Jobs
 
-1. **govulncheck** - Vulnerability scanning
-2. **lint** - Code quality checks (golangci-lint)
-3. **test** - Unit and integration tests
-4. **build** - Cross-platform binary builds
-5. **integration-test** - Integration test suite
+1. **dependency-scan** - OSV scan of `Cargo.lock`
+2. **lint** - rustfmt check
+3. **rust**, **rust-native**, **rust-miri** - Clippy, nextest, doctests, `cargo audit`/`cargo deny`, replayed differential contracts
+4. **build** / **build-pr** - `cargo build --release --locked -p symvault-cli --bin symvault`
+5. **smoke-test** - Binary smoke test on the Linux build
 
 ### Release Pipeline Jobs
 
-1. **lint** - Format check, golangci-lint, gosec SAST (mirrors CI gates)
-2. **test** - Pre-release validation
-3. **govulncheck** - Final vulnerability scan
-4. **release** - GoReleaser artifact publishing (depends on all above)
+1. **rust-gates** - rustfmt + Clippy, nextest + doctests, `cargo audit` + `cargo deny`, release-contract self-test
+2. **docker** - Image build, smoke test, push
+3. **release** - GoReleaser (Rust builder) artifact publishing, notarization, SBOM, Cosign signing (depends on the gates)
 
 ---
 
-## govulncheck Failures
+## Dependency Audit Failures
 
 ### What This Means
 
-`govulncheck` found vulnerabilities in Symaira Vault dependencies (not in Symaira Vault code itself).
+`cargo audit`, `cargo deny` or the OSV scan of `Cargo.lock` found vulnerabilities in Symaira Vault dependencies (not in Symaira Vault code itself).
 
 ### Response Matrix
 
@@ -62,19 +61,20 @@ Symaira Vault uses GitHub Actions for CI/CD:
 1. **Identify the vulnerable package**:
    ```bash
    # Local check
-   go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+   make rust-security
 
-   # Check which package has the CVE
+   # Which crates pull the vulnerable one in
+   cargo tree --locked -i <crate>
    ```
 
 2. **Check if the vulnerable function is actually called**:
-   - govulncheck may report false positives
+   - Advisories may not apply to the features or code paths Symaira Vault uses
    - Verify the call chain reaches the vulnerable code path
 
 3. **Check for fixed version**:
    ```bash
-   go list -m -versions <package>
-   go get <package>@<fixed-version>
+   cargo search <crate>
+   cargo update -p <crate> --precise <fixed-version>
    ```
 
 4. **If no fix available**:
@@ -86,13 +86,10 @@ Symaira Vault uses GitHub Actions for CI/CD:
 
 ```bash
 # Update dependency
-go get <package>@latest
-go mod tidy
-go mod verify
+cargo update -p <crate>
 
 # Test thoroughly
-go test -v ./...
-GOWORK=off go test -v -tags smoke ./...
+make rust-lint rust-test rust-security
 
 # Commit with conventional message
 git commit -m "fix(deps): update <package> to fix CVE-XXXX-XXXX"
@@ -129,11 +126,11 @@ Dependabot detected outdated dependencies with known vulnerabilities.
 git checkout -b dependabot/<package>-<version>
 
 # Check for breaking changes
-go mod why <package>  # Why is this dependency needed?
+cargo tree --locked -i <crate>  # Why is this dependency needed?
 
 # Test with new version
-go get <package>@latest
-go mod tidy
+cargo update -p <crate>
+make rust-test
 ```
 
 ---
@@ -145,7 +142,7 @@ go mod tidy
 | Job | Common Failure | Resolution |
 |-----|---------------|------------|
 | test | Flaky integration test | Re-run, check test isolation |
-| govulncheck | New CVE published | Update dependency to fixed version |
+| rust-gates | New RUSTSEC advisory published | Update the dependency to the fixed version |
 | release | GitHub token issues | Verify workflow permissions |
 | goreleaser | Asset size limit | Check artifact sizes |
 
@@ -496,7 +493,7 @@ If `identity.age` is lost, **there is no recovery**. The identity is the private
 
 1. Reinstall Symaira Vault:
    ```bash
-   go install github.com/danieljustus/symaira-vault@latest
+   cargo install --locked --git https://github.com/danieljustus/symaira-vault --tag <release tag> symvault-cli
    ```
 
 2. Restore vault from backup (see above)
@@ -976,7 +973,7 @@ git cherry-pick <commit>
 # OR manually apply changes
 
 # Test
-go test -v ./...
+make rust-test
 
 # Tag and push
 git tag v1.0.x
@@ -1058,4 +1055,4 @@ rm -rf /tmp/test-vault
 - [Security Policy](../SECURITY.md)
 - [Release Process Documentation](../.github/workflows/release.yml)
 - [GoReleaser Configuration](../.goreleaser.yml)
-- [Vulnerability Database](https://pkg.go.dev/golang.org/x/vuln)
+- [RustSec Advisory Database](https://rustsec.org/)

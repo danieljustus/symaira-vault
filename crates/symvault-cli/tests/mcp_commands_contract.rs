@@ -71,7 +71,11 @@ fn unix_platform_approval_pty_acceptance() {
     fs::set_permissions(&identity_path, fs::Permissions::from_mode(0o600))
         .expect("restrict synthetic identity permissions");
 
-    let store = Store::open(&vault, &identity).expect("open synthetic vault");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&vault),
+        &identity,
+    )
+    .expect("open synthetic vault");
     store
         .write_new_entry(
             "fixture",
@@ -303,10 +307,13 @@ fn unix_platform_approval_pty_acceptance() {
         }
     };
     let read_fixture = || {
-        Store::open(&vault, &identity)
-            .expect("reopen synthetic vault")
-            .get("fixture", &identity)
-            .expect("read synthetic entry")
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&vault),
+            &identity,
+        )
+        .expect("reopen synthetic vault")
+        .get("fixture", &identity)
+        .expect("read synthetic entry")
     };
 
     const INIT: &str = concat!(
@@ -778,7 +785,10 @@ fn run_source_bound_api_template_fixture(before_setup: impl FnOnce()) {
     let server_hits = Arc::clone(&hits);
     let observed_server_requests = Arc::clone(&observed_requests);
     let serve = move || {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        // The server exits after its seventh request; the deadline only bounds a
+        // broken run. 10 s closed the listener before the last case on a loaded
+        // host (6 of 7 hits, `upstream request failed`, #1565).
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
         while server_hits.load(Ordering::SeqCst) < 7 && std::time::Instant::now() < deadline {
             let (mut stream, _) = match listener.accept() {
                 Ok(pair) => pair,
@@ -792,10 +802,12 @@ fn run_source_bound_api_template_fixture(before_setup: impl FnOnce()) {
                 .set_nonblocking(false)
                 .expect("make accepted API stream blocking");
             stream
-                .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                // Setup bound, not the behavior under test: generous so load and coverage
+                // instrumentation cannot win the race (#1564-#1567).
+                .set_read_timeout(Some(std::time::Duration::from_secs(30)))
                 .expect("bound API request read");
             stream
-                .set_write_timeout(Some(std::time::Duration::from_secs(2)))
+                .set_write_timeout(Some(std::time::Duration::from_secs(30)))
                 .expect("bound API response write");
             let mut reader = BufReader::new(stream.try_clone().expect("clone API request stream"));
             let mut first_line = String::new();
@@ -934,7 +946,11 @@ fn run_source_bound_api_template_fixture(before_setup: impl FnOnce()) {
             .expect("write synthetic identity marker");
         fs::create_dir(root.join("entries")).expect("create synthetic entry directory");
         let identity = generate_identity();
-        let store = Store::open(&root, &identity).expect("open synthetic encrypted store");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .expect("open synthetic encrypted store");
         if with_entry {
             let entry_fields = case.entry_fields.as_ref().and_then(Value::as_object)
                 .map(|fields| fields.iter().map(|(key, value)| (key.clone(), value.clone())).collect())

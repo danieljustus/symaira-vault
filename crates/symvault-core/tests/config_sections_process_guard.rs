@@ -1,3 +1,6 @@
+// Loads configs through yaml-edit, whose rowan 0.16 thin Arc trips Miri under
+// Stacked and Tree Borrows (rust-analyzer/rowan#108); see `rust-miri` in the Makefile.
+#![cfg(not(miri))]
 //! CFG-003: the process-wide once-only guard for `clipboard.printByDefault`.
 //!
 //! Go keeps the guard in a package-level atomic, so the deprecation warning

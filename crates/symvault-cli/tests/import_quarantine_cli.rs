@@ -4,7 +4,8 @@
 //! checks flag conflicts, so an undetectable extension wins and no quarantine
 //! batch ID is announced. These tests pin that order before vault access.
 //! Go also prints a dry-run format and mapping report before conflict checks;
-//! that report is an existing, separate gap in the Rust import command.
+//! `import_command_contract.rs` pins that report (and every other import
+//! flag interaction) byte for byte against the Go oracle.
 use std::env;
 use std::path::PathBuf;
 use std::process::{Command, Output};

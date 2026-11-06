@@ -1,5 +1,710 @@
 # Rust migration handover — 2026-09-09
 
+## Coordination note, 2026-11-01 23:57 (read first)
+
+`local/rust-port` is integrated by ONE coordinator chat at a time. Since 23:57 the owner is the Hermes chat that
+started at 22:28 ("vollständige /go-to-rust-migration ... alles lokal"). Another chat committed `62fa4449` with the
+message "handoff, local/cli-005c review fixes gated, re-review pending" while this owner's merge of
+`local/dynamic-generate` was staged; that commit IS the dynamic merge (parents `29436f42`, `321acd6c`) plus its doc
+edit. Actual state at `62fa4449`:
+
+- `local/cli-005c` is merged (`29436f42`, via `local/cli-005c-fix`): the delta review of `d7c01a1c..c936dd00`
+  returned REQUEST_CHANGES (`auth set touchid` became exit 4 instead of Go's exit 1; the cached-passphrase unlock
+  branch skipped the missing-`config.yaml` check). Both fixed in `3743f0ad` (8/8 Go probes byte-identical,
+  symvault-cli nextest 648/648). Its gate receipts `2c5ad3ee` are at `c936dd00`, not at the merge.
+- `local/dynamic-generate` (`023217df`, `321acd6c`) is merged: native `dynamic generate`; review REQUEST_CHANGES
+  (repeated flags) fixed. Error-taxonomy pins now 3 uninitialized / 2 initialized (`setup` only).
+- Do not merge, rebase or push `local/rust-port` from another chat. No push at all until the closing step (user
+  instruction in the owner chat: everything local, no GitHub).
+
+## INTAKE-LOCKED (local/intake-locked @ 2c94d000 + 1 commit; CLI-005, local only, no push)
+
+`intake <file>`, `intake <dir>` and `intake watch <dir> --once` in the locked vault (EOF stdin, no cached
+identity) are recorded from the pinned Go binary (oracle `0cc78062`, built from a git clone):
+
+- `intake creds.env` and `intake stage` (a directory argument is a skipped source, not an error) validate their
+  sources first, then `cli.WithVault` hits the EOF passphrase prompt: exit 4, empty stdout, doubled
+  `Error: read passphrase: read Passphrase: EOF`, locked hint.
+- `intake watch stage --once --debounce 1ns` scans first and prints `Scanned 1 candidate(s), staged 1, skipped 0,
+  errors 0` on stdout, then `onBatch` opens the vault: same exit 4 and hint.
+- `intake watch empty --once --debounce 1ns` (a directory holding only a dotfile) **never unlocks**: exit 0,
+  `Scanned 0 candidate(s), ...`, empty stderr. Recorded as such; the native CLI matches.
+- Not recorded: `--dry-run` (Go never opens the vault), and `--json` of the staged scan (prints the random spool
+  path, the generator rejects it as non-deterministic).
+- Native needed no code change: `intake_commands::finish` already routes the `(4, e)` unlock failure through
+  `report_failed_passphrase_read`. Unlock-state corpus: 100 -> **104** scenarios (`locked` 34 -> 38; 38 + 6 x 7 +
+  2 x 12). Negative control: making `finish` skip the shared reporting turns the four locked intake scenarios red
+  (`locked: 4 of 38 differ`; `intake_x` is one of them), the empty watch stays green.
+
+## Integration 2026-11-02: template, MCP payment/Perplexity, doctor keyring, config --fix
+
+Merged into `local/rust-port` after the green gate at `2ab41aa7` (macos and linux exit 0,
+receipts in `builds/symaira-vault/local-gate/receipts.jsonl`). Each branch had an independent
+review; findings were fixed and delta-reviewed before the merge.
+
+- TEMPLATE-001 (`local/gotemplate`, `30193ca8`): Go `text/template` interpreter in
+  `crates/symvault-sync/src/gotemplate/` for custom `.tmpl` templates and non-string refs, CLI
+  and MCP dry-run. Go corpus `testdata/port/template/gotemplate-corpus.json` (2349 cases,
+  `scripts/rust-port/cmd/gotemplategen`, `--check` non-writing, go1.26.10) replays
+  byte-identically; 220 CLI differential runs. Review F1 (float precision above 65535 panicked
+  in Rust's formatter) fixed with six Go-recorded cases. Residuals: JSON `-0` renders `0`
+  (serde_json in the store parses it as integer); `template generate` with a missing ref says
+  `entry not found: nope` where Go says `statat nope.age: ...`; an unwritable `--output` reports
+  the atomic-write error and an existing output file becomes 0600 (Go keeps its mode).
+- MCP-TOOLS-PP-001 (`local/mcp-payment-perplexity`, `8153c8b1`): native `prepare_payment`,
+  `perplexity_search`, `perplexity_ask`; Go fixtures `testdata/port/mcp/prepare-payment.json`
+  and `perplexity.json`; every JSON-RPC result now gets Go's HTML escaping (`go_escaped_raw`).
+  Review M1 fixed: a cancelled or expired call returns `payment denied: context canceled` /
+  `context deadline exceeded` before any prompt or autotype. Autotype uses
+  `native_autotype()` on macOS, Linux and Windows like Go's `DefaultAutotype()`. Recorded
+  deviations: an unknown approval mode fails closed in Rust (Go lets it through); Go drops the
+  payment enforcer when the config or tracker is unreadable (fail-open), Rust mirrors that
+  for parity, to be raised as a Go issue at the closing step.
+- DOCTOR-KEYRING-001 (`local/doctor-keyring`, `f2838fed`): see `cli-gap-inventory.md`.
+- CONFIG-FIX-001 (`local/config-fix`, `4df5f2da`): interactive `config validate --fix`; 65 PTY
+  scenarios against Go plus Go-recorded bytes. Recorded deviation: Rust keeps
+  `copyByDefault: false` on save; Go's `omitempty` drops it and the reload turns the opt-out
+  into opt-in. Core load/validate differences found on the way (`vaultDir: ''`,
+  `promptInjectionMode: weird`, `audit.maxSizeMb: abc`, `logging.level: [1]`,
+  `authMethod: bogus`, `sessionTimeout: 0s` text, `parse config:`/`invalid config:` prefixes)
+  are CONFIG-LOAD-001 (branch `local/config-load`).
+
+Open: SETUP-001 (review REQUEST_CHANGES: stale taxonomy pins, recipients textarea accepts input
+where Go's never does, PTY differential only outside the repo, passphrase zeroization),
+ADD-FORM-001 (review REQUEST_CHANGES: no in-repo Go differential, `add` errors printed once
+where Go prints twice, `SecretType::usage_hint` in `symvault-store` has `***` where Go has the
+`<token>`/`<key>`/`<encoded>` placeholders), CONFIG-LOAD-001.
+
+## CLI-005c review fixes: unlock order and failed passphrase prompts, 2026-11-01
+
+Independent review of `58460a10..d7c01a1c` (REQUEST_CHANGES) found two defects that the
+corpus could not see: every earlier scenario ran with the environment passphrase, so no
+prompt ever reached EOF, and no scenario started from a vault with only one of
+`config.yaml` / `identity.age`. The corpus now has an `unlock_states` section
+(`errtaxgen/unlockstates.go`, 60 Go-recorded scenarios when this review was fixed; 104 now — 38 locked, 42 in the six
+partial-vault shapes, 24 in the two config-invalid states — oracle `0cc78062`) and the native CLI
+follows Go's `UnlockVault` order (`internal/cli/unlock.go`).
+
+| Finding | Before | Now |
+|---|---|---|
+| `device pair` with only one vault file (`device.rs`) | either file missing was taken as proof that the identity is absent: with an identity but no `config.yaml` it reported `open vault: read identity file: ...`; with a `config.yaml` that disables the environment passphrase and no identity it used the passphrase from the environment | resolves the real `config.yaml` (missing = default), obtains the passphrase under its policy, then reads `identity.age`, then loads `config.yaml`: `open vault: load config: open <path>: no such file or directory` for an identity without a config, `open vault: read identity file: ...` for a config without an identity |
+| EOF at the passphrase prompt (`migrate pseudonymize`, and every command that unlocks) | printed once, exit 1 | `Error: read passphrase: read Passphrase: EOF` twice, the locked hint (the Touch ID flavour for `unlock`), exit 4 (`report_failed_passphrase_read`, called by every `finish_*` function and by `intake`) |
+| Interactive unlock with `security.disable_env_passphrase` and `SYMVAULT_PASSPHRASE` set (`device_input.rs`) | error `environment passphrase is disabled; ...`, exit 1 | warning `SYMVAULT_PASSPHRASE is set but ignored: ...`, then the prompt, like `resolveUnlockPassphrase` |
+
+Scenarios per state (`UNLOCK_STATES` in `tests/error_taxonomy.rs`): `locked` 18 (settled vault,
+no `SYMVAULT_PASSPHRASE`: `device pair`, `list`, `find`, `add`, `delete`, `edit`, `verify`,
+`unlock`, `migrate pseudonymize` with and without `--yes`, `recipients add|remove`, `run`,
+`file use`, `import review list|promote`, `intake`), and 7 each (`device pair` with and without a
+positional, `list`, `verify`, `unlock`, `migrate pseudonymize` with and without `--yes`) for
+`identity_only`, `config_only`, `identity_only_locked`, `config_only_locked`,
+`config_only_env_disabled` and `env_disabled`. Native output before the fix, same fixture: 27 of
+the 60 differed (`locked` 16, `identity_only` 2, `config_only_env_disabled` 2,
+`env_disabled` 7); after: 0.
+
+**Not covered, still different from Go (found while sweeping every runnable command in the
+`locked` state):** `get` (Go takes the non-interactive path: `vault locked: this build cannot
+share ...`; Rust prompts), `set` (Go asks for the username first), `file get|add`
+(missing-flag errors), and a `config.yaml` that fails to parse (Go: exit 6,
+`configuration is invalid`, interactive editor offer; Rust: `load config: ...`, exit 1).
+These predate this branch and are not claimed.
+
+Evidence (local gate at `c936dd00`, clean tree, `MAKE_PREFIX=dev-external`, receipts in
+`builds/symaira-vault/local-gate-cli005c/receipts.jsonl`): `macos` exit 0 (1583 tests, 0
+failed), `linux` exit 0 (1571 tests; `error-taxonomy-cli-differential` prints `PASS error
+taxonomy fixture (... 60 unlock-state scenarios ...)`). Targeted runs before the receipts:
+`go test ./scripts/rust-port/cmd/errtaxgen/` ok, `errtaxgen --check` PASS, `cargo clippy -p
+symvault-cli --all-targets --locked -- -D warnings` clean, `cargo fmt --all --check` clean,
+`cargo nextest run -p symvault-cli` 648 passed. Local-only evidence; `PASS (local)` is not
+claimed for the CLI-005 row, which stays TODO.
+
+## CLI-005c: 18 of the 28 pinned body divergences closed, 2026-11-01
+
+Branch `local/cli-005c` (base `ee263740`), one commit per class, each removing its
+pins from `KNOWN_BODY_DIVERGENCES` and re-recording
+`error-taxonomy-known-divergences.json` with the ignored `record_known_divergences`
+(the 10 remaining entries are byte-identical to the previous file). Every closed scenario
+now matches the Go oracle `0cc78062` byte for byte (exit code, stdout, stderr).
+
+| Class (scenarios) | Rust change |
+|---|---|
+| `auth rotate-passphrase` (2) | `read_passphrase` keeps the prompt label: `read Current passphrase: EOF` (Go's `ReadHiddenInput`) |
+| `unlock` without OS keyring (2) | `session cache is memory-only` is printed by cobra and `ExecuteRoot`, followed by the unlock flavour of the locked hint (Touch ID) |
+| `migrate pseudonymize` (2) | unlocks (env-passphrase warning, prompt) before the `(y/N)` confirmation; a failed confirmation read is reported twice |
+| `device pair` (3) | no initialization gate: prompt `Passphrase: `, ExitLocked `read passphrase: read Passphrase: EOF` twice + `Unlock with ...` hint, exit 4; an initialized vault is unchanged |
+| `agent list` (3) | `load config: open <path>: no such file or directory` (new `go_load_config_error`) |
+| `migrate v4` (3) | same wording, reported twice (`finish_vault_result_doubled`) |
+| `migrate kdf` (3) | `read vault identity (<path>): open <path>: no such file or directory`, reported twice |
+
+Side effects of the label fix: the unlock prompt (device and session paths) is now
+`Passphrase: ` like Go's `resolveUnlockPassphrase` instead of `Enter passphrase: `, and the
+`read passphrase:` wrapper of a failed prompt read matches Go's ExitLocked error.
+
+**Still open (10 scenarios): `dynamic generate` (5) and `setup` (5).** Both are not native
+subcommands (only their help pages are frozen). Matching the corpus needs only the clap
+argument errors (`required flag(s) "engine", "role" not set`) and the non-TTY guard of
+`setup` (`setup needs a TTY; ...`), but a command that fails correctly in the corpus and
+then does nothing on a TTY (`setup` wizard) or with both flags (`dynamic generate`
+engines `postgres` and `aws-sts`, leases) would claim a port that does not exist, so the
+pins stay until the commands are ported.
+
+Evidence (local gate at `ad3d35a4`, clean tree, `MAKE_PREFIX=dev-external`, receipts in
+`builds/symaira-vault/local-gate-cli005c/receipts.jsonl`): `macos` exit 0 (1581 tests, 0
+failed; includes `config-cli-differential`, hence the `agent_list`, `auth`, `migrate kdf`
+Go differentials), `linux` exit 0 (1569 tests; `port-contract` incl.
+`error-taxonomy-cli-differential`). The first `linux` receipt for the same SHA is exit 2:
+the Docker VM ran out of disk (`No space left on device` while compiling); the obsolete
+shared volume `symvault-gate-target` (44.6 GB, unused since the per-worktree volumes)
+was removed and `linux` rerun, which overwrote that log (exit 0). Local-only evidence;
+`PASS (local)` is not claimed for the CLI-005 row, which stays TODO.
+
+## CLI-005b: host tools in the error-taxonomy corpus, 2026-11-01
+
+Branch `local/cli-005b` (base `18f7cd20`). Two defects of the extra-positional corpus:
+
+- **Linux gate failure.** The fixture is darwin's. `mcp|serve install|status` print the launchd plist path
+  (`<home>/LaunchAgents/com.symvault.mcp.plist`); the native Linux build installs a systemd user unit, and its
+  `systemctl --user daemon-reload` failed in the container (`Failed to connect to bus`). The local gate run at
+  `18f7cd20` stopped at 2 failures of `symvault-cli::error_taxonomy`, with 11 tests cancelled; a quick Linux run of the
+  whole test file after the first fix found one more host-dependent scenario, `auth status` in the initialized vault
+  (`Touch ID available: true` vs `false`).
+- **Host side effect.** Go's `internal/daemon` runs `launchctl unload/load/list` (and `systemctl`) resolved through
+  `PATH`, and so does the native `daemon_commands.rs`. Recording the oracle and every macOS replay of `mcp install x` /
+  `serve install x` therefore called the real launchctl in the developer's user domain (plist under the sandbox HOME).
+
+Fix (both implementations resolve the tools through `PATH`, so a stand-in directory is clean):
+
+- `errtaxgen/hosttools.go`: every sandbox gets `.host-tools/` with stand-ins for `launchctl`, `systemctl` (service
+  managers) and `security`, `secret-tool`, `pbcopy`, `pbpaste`, `xclip`, `xsel`, `wl-copy`, `wl-paste`, `osascript`,
+  `notify-send`, `xdotool` (refused). Each logs `tool argv...` to a file inside the sandbox (path baked into the script:
+  the service managers run with a cleared or filtered environment) and exits 0. Sandbox `PATH` = stand-ins +
+  `/usr/bin:/bin`. The generator reads the log after every run (all sections, not only the scenarios): a refused tool
+  fails it; service-manager calls are recorded per scenario as `host_tool_calls` (20 scenarios: `launchctl unload` for
+  `mcp|serve uninstall`, `unload` then `load` for `install`; `status` makes none) and must repeat across the two
+  recordings. The fixture gains `generated_on`, `host_tools` and `host_dependent_commands`.
+- Platform tag: the 4 commands `mcp|serve install|status` are `host_dependent_commands`; their 20 scenarios carry
+  `platforms: ["darwin"]` (12 uninitialized, 8 initialized). `mcp|serve uninstall` print the same text on both platforms
+  and stay untagged. The replay skips tagged scenarios on other hosts with `SKIP n ...` on stderr and asserts the exact
+  skip count (12 / 8 off darwin, 0 on darwin).
+- Linux `--check`: the first full Linux gate (`556009aa`) passed the 1567 nextest tests and then stopped in
+  `port-contract`, where `errtaxgen --check` builds the oracle on Linux and found the darwin-recorded
+  `install|status` output and `launchctl` call lists stale. On a host other than `generated_on`, `--check` takes
+  exactly two platform-bound parts from the recording and byte-compares the rest against the fresh oracle run; the
+  `PASS` line states the counts (`projectOnForeignHost`, negative controls in `hosttools_test.go`). Review of
+  `d4a164df` found the first version too wide (it replaced the whole observation of a tagged scenario and the call
+  list of any scenario with calls on either side, so a corrupted recorded `mcp install` argument or a new unrelated
+  `systemctl` call would have passed Linux `--check`). Now:
+  - only the `  Service file: <path>` stdout line of a tagged scenario is taken from the recording; its args, exit code,
+    stderr and every other stdout line come from the fresh run and must match the recording (a changed argument, exit
+    status, stderr, other stdout line, line count or line position stays stale);
+  - only scenarios of the six `service_manager_commands` (`mcp|serve install|status|uninstall`, a new fixture field
+    bound to the Rust test) take their call list from the recording; every other scenario must make zero host-tool
+    calls on every platform: `recordScenarios` fails otherwise (`scenario … is not a service-manager command but
+    called host tools`), the projection never replaces a fresh call list outside those commands, and the Rust replay
+    (`host_call_failure`) fails such a call on macOS and Linux, with negative controls in both languages.
+  Checked in the gate container: the Linux-built Go oracle reproduces every other recorded byte.
+- `auth status`: `Touch ID available` is a hardware probe, not CLI behavior; the named normalizer `touch_id_available`
+  rewrites that line to `__BOOL__` on both sides (5 scenarios).
+- Replay (`error_taxonomy.rs`): same stand-ins (installed from the fixture's `host_tools`), same `PATH`, guard on every
+  run, recorded `host_tool_calls` compared on darwin. Tests: `host_dependent_scenarios_are_tagged_and_counted`,
+  `sandbox_path_resolves_every_host_tool_to_its_stand_in`, `stand_ins_log_their_calls_and_the_guard_flags_other_tools`
+  (negative control for the guard), `darwin_service_commands_make_the_recorded_launchctl_calls`,
+  `linux_service_commands_use_systemd_through_the_stand_in` (Linux smoke, not Go parity),
+  `touch_id_normalizer_rewrites_only_the_availability_line`; Go: `hosttools_test.go`.
+- Not redirected (documented residuals): absolute-path calls (`/bin/launchctl` of `intake watch disable` needs an
+  existing plist; `/usr/bin/osascript` of the intake notification needs an import; no scenario does either) and the
+  native `auth status` Touch ID probe, which runs `/usr/bin/osascript -l JavaScript` (`canEvaluatePolicy`, read-only, no
+  prompt). The session cache stays in memory because the sandbox sets `CI=1`; the oracle is built without OS keyring
+  support, so no run reads the developer's keychain.
+- The oracle recording itself did not change a single observation: the regenerated fixture differs by the new fields,
+  the touch-id placeholder and the generator digest only.
+
+## CLI-005 partial: nil-`Args` extra positionals, 2026-11-01
+
+Branch `local/cli-005`. Every cobra command whose `Args` validator is nil accepts
+and ignores extra positionals; clap rejected them. Now fixed and pinned.
+
+- **Inventory.** `errtaxgen` (`inventory.go`) walks `cmd.NewRootCmd()` plus
+  cobra's default `help` command: 64 commands with `Args == nil`, 48 runnable
+  (the sources are digest-bound, so the compiled tree is the pinned oracle's).
+- **Corpus.** `testdata/port/cli/error-taxonomy.json` gains `nil_args`,
+  `vault_seed` (a Go-initialized vault, recorded once and reused by `--check`;
+  `--new-seed` re-records it), `extra_positionals` (138 empty-sandbox + 82
+  initialized-vault scenarios; `x`, `x y`, `-- x`), `extra_positional_exclusions`
+  (7 commands, each with a reason) and `run_file_use_argv` (82 + 82 `run`/`file use`
+  permutations; the vault seed holds a real attachment entry `seed/cert` and a text
+  field `seed/api.token`, the child is `/bin/sh -c 'printf "%s\n" "$@"'`, so flag-like
+  child words `-la --timeout 5 --json --` and symvault flags before and after the
+  positionals are compared for real). Every scenario ran twice against the Go binary and had to be
+  deterministic; the only rewrites are `password20` (`generate`) and `key_bytes`
+  (`audit rotate-key`). The pre-existing sections are unchanged.
+- **Before (first 284 scenarios):** 152 of them failed in the native binary: 133 because
+  clap rejected the positionals (27 command paths), 2 because `help x y` quoted its
+  words differently, 17 because `run`/`file use` reported a missing program or entry
+  differently. **After:** 356 of the 384 scenarios match Go byte for byte (all 164
+  `run`/`file use` ones), 28 are pinned as known body divergences (below), none is a
+  clap rejection. Review round 2 (seeded `run`/`file use` corpus) found and fixed four
+  more native divergences: `--timeout 5` (no unit) was accepted past the flag parser
+  (now pflag's `invalid argument ... flag: time: missing unit in duration`), a bare
+  `--timeout 0` was rejected (`parse_go_duration` accepts it like Go), `file use`
+  mapped an absent attachment field / an entry without attachment to exit 1 instead
+  of 2 (with the `Try:` hint) / 9, and printed a child's non-zero exit and a timeout
+  once instead of twice.
+- **Fix.** `IgnoredPositionals` (hidden `num_args = 0..`) is flattened into exactly
+  the nil-Args commands; commands with validators are untouched
+  (`clap_still_rejects_extra_positionals_where_cobra_has_a_validator`). Also:
+  `help` words are quoted like Go's `%#q`, a missing program in `run`/`file use`
+  reads `exec: "x": executable file not found in $PATH`, `file use` reports a
+  missing entry like Go (exit 2, doubled line, `Try:` hint), `auth status` prints its
+  plain failure twice.
+- **Open (28 scenarios, `KNOWN_BODY_DIVERGENCES` in `error_taxonomy.rs`):**
+  `dynamic generate` and `setup` are not native subcommands; `agent list`,
+  `migrate v4`, `migrate kdf` on a missing vault word the OS error differently and
+  print it once; `device pair` checks the vault before asking for the passphrase;
+  `auth rotate-passphrase` loses the prompt label in `read ... EOF`; `migrate
+  pseudonymize` lacks the passphrase warning and the second line; `unlock` without
+  an OS keyring lacks the second line and the Touch ID hint. All differ without the
+  extra positionals too; fix each against its own Go-recorded cases. Host- or
+  timing-dependent `doctor` and `startup-profile` and the long-running `broker`,
+  `mcp`, `serve` and random-token `device pair`/`migrate v4` are not replayed in
+  the initialized vault (clap acceptance only, via `nil_args_positional_tests`).
+- **Pins.** The 28 divergent scenarios are no longer replayed under a substring
+  check: `testdata/port/cli/error-taxonomy-known-divergences.json` holds the exact
+  native exit/stdout/stderr per scenario (regenerate with the ignored test
+  `record_known_divergences`, review the diff), the replay fails on any change or on a
+  match with Go, and `known_divergence_pin_detects_unrelated_changes` is the negative
+  control. `generator_digest` now hashes every non-test Go file of `errtaxgen`
+  (`main.go`, `inventory.go`, `scenarios.go`), and
+  `TestGeneratorDigestBindsEveryProductionSource` proves that changing any of them
+  makes `--check` report the fixture stale.
+- This is not completion of CLI-005: the broader exit/error taxonomy outside the
+  recorded corpus is unproven.
+
+## FFI-001 Swift bridge, 2026-11-01
+
+`crates/symvault-ffi` replaces the gomobile `pkg/mobilebind` bridge: 13 Go-identical functions (`src/api.rs`) behind a
+narrow C ABI (`src/abi.rs`, header `swift/Sources/CSymvaultFFI/include/symvault_ffi.h`), built only on
+`symvault-crypto`/`symvault-store`/`symvault-core` (plus `age`, already pinned, for Go's exact decrypt diagnostics).
+Decision and comparison: ADR 0031 (hand-written C ABI; UniFFI is MPL-2.0 and not on the `deny.toml` allowlist). No new
+dependency; `Cargo.lock` only gains the `symvault-ffi` package. New root profile `ffi` (`inherits = "release"`,
+`panic = "unwind"`) so `catch_unwind` can contain a bug.
+
+Evidence (branch `local/ffi-001`, base `22c51834`):
+- `scripts/rust-port/cmd/mobilebindgen` records `testdata/port/ffi/mobilebind.json` (462 cases, 548 steps) from the real
+  Go functions; `--check` re-runs Go against the stored seed and fails on any byte (also green on Linux with go1.26.6);
+  `--drive` answers JSON lines with raw Go results for the interop tests. Randomized outputs are pinned by shape plus an
+  inverse-function round trip; the vault tree, ciphertexts and identities Go produced once are stored as `seed`.
+- Rust: `cargo test -p symvault-ffi --locked` — fixture replay (548/548 steps through the C ABI), interop with live Go in both
+  directions, ABI tests. Swift: `swift test` in `crates/symvault-ffi/swift` replays the same 548 steps through `SymvaultFFI`
+  against `libsymvault_ffi.a` (the harness had to create names with raw POSIX calls: Foundation URLs decompose `é`, and
+  Foundation's JSON reader drops a leading U+FEFF).
+- `make ffi-differential` = Go `--check` + Rust tests (with the live Go driver) + (macOS) release-grade `ffi` build + Swift
+  test; exit 0 on macOS and in the Linux gate image (Swift part prints `SKIP`), hence part of `port-contract`. `make
+  ffi-fixtures-generate` re-records (new random seed, deliberate), `make ffi-fixtures-check` is the Go check alone.
+- Negative control: one changed byte in an expected error text fails `--check` and the replay.
+
+Differences from Go left open (all asserted with the exact Rust text, none silent): rust-age's random `*-grease` stanza
+lengthens X25519 ciphertexts by 8–200 bytes; non-mapping `config.yaml` wording (`known-divergences.json`, CFG owner);
+`symvault-store` `prepare_entry` keeps `Entry.path` (bridge clears it); **D-SYMLINK** (24 cases, approved by the owner 2026-11-01):
+Rust refuses a symlink anywhere inside the vault tree where Go follows it (ADR 0031).
+
+Review fixes, 2026-11-01 (independent review of `a2feae44`: REQUEST_CHANGES, F1-F8), on `local/ffi-001` after `4a04546c`:
+- Fixture now 553 cases / 674 steps. New Go-recorded cases: JSON nesting depth 33/129/5000/9999/10000/10001 (objects and
+  arrays, under `data`), store value limits (string > 1 MiB, > 1024 array items, > 1024 fields, nesting > 32), missing
+  `config.yaml` for every vault function, Open's config rewrite, stored and written `-0`, symlink mutations (identity,
+  config, manifest, entry, `entries` and subdirectories; dangling and outside-root targets).
+- Red before: at `4a04546c` the deep cases abort the replay and the 256 KiB-stack test with `stack overflow` (SIGABRT);
+  the missing-config cases mismatch.
+- Green after: `make ffi-differential` exit 0 on macOS (Rust 14 lib + 8 ABI + 1 C ABI + 3 replay/interop + 2, Swift 2
+  tests) and in the Linux gate image (Swift part SKIP); `make ffi-ios-simulator-test`; workspace clippy `-D warnings`,
+  fmt, gofmt/go vet on `mobilebindgen`, `cargo test -p symvault-store`.
+- `tests/c_abi.rs` builds the staticlib itself: `cargo test` never writes `libsymvault_ffi.a`, so an archive left from an
+  earlier `cargo build` could be stale (first Linux run failed for exactly that reason).
+- Delta review of `4a04546c..9166d365`: REQUEST_CHANGES. Blocking: the legacy-mode config rewrite went through
+  `Config::save_to`, which wrote a fixed `config.yaml.tmp` following symlinks (a planted link overwrote a file
+  outside the vault); fixed in `symvault-core` for every caller (unique `create_new` temporary, as Go's
+  `fsutil.AtomicWriteFile`) and the rewrite skips a symlinked `config.yaml`. Medium: `keep_negative_zero` turned
+  `1e-0` into invalid `1e-0.0` for every store reader; now only a leading `-0`, copy zeroized. Low: entry data
+  scrubbed on every return path (drop guard), `c_abi` skips under llvm-cov. Both fixes red before (victim
+  overwritten; `1e-0.0`), green after.
+- Re-review of `9166d365..3f8389b0`: APPROVE (one low note: the `c_abi` skip does not see a plain `cargo test
+  --target <triple>`; only the host triple works there). Merged into `local/rust-port` as `4176fc8b`; the local gate
+  on the merged SHA is the integration evidence.
+
+iOS slices, 2026-11-01 (branch `local/ffi-001`, after `a2feae44`):
+- `make ffi-xcframework` (`scripts/rust-port/build-ffi-xcframework.sh`, exit 0): `ffi` profile for `aarch64-apple-darwin`,
+  `aarch64-apple-ios`, `aarch64-apple-ios-sim` -> `$CARGO_TARGET_DIR/xcframework/SymvaultFFI.xcframework` with 3 slices
+  (`Info.plist` `AvailableLibraries`: `ios-arm64`, `ios-arm64-simulator`, `macos-arm64`; header + `CSymvaultFFI` module map in
+  each). Sizes (bytes): 48,027,088 / 48,022,888 / 48,252,800, total 144,302,776; linked and dead-stripped with all 15
+  exports kept about 2.23 MB per slice (ADR 0031 has the table; the old "8.97 MB" figure did not reproduce and is withdrawn).
+  `xcodebuild` is called plain there because `dev-external` appends `-derivedDataPath`, which `-create-xcframework` rejects.
+- `Package.swift`: default unchanged (`make ffi-differential` still exit 0, 548 steps on macOS); with
+  `SYMVAULT_FFI_XCFRAMEWORK=<xcframework>` a `binaryTarget` replaces the C shim (macOS `swift test` in that mode: 548 steps).
+- `make ffi-ios-simulator-test` (exit 0): 548 steps / 462 cases replayed inside an iOS 18.6 Simulator (arm64) against the
+  `ios-arm64-simulator` slice, 21.5 s. Route: `xcodebuild build-for-testing -destination generic/platform=iOS Simulator
+  ARCHS=arm64`, `simctl boot`, `simctl spawn <udid> xctest SymvaultFFITests.xctest`, using the real simctl binary
+  (`SIMCTL=/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/Resources/bin/simctl`). The script created and
+  afterwards removed one device of its own (`symvault-ffi001-iPhone16`); no other device or service was touched.
+
+Environment wall (CoreSimulator, this host, 2026-11-01), evidence:
+- `/usr/bin/xcrun simctl list runtimes` (Xcode's `/Applications/Xcode.app/Contents/Developer/usr/bin/simctl`, a bash wrapper)
+  produced no output for 1184 s (started 05:49, killed by me at 06:09; also a foreign session's identical probe, pid 23517,
+  was still hung at 20 min and was left alone). `ps`: wrapper `bash simctl` -> child `xcodebuild -runFirstLaunch`; `sample`
+  of the child: main thread in `mach_msg`, another in `xpc_connection_send_message_with_reply_sync`, i.e. waiting on an XPC
+  reply that never came. Cause from the wrapper source: it runs `-runFirstLaunch` when
+  `/Library/Developer/PrivateFrameworks/CoreSimulator.framework/.../Info.plist` `CFBundleVersion` (here `1174.9.2`) is older
+  than `EXPECTED_VERSION="1174.21"`.
+- The real simctl binary under that framework answers immediately (`list runtimes` 0 s): only runtime `iOS 18.6 (22G86)`
+  and `watchOS 27.0`; no iOS device existed before (created one).
+- `xcodebuild test -destination 'platform=iOS Simulator,id=<udid>'` fails at once: "CoreSimulator is out of date. Current
+  version (1174.9.2) is older than build version (1174.21.0) ... Simulator device support disabled", then `scheme
+  "SymvaultFFI-Package"` not found. So `xcodebuild test` against a simulator destination is blocked until the CoreSimulator
+  component is updated (smallest human action: let `xcodebuild -runFirstLaunch` / the Xcode components installer finish with
+  administrator rights, or install the matching CoreSimulator package). The simctl-spawn route above does not need it.
+
+Client switch, 2026-11-01 (branch `local/ffi-client`, base `1fd66491`):
+- `client/` now uses the Rust core: `MobileVaultCore.swift` imports `SymvaultFFI` (public API unchanged; every
+  `SymvaultFFIError` becomes `MobileVaultCoreError.frameworkError(<core text>)`, the former `NSError.localizedDescription`
+  surface; `fingerprint(of:)` stays non-throwing). `client/Package.swift` has the `CSymvaultFFI` binaryTarget at
+  `.build/mobilecore/SymvaultFFI.xcframework` plus a `SymvaultFFI` target whose sources are the reviewed wrapper through the
+  symlink `client/Sources/SymvaultFFI` (SwiftPM rejects a target path outside the package; Swift 5 language mode as the wrapper
+  is written for it); `SymvaultKit` links it on iOS, `SymvaultIOS` (SwiftPM target, now also compiling `MobileVaultCore.swift`
+  on macOS) and its tests use it, `project.yml` adds the `SymvaultFFI` product to `SymvaultIOSApp` and excludes `x86_64` for the
+  iOS Simulator SDK (the XCFramework is arm64 only).
+- `scripts/build-vaultcore.sh` builds the Rust XCFramework by default (`rustup target add`, `build-ffi-xcframework.sh`, copy to
+  `client/.build/mobilecore`); `SYMVAULT_VAULTCORE=gomobile` keeps the old gomobile bind (framework only: the Swift side is not
+  switchable, shipping gomobile means building the commit before the switch). `pkg/mobilebind` Go code is untouched (Go
+  removal needs owner authorization). `release.yml` gui-release, `ci.yml` Vaultcore (macOS) and `codeql.yml` (swift) install the
+  pinned toolchain with the three Apple targets before the script; `ci.yml` path filter also routes `crates/symvault-ffi/**`.
+- Two latent `MobileVaultCore.readEntry` bugs fixed (the same under gomobile; found by the new test, red before): the core's
+  entry JSON has no `path` (decoding threw `keyNotFound`, so `VaultStore.loadEntries` silently listed nothing) and field values
+  were interpolated as `string("alice")`. `IntakeTests.swift` is macOS-only now (`#if os(macOS)`, the models are), which unblocked
+  `build-for-testing` for iOS.
+- Verified locally (macOS 27.2, Xcode, `CARGO_TARGET_DIR` under builds/): `make ffi-xcframework` exit 0;
+  `scripts/build-vaultcore.sh` exit 0; `xcodegen generate` + `xcodebuild -scheme SymvaultIOSApp -destination 'generic/platform=iOS
+  Simulator' CODE_SIGNING_ALLOWED=NO build` exit 0, same for `generic/platform=iOS` (device, unsigned) exit 0; `swift build` and
+  `swift test` in `client/` exit 0 (`MobileVaultCoreTests` 3/3 against the real core on macOS, 21 + 9 existing tests);
+  `MobileVaultCoreTests` 3/3 inside the iOS 18.6 Simulator (`build-for-testing` of the package scheme, `simctl spawn xctest
+  -XCTest SymvaultIOSTests.MobileVaultCoreTests`); `make ffi-differential` exit 0 (674 steps / 553 cases; needs a `TMPDIR` that
+  is not under the `/var` symlink, otherwise the Go oracle check reports `/private$ROOT` for four symlink-loop texts: environment,
+  not a regression).
+- Not run: the app itself (compiled and linked only; the simulator run covers `MobileVaultCore` through an XCTest bundle, not
+  the SwiftUI app), the unsigned archive/IPA path of `ios-testflight.sh`, any CI job (release/ci/codeql edits checked with
+  `actionlint` only).
+
+Client switch review and merge (2026-11-01): review of `a690a4c9` REQUEST_CHANGES; fixed in `c0b5d561`
+(`build-vaultcore.sh` rebuilds the Rust framework on every run and swaps an existing one aside instead of moving the new one
+into it; `release.yml`/`codeql.yml` build the Rust core before the signing keychain and the appkit git token exist; ci.yml
+`macos-vaultcore` path filter covers `crates/*`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`; no global `rustup
+default`; numbers render exactly instead of `%g`; docs name the arm64-only requirement and that the gomobile fallback is not
+linkable by this client). Delta review REQUEST_CHANGES (`-0` lost its sign), fixed in `6cf57b8c`, re-review APPROVE.
+Fast-forwarded into `local/rust-port` at `6cf57b8c`; local gate macos and linux exit 0 (receipts in
+`builds/symaira-vault/local-gate/receipts.jsonl`). `xcodebuild test -scheme SymvaultClient-Package -destination
+'id=<iOS 18.6 Simulator>' -only-testing:SymvaultIOSTests/MobileVaultCoreTests` passed 3/3 (the generated `Symvault.xcodeproj`
+must be moved aside, otherwise xcodebuild picks the project, which only has the app scheme); the CoreSimulator wall below did
+not reproduce. The whole `SymvaultIOSTests` bundle unsigned: `ApprovalSessionStoreTests` fail with `-34018` (missing keychain
+entitlement without a signed test host), not caused by the switch.
+
+Not done: FFI-002 real-device RSS; a test run on a physical iPhone (needs hardware and signing; the `ios-arm64` slice is built
+and linked into the unsigned device app but never executed); `x86_64-apple-ios` (Intel simulator) slice (Apple-silicon only by
+design, `ARCHS=arm64`); XCFramework signing/checksum for distribution; CI evidence for the changed `release.yml`/`ci.yml`/
+`codeql.yml` steps; Go removal (`pkg/mobilebind`, gomobile tooling in `go.mod`) needs owner authorization. Next action: let the
+closing CI run the three macOS jobs on this branch and read the Rust-target install and XCFramework build steps there.
+
+
+## Local gate after CLI-005 and the per-worktree target volume, 2026-11-01
+
+`local/cli-005` (`9c35ff3a`..`18f7cd20`) and `local/cli-005b` (`556009aa`..`1d6d4ef4`) are fast-forwarded into
+`local/rust-port`; reviews APPROVE after two REQUEST_CHANGES rounds each. The first full gate on `1d6d4ef4` failed on
+Linux in `store-differential` (`symvault-store` `tests/audit.rs`: fixture `ENOENT`): every worktree shared the
+`symvault-gate-target` Docker volume, so cargo reused an `audit` test binary whose compile-time `CARGO_MANIFEST_DIR`
+pointed into another worktree. `ec61f76e` names the volume after the worktree path (first Linux run per worktree is a
+cold build). Gate `ec61f76e`: macos exit 0, linux exit 0 (receipts in `builds/symaira-vault/local-gate/receipts.jsonl`);
+no `symvault` LaunchAgent loaded afterwards. CLI-005 stays open: 28 pinned body divergences remain.
+
+Open at session end (2026-11-01, not merged): branch `local/cli-005c` (worktree `local-cli005c`, `2c5ad3ee`, backed up
+on `origin`) closes 18 of the 28 body divergences (374/384 scenarios match; `dynamic generate` and `setup` stay pinned
+until ported) and, in `cc479acb`/`25a0cf13`, both findings of the review of `d7c01a1c`: Go's unlock order for partial
+vaults (`device pair`, identity without config / config without identity) and Go's exit 4 plus locked hint for a failed
+passphrase read (`migrate pseudonymize`, `verify`, `list`, `run`, ...); new `unlock_states` corpus, 60 scenarios, 27
+differed before, 0 after. Gate `c936dd00` macos and linux exit 0 (receipts in
+`builds/symaira-vault/local-gate-cli005c/receipts.jsonl`). Next: independent re-review of `d7c01a1c..2c5ad3ee`, then
+fast-forward into `local/rust-port` and gate. Known, not fixed (older than the branch): locked `get` (Go non-interactive
+`vault locked: this build cannot share ...`, Rust prompts), `set` (Go asks for the username first), `file get`/`file add`
+missing-flag errors, unparsable `config.yaml` (Go exit 6 `configuration is invalid`, Rust exit 1). Gate disk: each
+per-worktree `symvault-gate-target-*` Docker volume holds about 45 GB; volumes of removed worktrees are not cleaned up
+yet (planned: let `local-gate.sh` remove orphans).
+
+## CLI-006 positive output matrix, 2026-10-31 (review fixes 2026-11-01)
+
+`outputmodegen` (oracle `bf7f687b`, darwin) records text, `--json`, `--output yaml`, `--output json` and
+`--quiet` for the 47 gate rows that do not refuse both formats: 524 cases (470 at the first recording), 47 paths, 6 frozen seeds, in
+`testdata/port/cli/output-modes.json`; `crates/symvault-cli/tests/output_modes.rs` replays them byte for byte
+(stdout, stderr, exit, file-tree effect incl. permission bits). Targets: `make output-modes-cli-differential`
+(re-verifies against a rebuilt oracle, then replays) and `make output-modes-regenerate` (keeps the frozen seeds).
+
+Rust fixes the matrix forced: `get --print` writes the `expose_plaintext` audit entry with an empty agent (Go's
+`emitExposureAudit`; the replay compares decoded audit fields, not presence); `auth set` refuses
+`--json`/`--output` (gate rows with `valid_args: 0` are probe artefacts); `update apply|check|info` accept
+`--quiet`/`--output`, apply's report goes to stderr; `template generate` `--output` is the file flag and
+`required flag(s) "type"` follows cobra; `generate manpages` accepts `--quiet`, uses the XDG default config path
+and the `2-Jan-2006` HISTORY date; `doctor` order (`mcp.tokens` after `recipients.recovery`), no `tags` in JSON,
+migration warning not silenced by `--quiet`; `agent install --json`; intake JSON keeps Go field order and stat
+errors; config `git:` writes `commit_template` first; device errors are doubled; yaml renderer shared via
+`symvault-gojson::yaml`.
+
+Review fixes (REQUEST_CHANGES, each pinned against the real Go binary):
+- **Linux CI.** `check_output_modes_cli.sh` skips the Go `--check` with a visible `SKIP` on a non-darwin host
+  (the corpus is darwin-recorded: `oracle.goos`); the Rust replay prints its own `SKIP`. Verified in the local
+  gate image on Linux (`make output-modes-cli-differential` exit 0, both notices on stderr). The corpus therefore
+  does not gate Linux/Windows: the evidence is the darwin run.
+- **`config set` typed decode.** The panic on `&value[..7]` is gone (Go cuts at seven bytes; the error text carries
+  the raw bytes, and U+FFFD shows up only in the fixture's reader-facing `stderr` field, the exact bytes being
+  `stderr_b64`), and a scalar of the wrong YAML type for a typed field (`sessionTimeout 12` is
+  `!!int` into a `Duration`) fails like Go with exit 6 instead of being written. The cases are recorded from
+  the Go binary.
+- **Normalization honesty.** One numbered list of 14 rules (`root`, `bin`, `dated-id`, `tmp-suffix`,
+  `touch-id`, `gen-pw`, `pair-token`, `now-ts`, `man-date`, `opaque`, `encrypted-store`, `audit-fields`,
+  `archive-members`, `managed-fields`) in the generator header, the fixture notes and the test header;
+  `normalization_rules_are_listed_once_and_consistently` fails on any disagreement and the other tests carry a
+  negative control per rule. `agent skill export` is no longer opaque: the archive is compared as decompressed
+  members (the probe showed Go writes them in map order and the `managed_hash`/`managed_installed_at` lines are
+  install-time values). Tree entries record the permission bits (both harnesses run the binary under umask 022).
+  Touch ID stays `<BOOL>`, but on darwin `touch_id_availability_matches_go_in_the_same_sandbox` compares the live
+  Go and Rust values (needs `SYMVAULT_OUTPUT_MODES_GO_BINARY`, set by the script; visible `SKIP` without it).
+- **Config read errors.** `config get|set|list` on a missing, unreadable or directory config file print Go's
+  `cannot load config: [cannot read config file: ]open|read <path>: <cause>` doubled with the doctor hint (exit 6)
+  instead of Rust's `No such file or directory (os error 2)`; six Go-recorded cases (red before: all six).
+  Mode recording also found `agent profile export` creating its file with 0600 (Go `os.Create`: 0644); fixed.
+- **yaml.v3 scalars.** `symvault-gojson::yaml` now ports the yaml.v3 scalar analysis/style selection and the
+  double-quoted escape rules (leading newline `|4-`, astral `\UXXXXXXXX`, U+2028 single-quoted folded, BEL `\a`,
+  U+FEFF/U+0085 escapes, plain `<<`) and is pinned by a Go-recorded scalar corpus
+  (`make yaml-scalar-differential`).
+
+Verified (HEAD at commit time): `outputmodegen --check` PASS against the rebuilt-pin oracle; replay 470 cases
+(>= 3 per path, all 47 paths; 524 after the delta-review follow-ups below) green; negative control (one byte of `version.text` changed) fails both `--check`
+and the replay. `error_taxonomy` and `cli_device_approval` expectations moved with the fixes (`delete x`,
+`device approval-revoke` now Go-exact); `empty_flow_mapping_root` became a regular `config-yaml-syntax.json` case
+(94 cases, 32 open divergences, 441 comparisons). Like all 16 `accepted` cases it records `validate`,
+`validate --json` and `doctor` only; `config get` on a `{}` document is not recorded anywhere (open, low).
+
+Declared open: update apply/check/info beyond the dev-build branch, `intake watch` beyond `--once`, live
+`approval`/`device approval-pair|accept|join` flows, `remote init` (the pinned Go oracle panics with a nil
+pointer dereference in `enableAutoPush` when the vault has no sync config, so that branch is not pinned),
+`--color`/`--theme`; `doctor` is pinned with `--no-network`. Not compared: the volatile audit fields (`ts`,
+`kid`, `hmac`, the `argv_hash` digest; shape only) and read errors of the config file other than the three recorded ones. The corpus is darwin-only
+(`oracle.goos`); other hosts skip it visibly. Touch ID: the worker first saw Go true and Rust false here; that
+was a Rust bug, not a sandbox effect: every JXA adapter in `symvault-platform/src/macos.rs` reported through
+`console.log`, which osascript writes to stderr, so `run_jxa` read an empty stdout. Fixed by ending each script in
+its result expression (and asking Go's biometric-only policy 1, not 2);
+`jxa_reports_through_the_last_expression_on_stdout` and `jxa_scripts_never_report_through_console_log` pin it.
+
+## CLI-006 delta review follow-ups, 2026-11-01
+
+Branch `local/cli006` on 22c51834, one commit per area: `config set` typed reload ported from yaml.v3's
+`decode.go` (aliases, merge keys, explicit tags, duplicate keys, `time.Time`; `time.ParseError` wording in
+`symvault-gojson::rfc3339`; plain `<<` written as `!!merge <<`), resolver quirks (`0b+1`, `0o-12`, `.1_0`; 7
+more strings in `yaml-scalars.json`), `gen_config_schema.py` (all `internal/config` files, loud failures,
+`test_gen_config_schema.py` mutation controls inside `config-cli-differential`), and `go_path_error` for config
+reads and `agent profile export -o`. 54 Go-recorded cases (`output-modes.json`, text mode), 48 differ at the
+base. The open classes the review listed (loader strictness, value inference and re-encode differences,
+`profiles.x: null`) are recorded with probes in the CFG-003 and CLI-005 rows of the contract matrix and in
+`cli-gap-inventory.md`. The one `output-modes` harness change: work files may be symbolic links (`link`).
+
+## IO-001 invalid-byte representation, 2026-10-31
+
+Question closed: does `ImportedEntry` (`String` paths and values) lose data against Go? Probed with the
+REAL Go binary (oracle `bf7f687b`, macOS plus a `linux/arm64` container): Go keeps imported strings as
+raw bytes. Paths reach dry-run/progress lines and every error text unchanged, values are re-encoded by
+`encoding/json` when stored (one U+FFFD per invalid byte), the 4096-byte field limit counts raw bytes,
+and creating a file with a non-UTF-8 name fails on macOS (`EILSEQ`) but succeeds on Linux (where Go then
+leaves unreadable entries: collapsed manifest keys, `entry not found`).
+
+Rust: `ImportedEntry` gains `raw_path` and `raw_value_len` (`#[serde(skip)]`, empty for UTF-8 input);
+CSV/profile/pass importers keep raw bytes, de-duplicate and `path.Join` on them; the invented
+`distinct CSV paths collapse` error and `ImportError::PathCollision` are gone. `import_commands::apply`
+works on path bytes (new `Reporter::line_bytes`, `ApplyError(Vec<u8>)`, byte-level `go_invalid_path_text`,
+`validate_field_lengths` with raw lengths; the import/replace callbacks take the raw-length map). The
+write of a non-UTF-8 path runs Go's `mkdir`/`open` sequence, so macOS produces Go's exact text; a file
+system that accepts the name gets an explicit refusal (ADR 0030 item 4, bounded divergence, approved by
+the owner 2026-11-01).
+
+Corpus: `importcligen` 293 -> 345 cases (52 `invalid-bytes-*`: 33 `any`, 19 `darwin`). Harness additions:
+`stdout_b64`/`stderr_b64` (raw bytes; text field only readable), normalization rule 3
+(`.age.tmp-<digits>` -> `.age.tmp-<N>`), platform `darwin` (other hosts keep the recorded case in
+`--check`, the Rust replay skips it). Regenerate with `make import-cli-regenerate` on a macOS host only;
+verified diff: the first 293 cases byte-identical, `generator_digest` and notes changed, 52 appended.
+
+Red before: 39 of the 52 new cases differed against the pre-change binary (replayed with the same
+rules). Not covered, still open: argv-borne invalid bytes (`--prefix`, `--mapping`, source path in error
+text; clap rejects non-UTF-8 values Go accepts) and invalid bytes in a pass store path (Go side not
+observable on macOS; Rust adapter unit-tested). Observed once or twice under heavy host load in the
+replay: `e2e-csv-many-rows` failing with `failed to read .git/objects/<xx>: No such file or directory`
+from the store (valid paths, not touched by this slice; reran green 20+ times, also with the pre-change
+binary) - treat as a pre-existing store/Git race if it recurs.
+
+## IO-001 pass importer against real gpg, 2026-10-31
+
+`passgpggen` (new, oracle `fca3f894`, sources `internal/importer/{importer,pass,totp}.go`,
+`internal/crypto/totp.go`, `internal/secrets/filter.go`) freezes 36 pass stores into
+`testdata/port/sync/pass-gpg.json`: an armored test-only key (empty passphrase, disposable
+`GNUPGHOME`), ciphertexts made by the real gpg binary, and the entries/warnings/complete error text of
+the REAL Go importer (`importer.New(FormatPass)` over the opened directory). `--check` imports the
+recorded key, decrypts the stored ciphertexts (never re-encrypts) and re-runs the Go importer; it keeps
+the recorded `goos`/gpg version, so it is platform independent. `pass_gpg_contract.rs` imports the same
+key and runs `import_pass` with the system gpg (fail closed without gpg). Gate: `make
+pass-gpg-differential` = `scripts/rust-port/check_pass_gpg.sh`, part of `sync-io-differential`.
+
+Pinned environment: `LC_ALL=C` (Go forwards LC_ALL, and gpg words its errors per locale),
+`GNUPGHOME`/`HOME` disposable and short (agent socket path limit), `pinentry-program /usr/bin/false`.
+What of gpg's stderr reaches Go: nothing on success; on failure `decrypt pass entry <path>: ` + the
+whole trimmed stderr (key ids and creation dates are fixed by the stored ciphertext). Two narrow rules,
+documented in the fixture and implemented identically in generator and test: N1 replaces
+`filepath.Clean(argument)` by `@STORE` (an un-cleaned spelling stays visible); N2 applies only to three
+`version_variant` cases and only when the gpg version line differs from the recorded one (gpg 2.4.4 vs
+2.5.24): listed optional lines are removed and consecutive duplicates collapsed on both sides, otherwise
+byte-identical. Every other case is compared byte for byte on both gpg versions.
+
+Red before: 13 of 36 cases differed (and 54 of 121 `otpauth://` entries): store arguments `a//b`,
+`./x`, `a/../x`, `.` (Go prints `path.Join`-cleaned paths), unreadable directory/root wording
+(`walk pass store: open <path>: permission denied`), decrypt failure ahead of an unreadable directory
+(Go decrypts while walking, Rust walked first), symlinked store root (Go's `WalkDir` lstat()s the root
+and does not descend; a trailing slash resolves it), `net/url.Parse` rejections the `url` crate accepts
+(`%zz` in the path) or words differently (28 entries), `%q` quoting of TOTP algorithms (Rust Debug).
+Fixed at the root: `pass.rs` is a streaming `WalkDir` port (cleaned joins, root lstat, Go error text,
+`exit status N`/`signal: killed` for empty stderr), plaintext stays bytes until the last per-field lossy
+conversion (Go quotes invalid bytes as `\xNN` in warnings), new `importer/gourl.rs` ports `net/url.Parse`
+(escape/host/port/IPv6/`netip.ParseAddr` errors, fragment, control bytes), `ParseQuery` (first value,
+bad-escape/semicolon pairs dropped, 10000-parameter cap) and byte-level `strconv.Quote`; `ParseTOTP`
+uses it with Go `Atoi` wording and simple-case `ToUpper`; `symvault-core` TOTP algorithm errors use
+`go_quote`. Negative control: adding `--quiet` to the production gpg arguments fails 17 cases; the
+source was restored byte-identically (sha256 compared).
+
+Evidence (2026-10-31, local): macOS arm64 (gpg 2.5.24) check script green; Linux arm64 image (gpg
+2.4.4) `make pass-gpg-differential` green under plain `cargo test` and `cargo llvm-cov nextest -p
+symvault-sync` (163 tests); `cargo test -p symvault-sync --all-features` and `symvault-cli --test
+import_command_contract --test import_commands` green; workspace clippy `-D warnings` and fmt clean;
+no gpg-agent left (pgrep) on host or in the container. Gotchas: `os.Exit` skips defers, so the generator
+kills agents through a cleanup list; the first Linux run caught the gpg 2.4 extra
+`no valid OpenPGP data found` line for a cut armor. Residuals: non-UTF-8 store paths in error text (Rust
+`Path::display` is lossy, Go prints raw bytes), signal names beyond the common set, Windows (not a
+supported target). Invalid-byte API representation of `ImportedEntry` stays open.
+
+## IO-001/IO-002 command CLIs gated, 2026-10-31
+
+Gate `59c8c7cc` green on macOS arm64 (1477 Rust tests, 112 Go packages) and Linux arm64 (1467
+tests in the test and llvm-cov stages; import 293 and export/backup/restore 173 Go re-verifications).
+Gate hardening on the way: the import replay hides a system gpg (`<work>/bin` + mirrored
+`/usr/bin:/bin` without `gpg*`), both replays keep `LLVM_PROFILE_FILE` after `env_clear()`, the
+export `--check` keeps the recorded `goos`, and a sweep raised test-only setup deadlines in 26 files
+(#1564-#1567). Residuals: IO-001 invalid-byte API representation and real GPG compatibility; IO-002
+tar header residuals.
+
+## IO-001 complete import CLI, 2026-10-31
+
+`importcligen` (new, oracle `bf7f687b`, source files `cmd/admin/import.go` + `internal/importer` +
+`internal/cli`, generator digest over `cases.go`, `main.go` and `check_import_cli.sh`) freezes 293
+`symvault import <source>` cases: stdout, stderr, exit status and, through `list --json` and
+`export --format json --yes` replays, the resulting vault (paths, field values, secret type and usage
+hint). `import_command_contract.rs` replays them with an exact case count and collects all
+differences; `make import-cli-differential` re-verifies the corpus against a rebuilt oracle first
+(`make import-cli-regenerate` rewrites it deliberately). Normalization is two narrow rules, documented
+in the generator and the test: sandbox paths become `@WORK`/`@ROOT`, and `import-YYYYMMDD-<8 hex>`
+quarantine IDs become `import-<DATE>-<RAND>`. Red before: 273 of 293 differed (heuristic classes, a
+case can be in several): per-entry progress lines missing 150, `list --json` of an empty vault 137,
+error printed once instead of twice 105, dry-run report missing 36, vault state 30, exit code 25,
+`usage_hint` of imported secret metadata 18, `Detected ... CSV export` line 17, repeated string flags
+rejected 4, plus single cases for `.json`/`.yaml` dispatch, `filepath.Ext` dotfiles, `1pux` alias,
+check order (vault before source, quarantine ID after parse), CSV parse error positions, mapping and
+open/read diagnostics, pass through the command, vault path diagnostics, backslash auto-commit.
+`import_commands.rs` now follows `cmd/admin/import.go` step for step (`prepare` before the vault,
+`apply` inside it). Also fixed at the root: Go CSV scanner port (`GoCsvScanner`) for exact `parse error
+on line N, column M` text, `path.Join` cleaning, Go `%q` in mapping errors, `UsageHintForType` in
+`symvault-store`, DEL/C1 characters accepted in entry paths (Go rejects only runes below 0x20),
+`list --json` `null` for an empty vault, auto-commit paths keep Unix backslashes. Negative control:
+reverting the `path.Join` cleaning fails 6 prefix cases. Residual: an environment-dependent case
+(case-insensitive file system, wall-clock git warning) is deliberately not in the corpus. Local gate
+only (local-first mode).
+
+## IO-001 1PUX on gojson, 2026-10-30
+
+`import1passgen` adds the same mutation sweep as `cxfgen` (197 `onepux_mut*` cases, complete
+Go error text; oracle `fca3f894` unchanged). 128 differed (15 accepted where Go rejects, 19
+upper-cased keys ignored, 94 error texts). `onepux.rs` now decodes through `gojson` (new
+`GoDecode for bool`); size, zip-open, read and missing-export errors use Go's text via
+`ImportError::Decode`, so `symvault import` prints Go's `parse import source: <err>`.
+Negative control: disabling case-insensitive key lookup fails 19 cases. Also fixed the
+load-sensitive `command_runner_times_out_and_reaps_the_process_group` (#1564).
+Local gate only (local-first mode).
+
+## IO-001 CXF on gojson, 2026-10-30
+
+`cxfgen` now records Go's complete `err.Error()` and a mutation sweep over the reference
+payload (every path null / wrong scalar / array / object, upper-cased keys): 496 cases
+(oracle `58d978bb` unchanged). Before, 147 differed (13 accepted where Go rejects, 12
+entry/warning differences, 122 error texts). `importer/cxf.rs` decodes through `gojson`
+(new: `json.Unmarshal` path, `RawMessage`, `EditableValue`, `map[string]any`); Go-verbatim
+errors use `ImportError::Decode`, so the CLI keeps Go's `parse import source: <err>`.
+`go_is_print`/`go_quote` (Go `strconv.Quote`) moved to `symvault-core` (table generator
+path updated) and replace `{:?}` in the CXF warning and TOTP errors; CXF type matching uses
+`go_to_lower` (`CXF-021`). Negative controls: array-for-struct, `to_lowercase`, `{:?}`.
+Local gate only (local-first mode).
+
+## IO-002 numeric tar header fields, 2026-10-30
+
+Rust checked only the mode field; Go's `readHeader` rejects any malformed size, uid,
+gid, mtime, USTAR devmajor/devminor or STAR atime/ctime with `archive/tar: invalid tar
+header`, and a bad GNU atime/ctime silently demotes the header and prepends the USTAR
+prefix field (which overlaps those bytes) to the name. `restoregen` records 19 new
+`header-field/*` cases (149 total; oracle `861ad938` unchanged, only `generator_digest`
+and the appended cases differ). Red before: 11 error mismatches plus the GNU-prefix tree.
+`go_header` in `symvault-sync/src/archive.rs` now mirrors both; four branch mutations each
+fail the corpus. Residuals in the IO-002 matrix row. Local gate only (local-first mode).
+
+## CLI-005/006 hand-parsed `update` bool flags, 2026-10-30 (#1558)
+
+`update apply|check|info` accept `--flag[=<ParseBool form>]`, last value wins, for
+`--json`, `--quiet`, `--force` and `--dry-run`. The cobra emulation now types these
+hand-parsed flags (`HAND_PARSED_BOOLS`, guarded against `command-tree.json`), so an
+invalid value is reported before an extra positional and `update info --json=`
+no longer hits the persistent `--json`. Go prints the `update` errors once.
+`errtaxgen` gained 10 `bool_flag_update_*` cases (105 usage cases; oracle
+`0cc78062` unchanged). Open: `setup` is not ported, so its two bool flags are not
+either. Local gate only (local-first mode).
+
+## CLI-005/006 local bool flags `--flag[=bool]`, 2026-10-30 (#1529)
+
+All 69 command-local clap `SetTrue` bool flags that are pflag `BoolVar`s in Go (plus `audit -j` and
+the Rust-only local `agent install --quiet`) now use the `--flag[=bool]` + `overrides_with` spelling,
+so `doctor --fix=false`, `verify --rebuild=false`, `-y=false` and repeats (last value wins) behave
+like Go; pre-existing `--flag[=bool]` locals gained the missing `overrides_with`, and
+`auth rotate-passphrase --reencrypt` takes ParseBool forms. The cobra emulation accepts `-y=value`
+for bool shorthands. `errtaxgen` records 20 more `bool_flag_local_*` usage cases (95 total; oracle
+`0cc78062` unchanged, only `generator_digest` and the appended cases differ; 15 failed on the
+pre-change binary). `doctor --fix=false` is guarded by in-crate tests over the whole command tree,
+not by a byte replay (host-dependent report). Open: hand-parsed `update apply|check|info` and
+`setup` bool flags still reject `--flag=false`; details in `cli-gap-inventory.md`.
+
+## GIT-002 stable git locale, 2026-10-30 (#1555)
+
+A localized git prints `Schwerwiegend: konnte nicht auf '<url>' zugreifen: ...`, which the English
+offline markers (`couldn't connect`, `unable to access`) do not match, so a German session
+classified an unreachable remote as `pull failed`. Red: `git_io_gaps::
+pull_classifies_offline_under_a_german_locale` (re-executes itself with `LANG/LC_ALL=de_DE.UTF-8`,
+`LANGUAGE=de`; skips when the host has no German git catalog) failed with that text. Fix:
+`run_process_with_timeout` (the single Rust git runner) now runs every child with `LC_ALL=C` and
+`LANGUAGE` removed (`pin_stable_locale`; `git::tests` assert the env deterministically without a
+catalog). Probe on git 2.56: `LANGUAGE=de LC_ALL=C` prints English, so `LC_ALL=C` alone wins; the
+`LANGUAGE` removal is belt-and-braces for gettext builds that honour it. `device.rs` `git clone`
+(inherits stdio, output is not classified) deliberately keeps the user's locale.
+
+Go oracle: the Go classifier has no `unable to access` marker and pulls through go-git, so only
+`pushWithSystemGit` (SSH URLs) parses git text. Pinning its env needs an edit to
+`internal/git/git_push.go`, a pinned source of `gitio` (`oracleCommit` `28fd3531`, which also
+compares the file set): the follow-up is source fix -> merge -> advance `gitio` pin to the
+merged revision -> provenance-only `make` re-freeze of `testdata/port/sync/git-io.json`
+(`git-offline`/`git-winner` are unaffected). Not done on the PR branch because a pin can only
+name a revision that survives the squash merge.
+
 ## IO-003 intake watch mtime zone, 2026-10-25 (#1510)
 
 Go formats `fi.ModTime()` in `time.Local`, so `intake <file> --json` provenance `mtime` carries the host offset (`2023-11-14T23:13:20+01:00` under `TZ=Europe/Berlin`); Rust printed `Z`. The contract was previously only exercised in UTC. Red: `TZ=Europe/Berlin intake_watch_contract.py` failed on `file-env` against the pinned Go oracle. Fix: `intake_commands.rs` converts the mtime with a `localtime_r` offset (the `time` crate's `local_offset_at` refuses in the CLI's worker thread). The contract gains a `file-env-local-zone` case (`TZ=Europe/Berlin`, non-Windows; asserts `+01:00`). No Go source or fixture changed, so no pin advance was needed.

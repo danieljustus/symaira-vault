@@ -1,0 +1,629 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "690647c5068a818a4b237738882bb20c865a134a",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
+  "tests": {
+    "agent_uninstall_keeps_a_multi_line_description_like_go": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "f46f5412a030128e00c9aca9132495cc7f434edc340cb87df6f9322d2e370c8d",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root/vault",
+              "agent",
+              "uninstall",
+              "other",
+              "--yes"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root/home",
+              "NO_COLOR": "1",
+              "SYMVAULT_ORACLE_INPUT_SHA256": "907a11eeacde974f080e25e2f84f3b8f6cef2637b29f715be19e548a21182dc2",
+              "USERPROFILE": "<ROOT:0>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "✓ Profile for \"other\" removed from config\n\nAgent \"other\" has been uninstalled.\nNote: MCP server entries in the agent's config file (e.g. mcp.json) must be removed manually.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    bot:\n        allowedPaths:\n            - |-\n              a\n              b\n            - plain\n        perToolRedactFields:\n            get: []\n        canWrite: true\n        exposeValueTools: true\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nscan_patterns:\n    - name: aws\n      pattern: ^AKIA\n      description: |\n        Matches AWS keys.\n        Second line.\n      severity: high\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "d20e78c6d6758667f58bd59b109c643b5909e4f458768f4fb325eea533e510ad",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:3>/root/vault",
+              "config",
+              "validate"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:3>/root/home",
+              "NO_COLOR": "1",
+              "SYMVAULT_ORACLE_INPUT_SHA256": "26da34a136e6c6086e041bc07019eaaf011384439b00efd86b4d28a2a5f5a822",
+              "USERPROFILE": "<ROOT:3>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:3>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:3>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:3>/root/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Configuration is valid (<ROOT:3>/root/home/.symvault/config.yaml)\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "agent_uninstall_keeps_every_mcp_field_go_keeps": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "dd16ebfbc5f798cb6e275dba785d6ce0317c70b768c36311f9e6c30b061b07bd",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root/vault",
+              "agent",
+              "uninstall",
+              "other",
+              "--yes"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root/home",
+              "NO_COLOR": "1",
+              "SYMVAULT_ORACLE_INPUT_SHA256": "68516daf5403b2bb757857129342ccfd753ad79c21c83b4bdc7dcdc0dce5232d",
+              "USERPROFILE": "<ROOT:0>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "✓ Profile for \"other\" removed from config\n\nAgent \"other\" has been uninstalled.\nNote: MCP server entries in the agent's config file (e.g. mcp.json) must be removed manually.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nmcp:\n    port: 9091\n    bind: 127.0.0.1\n    httpTokenFile: /tmp/tok\n    otlp_endpoint: localhost:4317\n    stdio: true\n    read_header_timeout: 5s\n    read_timeout: 1m30s\n    write_timeout: 10s\n    shutdown_timeout: 5s\n    approval_timeout: 30s\n    rate_limit: 60\n    trusted_proxy_ips:\n        - 10.0.0.1\n        - 192.168.0.0/24\n    metrics_auth_required: true\n    tls_cert_file: /c.pem\n    tls_key_file: /k.pem\n    approval_tls_cert_file: certs/approval-client.pem\n    approval_tls_key_file: certs/approval-client.key\n    mtls_enabled: true\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "26e21d9b7a350ec23275697a150c9147a79235b503304134518646701ad7ae17",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:3>/root/vault",
+              "config",
+              "validate"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:3>/root/home",
+              "NO_COLOR": "1",
+              "SYMVAULT_ORACLE_INPUT_SHA256": "cc3e453dd74ed12b88fca60374b2d4527e173804ffabd0d256b753a368428b4e",
+              "USERPROFILE": "<ROOT:3>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:3>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:3>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:3>/root/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Configuration is valid (<ROOT:3>/root/home/.symvault/config.yaml)\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "agent_uninstall_keeps_what_go_drops_and_nothing_else_differs": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "8202200bf663a024adecfa05ed6bfe054ede346e97fdc54c7a6f2eed44fdc336",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root/vault",
+              "agent",
+              "uninstall",
+              "other",
+              "--yes"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root/home",
+              "NO_COLOR": "1",
+              "SYMVAULT_ORACLE_INPUT_SHA256": "b839cb469de424491abf35512da6ea34462463695778a4a5109c1914658c28ef",
+              "USERPROFILE": "<ROOT:0>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "approval_required is deprecated and will be removed in a future version\n✓ Profile for \"other\" removed from config\n\nAgent \"other\" has been uninstalled.\nNote: MCP server entries in the agent's config file (e.g. mcp.json) must be removed manually.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\ngit:\n    commit_template: msg\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nmcp:\n    port: 9096\n    bind: 127.0.0.1\n    httpTokenFile: auto\n    read_header_timeout: 5s\n    read_timeout: 10s\n    write_timeout: 10s\n    shutdown_timeout: 5s\n    approval_timeout: 30s\n    rate_limit: 60\n    metrics_auth_required: true\nclipboard:\n    auto_clear_duration: 15\n    copyByDefault: true\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "0318f96299912aa1af7d5095c7fffaff0268676243ad285b1f70982d82fb4053",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:3>/root/vault",
+              "config",
+              "validate"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:3>/root/home",
+              "NO_COLOR": "1",
+              "SYMVAULT_ORACLE_INPUT_SHA256": "e024aa50852ce462f478182361fae9affc3c25b3768e271f27eda2f9637ced8d",
+              "USERPROFILE": "<ROOT:3>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:3>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:3>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:3>/root/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Configuration is valid (<ROOT:3>/root/home/.symvault/config.yaml)\n"
+            },
+            "stderr": {
+              "text": "approval_required is deprecated and will be removed in a future version\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "agent_uninstall_of_the_payment_bound_agent_like_go": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "e07dde6b4a06707c10606e7d9eae01ae0ab22a197c2f439bb98df7e6ec395cf9",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root/vault",
+              "agent",
+              "uninstall",
+              "bot",
+              "--yes"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root/home",
+              "NO_COLOR": "1",
+              "SYMVAULT_ORACLE_INPUT_SHA256": "be4f601f8ec4bed3d69299abc8679a2639199812d4d81569b03ad7fb908cf659",
+              "USERPROFILE": "<ROOT:0>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "✓ Profile for \"bot\" removed from config\n\nAgent \"bot\" has been uninstalled.\nNote: MCP server entries in the agent's config file (e.g. mcp.json) must be removed manually.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\n    other:\n        canWrite: true\n        exposeValueTools: true\naudit:\n    maxSizeMb: 10\n    maxBackups: 2\n    maxAgeDays: 30\nlogging:\n    level: debug\n    format: text\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nscan_patterns:\n    - name: aws\n      pattern: ^AKIA\n      description: key\n      severity: high\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "8a21a33715f4fdd3da794aded061dd72d766d9590c57a062a4811200f527cd64",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:3>/root/vault",
+              "config",
+              "validate"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:3>/root/home",
+              "NO_COLOR": "1",
+              "SYMVAULT_ORACLE_INPUT_SHA256": "507fcdec68c6ba2c6b6469303e61e10fc880ebd55af4ec1ad8f5464005eeefab",
+              "USERPROFILE": "<ROOT:3>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:3>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:3>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:3>/root/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Configuration is valid (<ROOT:3>/root/home/.symvault/config.yaml)\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "agent_uninstall_rewrites_the_config_like_go": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "0d4e8c2fc5ccc524d9bdbc5f904f32e7832a3ac710f17db235b2fed718550902",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root/vault",
+              "agent",
+              "uninstall",
+              "other",
+              "--yes"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root/home",
+              "NO_COLOR": "1",
+              "SYMVAULT_ORACLE_INPUT_SHA256": "be4f601f8ec4bed3d69299abc8679a2639199812d4d81569b03ad7fb908cf659",
+              "USERPROFILE": "<ROOT:0>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "✓ Profile for \"other\" removed from config\n\nAgent \"other\" has been uninstalled.\nNote: MCP server entries in the agent's config file (e.g. mcp.json) must be removed manually.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    bot:\n        canWrite: true\n        exposeValueTools: true\n        allowed_tools:\n            - vault_get\n        max_reads_per_hour: 7\n        dynamicProviders:\n            aws:\n                - a\n        skillPath: /s/p\n        skillVersion: \"3\"\n        exposePaymentValues: true\n        paymentPolicy: card\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\naudit:\n    maxSizeMb: 10\n    maxBackups: 2\n    maxAgeDays: 30\nlogging:\n    level: debug\n    format: text\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nscan_patterns:\n    - name: aws\n      pattern: ^AKIA\n      description: key\n      severity: high\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "f0a83d9be9e84915d9d198e4d4ddd3fb849a319977bc09f0b103c509c536d42b",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:3>/root/vault",
+              "config",
+              "validate"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:3>/root/home",
+              "NO_COLOR": "1",
+              "SYMVAULT_ORACLE_INPUT_SHA256": "3504cf2df406fbb0b79f8dd5bcc0a7464bc9c21ed2636277c066b84f6824f624",
+              "USERPROFILE": "<ROOT:3>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:3>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:3>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:3>/root/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Configuration is valid (<ROOT:3>/root/home/.symvault/config.yaml)\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "doctor_fix_repairs_audit_and_clipboard_like_go": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "96936fe70c5eaf03aa876f3a59c2a9b27e8184b062a026b71bea4eef679430f1",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root/vault",
+              "doctor",
+              "--only",
+              "vault.config.validates",
+              "--fix",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root/home",
+              "NO_COLOR": "1",
+              "SYMVAULT_ORACLE_INPUT_SHA256": "c06e6fcf384d1bfffbee4261262f469706d6785cf299b03cf603bb2b3544a29f",
+              "USERPROFILE": "<ROOT:0>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261104-2fb936d0).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261104-2fb936d0\nSymaira Vault Doctor — Vault: <ROOT:0>/root/vault\n\n ✓  Vault config validates                   fixed — config validation error: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml) (+1 more) (fixed)\n    → run `symvault doctor --fix` to auto-correct common issues\n\nScore: 1/1 OK\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/vault/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/vault/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    bot:\n        canWrite: true\n        exposeValueTools: true\n        skillVersion: \"3\"\n        paymentPolicy: card\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nclipboard:\n    auto_clear_duration: 0\n    copyByDefault: true\naudit:\n    maxSizeMb: 100\n    maxBackups: 4\n    maxAgeDays: 30\nlogging:\n    level: warn\n    format: json\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/vault/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261104-2fb936d0\": {\n      \"id\": \"tok-20261104-2fb936d0\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"4ecb2b4dcfbdb592675e1ec988af9f475a4f123ed6ecaea87f1c3f1b868ed8d6\",\n      \"prefix\": \"4dc0\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-04T00:08:18.889361Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "5cfa28c50f9600fca140dd23171c300bf0f8aa5412a2ff49b0928f5b2304e5c8",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:3>/root/vault",
+              "config",
+              "validate"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:3>/root/home",
+              "NO_COLOR": "1",
+              "SYMVAULT_ORACLE_INPUT_SHA256": "65a385518b55973342f0dfa6b831d82d053e878054bdb78eb7c94ce7ac04c495",
+              "USERPROFILE": "<ROOT:3>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:3>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:3>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:3>/root/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Configuration is valid (<ROOT:3>/root/home/.symvault/config.yaml)\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "doctor_fix_repairs_audit_and_clipboard_like_go.repair": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "fd2f6cad4efa31117870167cdb701e3d52ed4abfa5c7a78273e86dabc2236f05",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:1>/root/vault",
+              "doctor",
+              "--only",
+              "vault.config.validates",
+              "--fix",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root/home",
+              "NO_COLOR": "1",
+              "SYMVAULT_ORACLE_INPUT_SHA256": "c06e6fcf384d1bfffbee4261262f469706d6785cf299b03cf603bb2b3544a29f",
+              "USERPROFILE": "<ROOT:1>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261104-0dfda95a).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261104-0dfda95a\nSymaira Vault Doctor — Vault: <ROOT:1>/root/vault\n\n ✓  Vault config validates                   fixed — config validation error: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml) (+1 more) (fixed)\n    → run `symvault doctor --fix` to auto-correct common issues\n\nScore: 1/1 OK\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 1,
+              "path": "root/vault/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 1,
+              "path": "root/vault/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 1,
+              "path": "root/vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    bot:\n        canWrite: true\n        exposeValueTools: true\n        skillVersion: \"3\"\n        paymentPolicy: card\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nclipboard:\n    auto_clear_duration: 0\n    copyByDefault: true\naudit:\n    maxSizeMb: 100\n    maxBackups: 4\n    maxAgeDays: 30\nlogging:\n    level: warn\n    format: json\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 1,
+              "path": "root/vault/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261104-0dfda95a\": {\n      \"id\": \"tok-20261104-0dfda95a\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"c996514f33a66aed9698ec8ace87908daea298b04d41de23fb0624e090c1f3c7\",\n      \"prefix\": \"50bb\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-04T00:08:21.329323Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

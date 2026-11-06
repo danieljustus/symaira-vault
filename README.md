@@ -5,11 +5,10 @@
 [![CI](https://github.com/danieljustus/symaira-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/danieljustus/symaira-vault/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/danieljustus/symaira-vault)](https://github.com/danieljustus/symaira-vault/releases/latest)
 [![License](https://img.shields.io/github/license/danieljustus/symaira-vault)](https://opensource.org/licenses/Apache-2.0)
-[![Go Reference](https://pkg.go.dev/badge/github.com/danieljustus/symaira-vault.svg)](https://pkg.go.dev/github.com/danieljustus/symaira-vault)
 
 ![Symaira Vault hero](docs/assets/symvault-hero.png)
 
-A modern, secure command-line password manager (`symvault`) written in Go. Uses [age](https://age-encryption.org/) for encryption with built-in MCP server support for AI agent integration.
+A modern, secure command-line password manager (`symvault`) written in Rust. Uses [age](https://age-encryption.org/) for encryption with built-in MCP server support for AI agent integration.
 
 ![Symaira Vault demo](docs/assets/symvault-demo.gif)
 
@@ -22,22 +21,27 @@ A modern, secure command-line password manager (`symvault`) written in Go. Uses 
 - **Modern Encryption**: [age](https://age-encryption.org/) (X25519 + ChaCha20-Poly1305)
 - **TOTP Support**: Store and generate TOTP codes
 - **Clipboard Auto-Clear**: Automatic clearing after timeout
-- **Autotype**: Cross-platform automatic password entry (macOS, Linux, Windows)
+- **Autotype**: Automatic password entry (macOS arm64, Linux)
 - **Secret Execution**: Run commands with vault secrets injected as environment variables
 - **Session Caching**: OS keyring with 15-minute TTL
 - **Git Integration**: Automatic commits and sync
 - **Multi-User Vaults**: age recipients for shared access
 - **MCP Server**: stdio and HTTP for AI agent integration with scoped token management
 - **MCP Slash Commands**: `add-credential`, `rotate-credential`, `find-and-use`, `share-credential` — guided workflows surfaced as slash commands in Claude Code, OpenCode, Hermes
-- **Native Secure-Input Dialog**: cross-platform popups (macOS osascript, Linux zenity/kdialog, Windows Get-Credential) for collecting credentials from agents without exposing them in chat
+- **Native Secure-Input Dialog**: popups (macOS osascript, Linux zenity/kdialog) for collecting credentials from agents without exposing them in chat
 - **Review-Gated Credential Intake**: stage loose credential files (`.env` exports, screenshots, certificates) into an encrypted quarantine for human review before anything enters the vault (`symvault intake`, `symvault intake watch`)
 - **Native macOS Client**: SwiftUI app for browsing, unlocking, creating, editing, generating, copying, and deleting local vault entries
 - **Egress Credential Broker**: opt-in loopback proxy that attaches vault credentials to an agent's outbound requests server-side, without exposing them to the child process (`symvault broker`, `symvault run --broker`)
 - **MCP API Templates**: shape `execute_api_request` calls with YAML templates and built-in provider catalog (Anthropic, GitHub, OpenAI, Stripe, …), with credentials resolved from the vault at request time
 - **Approval Devices**: pair a phone to approve or deny an agent's write requests in real time (`symvault device approval-pair`), the human-in-the-loop behind `approvalMode: prompt`
-- **Cross-Platform**: macOS, Linux, Windows, FreeBSD
+- **Platforms**: macOS arm64 and Linux CLI; iOS and Web where applicable
 
 ## Installation
+
+Supported native targets are **macOS on Apple Silicon (arm64)** and **Linux CLI/server**.
+iOS and Web are supported where applicable. Windows and Intel Macs are unsupported
+and receive no CI or release artifacts; FreeBSD has been dropped. See
+[#1550](https://github.com/danieljustus/symaira-vault/issues/1550).
 
 ### Quick install
 
@@ -46,21 +50,10 @@ A modern, secure command-line password manager (`symvault`) written in Go. Uses 
 curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh
 ```
 
-**Windows:**
-```powershell
-irm https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.ps1 | iex
-```
-
 **Homebrew:**
 ```bash
 brew tap danieljustus/tap
 brew install symvault
-```
-
-**Scoop:**
-```powershell
-scoop bucket add symaira https://github.com/danieljustus/scoop-bucket
-scoop install symaira/symvault
 ```
 
 **Nix (Flake):**
@@ -72,21 +65,32 @@ nix run github:danieljustus/symaira-vault
 # flake.nix:
 #   inputs.symvault.url = "github:danieljustus/symaira-vault";
 ```
-> **Note:** The flake is new. Go module dependencies are pinned via `vendorHash` in `flake.nix`. If updating dependencies, run `go mod vendor && nix hash path --sri vendor/` and update the hash.
+> **Note:** The flake builds the Rust CLI from `Cargo.lock` (`rustPlatform.buildRustPackage`). It needs a nixpkgs whose `rustc` satisfies the workspace `rust-version` (1.98); if the build reports `requires rustc 1.98`, run `nix flake update nixpkgs`.
 
-**Go:**
+**Cargo (build from source):**
 ```bash
-go install github.com/danieljustus/symaira-vault@latest
+cargo install --locked --git https://github.com/danieljustus/symaira-vault --tag <release tag> symvault-cli
 ```
+Use the tag of the release you want (for example the latest on the
+[releases page](https://github.com/danieljustus/symaira-vault/releases/latest)).
+This installs the `symvault` binary into `~/.cargo/bin`.
+
+**Requires `git`:** `symvault` runs the `git` executable for vault history and
+sync, so `git` must be on `PATH` (see
+[ADR 0033](docs/adr/0033-git-binary-runtime-dependency.md)). The deb/rpm/apk
+packages depend on `git` and pull it in; with the install script, Homebrew-less
+manual downloads or `cargo install`, install it yourself — macOS:
+`xcode-select --install` (Xcode Command Line Tools, which will prompt on first
+use) or `brew install git`; Debian/Ubuntu: `sudo apt install git`;
+Fedora/RHEL: `sudo dnf install git`; Alpine: `sudo apk add git`.
 
 For manual downloads, Linux packages, release verification (including Cosign signature verification), and build-from-source instructions, see [docs/distribution.md](docs/distribution.md).
 
 | Platform | amd64 | arm64 | Install Methods |
 |----------|-------|-------|-----------------|
-| macOS | ✓ | ✓ | Quick install, Homebrew, Go, Manual |
-| Linux | ✓ | ✓ | Quick install, Homebrew, Go, Manual, deb/rpm/apk |
-| Windows | ✓ | ✓ | Quick install, Scoop, Go, Manual |
-| FreeBSD | ✓ | ✓ | Go, Manual |
+| macOS | Unsupported | ✓ | Quick install, Homebrew, Cargo, Manual |
+| Linux | ✓ | ✓ | Quick install, Homebrew, Cargo, Manual, deb/rpm/apk |
+| Windows | Unsupported | Unsupported | None |
 | NixOS / Nix | ✓ | ✓ | Nix flake (`nix run github:danieljustus/symaira-vault`) |
 
 ### Native macOS app (from source)
@@ -99,8 +103,8 @@ the replacement and security/migration gates in [PB-2026-09-09](docs/product-bou
 pass. No account or hosted service is required.
 
 ```bash
-make build
-bash scripts/build-vaultcore.sh  # requires full Xcode with the iOS SDK
+make rust-cli && cp target/release/symvault symvault   # the app embeds ../symvault
+bash scripts/build-vaultcore.sh  # Rust SymvaultFFI XCFramework; needs full Xcode with the iOS SDK
 cd client
 xcodegen generate
 xcodebuild -project Symvault.xcodeproj -scheme Symvault -scmProvider system build
@@ -366,7 +370,7 @@ vault clears the in-memory index; the persisted index remains encrypted.
 | **Git Integration** | Built-in | SSH agent, commit signing | SSH agent, GitHub Actions, GitLab CI | Built-in (automatic commits) | No |
 | **MCP Server** | Built-in (stdio + HTTP) | Community (official: no raw secrets via MCP) | Official (`bitwarden-mcp`) | No | No |
 | **Password Generation** | Built-in | Built-in | Built-in | Built-in | Manual / ad-hoc |
-| **Cross-Platform** | macOS, Linux, Windows, FreeBSD | macOS, Linux, Windows, mobile | macOS, Linux, Windows, mobile, web | Unix-like (Linux, macOS, FreeBSD) | Any chat platform |
+| **Cross-Platform** | macOS arm64, Linux CLI | macOS, Linux, Windows, mobile | macOS, Linux, Windows, mobile, web | Unix-like (Linux, macOS, FreeBSD) | Any chat platform |
 | **Telemetry** | **None** | Opt-in (personal), on-by-default (business) | Administrative data only (vault zero-knowledge) | None | Logged by chat providers |
 | **Entry Format** | Individual encrypted files | Proprietary database (1PUX export documented) | Encrypted JSON / SQLite | Individual encrypted files | Plaintext in chat history |
 
@@ -383,10 +387,10 @@ vault clears the in-memory index; the persisted index remains encrypted.
 
 ## Dependencies
 
-- Go: use the version declared in [`go.mod`](go.mod)
-- [filippo.io/age](https://pkg.go.dev/filippo.io/age) — encryption
-- [spf13/cobra](https://github.com/spf13/cobra) — CLI framework
-- [zalando/go-keyring](https://github.com/zalando/go-keyring) — OS keyring
+- Rust: the toolchain pinned in [`rust-toolchain.toml`](rust-toolchain.toml); crate versions are locked in [`Cargo.lock`](Cargo.lock)
+- [age](https://crates.io/crates/age) — encryption
+- [clap](https://crates.io/crates/clap) — CLI framework
+- [keyring](https://crates.io/crates/keyring) — OS keyring
 
 ## Contributing
 
@@ -395,21 +399,18 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and PR process.
 ### Testing
 
 ```bash
-# Run all tests with race detector (recommended for local validation)
-make test
+# Format check + Clippy (-D warnings)
+make rust-lint
 
-# Run tests without race detector (faster, for quick iteration)
-make test-fast
+# Run all tests (nextest + doctests)
+make rust-test
 
-# Run specific package tests
-go test ./internal/vault/... -v
+# Run one crate's tests
+cargo test -p symvault-store
 ```
-
-Tests include the Go race detector by default via `make test` to catch concurrency issues early. Use `make test-fast` when iterating quickly and you want a faster feedback loop without the race detector penalty.
 
 Some tests are skipped automatically:
 
-- **Slow tests** (`-short` flag): Flow and binary e2e tests skip in short mode. Run without `-short` to execute them.
 - **Headless CI**: Tests requiring the OS keyring (session caching) skip when no keyring backend is available (e.g., containerized or headless CI). These are environment-dependent and not failures.
 
 ## License
@@ -419,7 +420,7 @@ Apache-2.0 License
 ## Acknowledgments
 
 - Inspired by [pass](https://www.passwordstore.org/) from zx2c4
-- MCP support via [mark3labs/mcp-go](https://github.com/mark3labs/mcp-go)
+- MCP support via the [Model Context Protocol](https://modelcontextprotocol.io)
 - Former name: OpenPass
 
 ## Disclaimer

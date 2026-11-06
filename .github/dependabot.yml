@@ -1,24 +1,5 @@
 version: 2
 updates:
-  - package-ecosystem: gomod
-    directory: /
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    reviewers:
-      - danieljustus
-    commit-message:
-      prefix: "chore(deps)"
-    groups:
-      go-dependencies:
-        patterns:
-          - "*"
-    ignore:
-      # Deferred: transitive via go-git — tracked in deferred-deps-check.yml
-      - dependency-name: "github.com/ProtonMail/go-crypto"
-      # Deferred: transitive via groupcache — tracked in deferred-deps-check.yml
-      - dependency-name: "github.com/golang/protobuf"
-
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -45,9 +26,10 @@ updates:
           - patch
     ignore:
       # 0.3.2 emitted nested block scalars as `- >2-` (fixed in 0.3.3). 0.3.4+
-      # accepts a document-start-only config in `set` where Go exits 6,
-      # breaking config_yaml_syntax recorded_open_divergences_are_still_open
-      # (document_start_only). Tracked in #1526.
+      # accepts a document-start-only config in `set` that the recorded Go
+      # behaviour rejects (exit 6), breaking config_yaml_syntax
+      # recorded_open_divergences_are_still_open (document_start_only).
+      # Tracked in #1526.
       - dependency-name: "yaml-edit"
         versions: [">0.3.3"]
       # 0.1.22 has Unicode 15 tables, 0.1.25 already Unicode 17; the frozen Go

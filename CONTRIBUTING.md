@@ -30,21 +30,25 @@ The script is idempotent and safe to run multiple times. Use `./scripts/setup-de
 
 If you prefer manual setup, ensure you have:
 
-- **Go:** use the patched `toolchain` in `go.mod` (currently `go1.26.10`), also selected by `BUILD_GO_TOOLCHAIN` in `Makefile`; the `go 1.26.6` directive is the minimum retained for frozen oracle checks
-- **Python 3:** required by the Makefile test wrapper
-- **Rust/Cargo:** use the toolchain pinned in `rust-toolchain.toml`; the test wrapper builds the Rust CLI unless `SYMVAULT_RUST_BINARY` supplies an existing binary
+- **Rust/Cargo:** the toolchain pinned in `rust-toolchain.toml` (installed automatically by `rustup`), with `clippy` and `rustfmt`
+- **cargo-nextest**, **cargo-deny**, **cargo-audit**: `cargo install --locked cargo-nextest cargo-deny cargo-audit` (see `scripts/setup-dev.sh` for the pinned versions)
+- **Python 3:** the contract and CI helper scripts under `scripts/` are Python
 - **git**
 - **make**
-- **golangci-lint** v2.11.4: `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4`
 - **pre-commit** (optional but recommended): `pip install pre-commit` or `brew install pre-commit`
+
+No Go toolchain is needed: the project is Rust-only, and the differential tests
+replay committed observations of the original Go implementation.
 
 ### Clone and Build
 
 ```bash
 git clone https://github.com/danieljustus/symaira-vault
 cd symaira-vault
-go build -o symvault .
+make rust-cli        # cargo build --release --locked -p symvault-cli --bin symvault
 ```
+
+The binary is written to `target/release/symvault`.
 
 ### Pre-commit Hooks
 
@@ -54,48 +58,45 @@ After running the setup script (or installing pre-commit manually):
 pre-commit install
 ```
 
-This installs git hooks that run formatting, linting, and fast tests before each commit, catching issues locally before they reach CI. The pre-commit hook uses `make test-fast` which runs all tests without the race detector for quicker feedback (<30 seconds for typical changes).
+This installs git hooks that run `cargo fmt --check` and `make rust-lint` (rustfmt and Clippy with `-D warnings`) on Rust changes before each commit, catching issues locally before they reach CI.
 
-### Two-Tier Test Workflow
-
-Symaira Vault uses a two-tier testing approach:
+### Test Workflow
 
 | Command | Purpose | What it runs |
 |---------|---------|-------------|
-| `make test-fast` | Local iteration, pre-commit hook | All tests without race detector |
-| `make test` | CI gate, before pushing shared branches | All tests with race detector |
+| `make rust-lint` | Pre-commit, before pushing | `cargo fmt --all --check` and `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` |
+| `make rust-test` | Local iteration, CI gate | `cargo nextest run --workspace --all-features --locked` plus doctests |
+| `make rust-security` | Dependency audit | `cargo audit` and `cargo deny` |
 
-Use `make test-fast` during development for fast feedback. Run `make test` before pushing a PR to catch concurrency issues that only the race detector surfaces. CI runs explicit Go commands with platform-specific race and skip flags; the main matrix skips flow, binary E2E and integration tests, with separate jobs covering additional suites. See `.github/workflows/ci.yml` for the current flags.
+Use `cargo test -p <crate>` or `cargo nextest run -p <crate> <filter>` for fast feedback on one crate. See `.github/workflows/ci.yml` for the exact CI invocations.
 
 ### Running from Source
 
 ```bash
-./symvault --help
+target/release/symvault --help
+# or, without a release build:
+cargo run -p symvault-cli --bin symvault -- --help
 ```
 
 ### Project Structure
 
 ```
 symaira-vault/
-├── main.go              # Entry point
-├── cmd/                 # CLI commands (Cobra)
-│   ├── root.go          # Root command
-│   ├── crud/            # Get, set, list, find, delete, edit, add
-│   ├── admin/           # Initialize vault and administration
-│   ├── auth/            # Lock, unlock and authentication
-│   ├── mcp/             # MCP server and client configuration
-│   ├── generate.go      # Generate password
-│   ├── git.go           # Git operations
-│   └── recipients.go    # Manage recipients
-├── internal/
-│   ├── vault/           # Core vault logic
-│   ├── crypto/          # Age encryption layer
-│   ├── session/         # OS keyring caching
-│   ├── config/          # YAML config
-│   ├── git/             # Git integration
-│   ├── mcp/             # MCP server implementation
-│   └── audit/           # Audit logging
-
+├── Cargo.toml            # Workspace manifest (Cargo.lock is committed)
+├── crates/
+│   ├── symvault-cli/     # CLI binary (`symvault`)
+│   ├── symvault-core/    # Config, policy and shared types
+│   ├── symvault-crypto/  # age encryption and KDF
+│   ├── symvault-store/   # Vault storage, audit log
+│   ├── symvault-sync/    # Git sync and intake
+│   ├── symvault-mcp/     # MCP server (stdio and HTTP)
+│   ├── symvault-platform/# OS keyring and platform glue
+│   ├── symvault-ffi/     # SymvaultFFI for the Swift clients
+│   └── symvault-gojson/  # Go-compatible JSON encoding
+├── client/               # SwiftUI macOS/iOS client
+├── editors/              # Editor integrations
+├── scripts/              # Build, packaging and CI helpers
+└── testdata/             # Committed fixtures and recorded observations
 ```
 
 ## Code Style Guidelines
@@ -104,7 +105,7 @@ symaira-vault/
 
 Symaira Vault uses [EditorConfig](https://editorconfig.org) to maintain consistent formatting across editors. The `.editorconfig` file in the repository root defines the rules:
 
-- **Go files** (`*.go`, `go.mod`): tab indentation
+- **Rust files** (`*.rs`): 4-space indentation, owned by `rustfmt`
 - **YAML files** (`*.yaml`, `*.yml`): 2-space indentation
 - **Markdown files** (`*.md`): trailing whitespace preserved (for line breaks), max line length 80
 - **JSON files** (`*.json`): 2-space indentation
@@ -112,96 +113,19 @@ Symaira Vault uses [EditorConfig](https://editorconfig.org) to maintain consiste
 
 Most editors support EditorConfig natively or via plugin. See [editorconfig.org](https://editorconfig.org) for setup instructions.
 
-### Go Standards
+### Rust Standards
 
-- Follow [Effective Go](https://go.dev/doc/effective_go) conventions
-- Use `gofmt` for formatting (enforced via `make fmt`)
-- Run `go vet` before committing (enforced via `make lint`)
+- Format with `cargo fmt --all` (enforced via `make rust-lint`)
+- Clippy must be clean with `-D warnings` on all targets and features
+- Follow the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/)
+- Prefer typed errors (`thiserror`) in library crates and propagate with `?`; keep the underlying error as `source()` instead of formatting it into a new string
+- Library crates must not print: return errors to the caller
 
 ### Naming Conventions
 
-- **Files**: lowercase with underscores (`vault.go`, `age_crypto.go`)
-- **Functions**: PascalCase for exported, camelCase for unexported
-- **Constants**: CamelCase or SCREAMING_SNAKE_CASE for magic values
-- **Interfaces**: PascalCase, typically with `-er` suffix (e.g., `Reader`, `Writer`)
-
-### Error Handling
-
-- Return errors rather than logging them in library code
-- Prefix error messages with lowercase context: `"vault: failed to open"`
-
-#### Error Wrapping Conventions
-
-Use `fmt.Errorf` with `%w` when wrapping an underlying error that the caller may need to programmatically inspect with `errors.Is` or `errors.As`:
-
-```go
-// Good: preserves the error chain for errors.Is/errors.As
-if err := os.MkdirAll(path, 0o755); err != nil {
-    return fmt.Errorf("create vault directory: %w", err)
-}
-```
-
-Use `fmt.Errorf` with `%v` or use `errors.New` when the message is purely informational and the underlying error is a well-known sentinel or needs no programmatic inspection:
-
-```go
-// Good: validation error — no underlying error to wrap
-if passphrase == "" {
-    return errors.New("passphrase is empty")
-}
-
-// Good: informational message with a known sentinel
-return 0, fmt.Errorf("invalid HMAC key size: got %d, want %d", len(data), hmacKeySize)
-```
-
-**Decision guide:**
-| Scenario | Pattern |
-|---|---|
-| Propagating an unknown/third-party error that the caller may need to inspect | `fmt.Errorf("context: %w", err)` |
-| Propagating a sentinel error (defined in the package) | `fmt.Errorf("context: %w", err)` |
-| Validation failure, no error to wrap | `errors.New("...")` or `fmt.Errorf("...: %v", val)` |
-| Creating a dynamic error message from a string | `fmt.Errorf("...")` |
-| Recovering from a panic — `r` is not an error type | `fmt.Errorf("panic: %v", r)` |
-
-**What NOT to do:**
-
-```go
-// Bad: swallows the error chain — caller cannot errors.Is/errors.As
-return fmt.Errorf("read config: %v", err)
-
-// Bad: discards the error entirely
-log.Printf("read config failed: %v", err)
-return fmt.Errorf("read config failed")
-```
-
-**Enforcement:** The project uses `errorlint` via golangci-lint to catch `fmt.Errorf` calls that pass an `error` argument without `%w`. Run `make lint` to verify.
-
-### File Handle Management
-
-Always use `defer` to close file handles immediately after opening:
-
-```go
-// Correct: defer close immediately after error check
-file, err := os.Open(path)
-if err != nil {
-    return err
-}
-defer func() { _ = file.Close() }()
-
-// For long-lived resources (e.g., loggers), store the handle in a struct
-// and provide a Close() method for cleanup:
-type Logger struct {
-    file *os.File
-}
-
-func (l *Logger) Close() error {
-    if l.file != nil {
-        return l.file.Close()
-    }
-    return nil
-}
-```
-
-This ensures file handles are closed even on early returns or panics.
+- **Files and modules**: `snake_case` (`vault.rs`, `age_crypto.rs`)
+- **Types and traits**: `PascalCase`; **functions and variables**: `snake_case`
+- **Constants**: `SCREAMING_SNAKE_CASE`
 
 ### Output Streams
 
@@ -209,19 +133,6 @@ Symaira Vault follows standard Unix conventions for output streams:
 
 - **stdout**: Normal output, data, success messages
 - **stderr**: Errors, warnings, interactive prompts
-
-**Examples:**
-
-```go
-// Correct: prompts to stderr
-fmt.Fprint(os.Stderr, "Passphrase: ")
-
-// Correct: normal output to stdout
-fmt.Println("Entry created: path/to/entry")
-
-// Correct: errors to stderr
-fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-```
 
 This allows users to pipe normal output to other commands while still seeing errors.
 
@@ -232,8 +143,7 @@ symvault get pass 2>/dev/null   # Hide errors
 
 ### Comments
 
-- Comment exported functions and types
-- Use doc comments (`// FunctionName does...`) for public APIs
+- Document public items with `///` doc comments
 - Keep comments concise but informative
 
 ## Testing Requirements
@@ -241,58 +151,37 @@ symvault get pass 2>/dev/null   # Hide errors
 ### Running Tests
 
 ```bash
-# Run all tests with race detector (recommended for local validation)
-make test
+# Run the whole workspace (nextest + doctests)
+make rust-test
 
-# Run tests without race detector (faster, for quick iteration)
-make test-fast
-
-# Run tests with race detector and extended timeout (used in CI)
-make test-race
-
-# Run specific package tests
-go test ./internal/vault/... -v
-
-# Run specific test
-go test ./internal/vault/... -run TestFoo -v
+# Run one crate, or one test
+cargo test -p symvault-store
+cargo test -p symvault-store -- <test name filter>
 ```
 
 ### Test Coverage
 
 ```bash
-# Generate text coverage report
-make test-coverage
-
-# Generate HTML coverage report
-make test-coverage-html
+make rust-coverage
 ```
 
 ### Code Quality Checks
 
 ```bash
-# Install golangci-lint v2 (required for local linting)
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
+# Format check + Clippy (-D warnings)
+make rust-lint
 
-# Run all linters (golangci-lint must be installed)
-make lint
-
-# Format code
-make fmt
-
-# Run go vet
-make vet
-
-# Run gosec SAST scanner (blocking in CI)
-go install github.com/securego/gosec/v2/cmd/gosec@latest
-gosec ./...
+# Dependency audit (cargo audit + cargo deny)
+make rust-security
 ```
 
 ### Writing Tests
 
-- Tests should be in `*_test.go` files in the same package
-- Use descriptive test names: `TestVault_Open_WithValidIdentity`
+- Unit tests live next to the code (`#[cfg(test)] mod tests`); integration tests in each crate's `tests/` directory
+- Use descriptive test names: `open_with_valid_identity_succeeds`
 - Use table-driven tests for multiple scenarios
-- Ensure tests clean up after themselves (temp files, etc.)
+- Ensure tests clean up after themselves (use `tempfile`); never touch the real keyring or home directory
+- Differential tests compare against committed observations of the original Go implementation (`testdata/port/`); they run without a Go toolchain
 
 ## Commit Message Format
 
@@ -348,10 +237,8 @@ docs(readme): update installation instructions
 2. **Keep changes focused** — one feature or fix per PR
 3. **Run local checks**:
    ```bash
-   make fmt
-   make vet
-   make lint
-   make test
+   make rust-lint
+   make rust-test
    ```
 4. **Add tests** for new functionality
 5. **Update documentation** if needed
@@ -391,7 +278,7 @@ Include in your PR description:
 
 For **bugs**, include:
 - Symaira Vault version (`symvault --version` or git commit)
-- Go version (`go version`)
+- Rust version (`rustc --version`) if you built from source
 - Operating system and version
 - Steps to reproduce
 - Expected vs actual behavior

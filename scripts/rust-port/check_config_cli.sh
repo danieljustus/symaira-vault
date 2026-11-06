@@ -1,32 +1,24 @@
 #!/bin/sh
+# config-cli differential: replays the committed Go transcripts
+# (testdata/port/cli-transcripts/*.json) against the Rust binary. No Go
+# toolchain and no oracle binary: a recording that is missing or no longer
+# matched is a failure. Re-recording needs the archived oracle (tag
+# legacy/go-oracle, docs/rust-port/go-oracle-archive.md).
 set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 cd "$repo_root"
-# A supplied oracle is still verified by configclicasesgen (revision,
-# clean VCS metadata and toolchain). CI builds one when none is provided.
-export GOWORK=off
 # macOS TMPDIR ends in '/'. Sandboxes created under it would keep a doubled
 # separator that the CLI's cleaned paths never contain (#1474).
 while case ${TMPDIR:-} in ?*/) true ;; *) false ;; esac; do TMPDIR=${TMPDIR%/}; done
 [ -z "${TMPDIR:-}" ] || export TMPDIR
-export GOTOOLCHAIN=${GO_TOOLCHAIN:-go1.26.6}
-oracle_binary=${SYMVAULT_GO_BINARY:-}
-if [ -z "$oracle_binary" ]; then
-    run_root=$(mktemp -d "${TMPDIR:-/tmp}/config-cli.XXXXXX")
-    trap 'rm -rf "$run_root"' EXIT HUP INT TERM
-    oracle_commit=fca3f89401833b5e14ec4ec74ef736b0f63bca74
-    export TMPDIR="$run_root"
-    export TMP="$run_root" TEMP="$run_root" GOTMPDIR="$run_root"
-    # Ordinary clones give Go reliable VCS metadata; nested worktrees do not.
-    git clone --quiet --no-hardlinks --no-checkout --local "$repo_root" "$run_root/oracle"
-    git -C "$run_root/oracle" checkout --quiet --detach "$oracle_commit"
-    (cd "$run_root/oracle" && "${GO:-go}" build -buildvcs=true -o "$run_root/symvault-go" .)
-    oracle_binary="$run_root/symvault-go"
-fi
-"${GO:-go}" run ./scripts/rust-port/cmd/configclicasesgen \
-    --check --go-binary "$oracle_binary"
-SYMVAULT_GO_BINARY="$oracle_binary" "${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" \
-    -p symvault-cli --test config_inspect --test cli_differential --test profile_differential --test remote_differential --test sync_differential --test audit_export_commands --test run_differential --test share_differential --test agent_whoami_differential --test agent_list_differential --test agent_profile_differential --test agent_token_mutations_differential --test policy_differential --test path_migration_differential --test auth_differential --test audit_rotate_differential --test config_validate_differential --test doctor_differential --locked
-SYMVAULT_GO_BINARY="$oracle_binary" "${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" \
-    -p symvault-cli --test migrate_kdf_differential --locked migrate_kdf_go_rust_integration -- --ignored
+
+case ${1:-} in
+    "") ;;
+    *) echo "usage: $0" >&2; exit 2 ;;
+esac
+
+tests="--test config_inspect --test cli_differential --test profile_differential --test remote_differential --test sync_differential --test audit_export_commands --test run_differential --test share_differential --test agent_whoami_differential --test agent_list_differential --test agent_profile_differential --test agent_token_mutations_differential --test policy_differential --test path_migration_differential --test auth_differential --test audit_rotate_differential --test config_validate_differential --test doctor_differential --test migrate_kdf_differential"
+
+# shellcheck disable=SC2086 # $tests is a word list of cargo flags
+"${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" -p symvault-cli $tests --locked

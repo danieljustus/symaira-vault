@@ -6,15 +6,8 @@ CLAUDE.md export-ignore
 # cross-platform test failures (Windows CRLF conversion).
 *.tmpl text eol=lf
 *.golden text eol=lf
-*.go text eol=lf
-# The Go module files feed the same working-tree provenance digests as the
-# sources above (provenance.Digest reads the checkout, not the blob), so a
-# Windows CRLF checkout makes exportgen's oracle digest disagree with the pin.
-go.mod text eol=lf
-go.sum text eol=lf
-# The detached Go oracle programs are carried as .txt so they do not compile
-# with the generator; their bytes feed a provenance digest, so a Windows CRLF
-# checkout would make that digest disagree with every other platform.
+# The detached Go oracle programs are carried as .txt; their bytes feed a
+# provenance digest, so a CRLF checkout would make that digest disagree.
 *.go.txt text eol=lf
 *.rs text eol=lf
 Cargo.toml text eol=lf
@@ -35,22 +28,17 @@ docs/rust-port/store-normalization.md text eol=lf
 # Keep the embedded native Git test helper identical across checkouts.
 crates/symvault-sync/tests/fixtures/** text eol=lf
 
-# The read-policy generator hashes its immutable Python orchestrator.
-scripts/rust-port/refresh-read-policy-fixtures.py text eol=lf
 scripts/rust-port/intake_watch_contract.py text eol=lf
 scripts/rust-port/cli_artifacts_contract.py text eol=lf
 .github/workflows/rust-cli-artifacts.yml text eol=lf
 scripts/rust-port/serve_contract.py text eol=lf
 .github/workflows/rust-serve-cli.yml text eol=lf
-# Retained upstream source and the historical KDF driver feed byte hashes.
+# Retained upstream source feeds byte hashes.
 third_party/argon2/** text eol=lf
 third_party/cobra-completion/** text eol=lf
-scripts/rust-port/kdf_policy_fixtures.py text eol=lf
 scripts/rust-port/connect_contract.py text eol=lf
 scripts/rust-port/connect_contract_probe.go.txt text eol=lf
 .github/workflows/rust-broker-connect.yml text eol=lf
-scripts/rust-port/windows_file_use_contract.py text eol=lf
-.github/workflows/rust-windows-file-use.yml text eol=lf
 scripts/rust-port/egress_contract.py text eol=lf
 scripts/rust-port/egress_contract_probe.go.txt text eol=lf
 .github/workflows/rust-broker-egress.yml text eol=lf
@@ -84,8 +72,12 @@ scripts/rust-port/test_http_write_contract.py text eol=lf
 
 # Independently anchored MCP evidence and its input manifest are exact bytes.
 scripts/rust-port/fixtures/mcp-anomaly/** text eol=lf
+# Vendored upstream bash-completion files are sha-pinned: never normalize their bytes.
+scripts/rust-port/fixtures/bash-completion/* -text
 scripts/rust-port/mcp_oracle.py text eol=lf
 scripts/rust-port/mcp_fixture_contract.py text eol=lf
 scripts/rust-port/mcp_process_contract.py text eol=lf
 scripts/rust-port/test_mcp_oracle.py text eol=lf
 crates/symvault-mcp/tests/fixtures/tls-* text eol=lf
+# The built-in API templates are hashed by crates/symvault-mcp/tests/apitemplate_assets_sync.rs.
+crates/symvault-mcp/assets/** text eol=lf

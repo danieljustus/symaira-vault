@@ -1,0 +1,134 @@
+	true
+add	true
+agent	true
+agent audit	true
+agent doctor	true
+agent install	false
+agent list	false
+agent profile	true
+agent profile edit	true
+agent profile export	true
+agent profile show	true
+agent setup	true
+agent skill	true
+agent skill export	true
+agent skill refresh	true
+agent token	true
+agent token list	true
+agent token new	true
+agent token revoke	true
+agent token rotate	true
+agent uninstall	false
+agent upgrade	false
+agent whoami	false
+approval	true
+approval decide	true
+approval list	true
+audit	false
+audit export	false
+audit rotate-key	true
+auth	true
+auth rotate-passphrase	true
+auth set	true
+auth status	true
+backup	true
+broker	true
+config	false
+config get	false
+config list	false
+config set	false
+config validate	false
+delete	true
+device	true
+device accept	true
+device add	true
+device approval-list	true
+device approval-pair	true
+device approval-revoke	true
+device join	true
+device list	true
+device pair	true
+device revoke	true
+doctor	false
+dynamic	true
+dynamic generate	true
+edit	true
+export	true
+file	true
+file add	true
+file get	true
+file use	true
+find	true
+generate	true
+generate manpages	true
+get	true
+git	true
+import	true
+import review	true
+import review list	true
+import review promote	true
+init	true
+intake	true
+intake watch	true
+intake watch disable	true
+list	true
+lock	true
+mcp	true
+mcp install	true
+mcp status	true
+mcp token	true
+mcp token create	true
+mcp token list	true
+mcp token revoke	true
+mcp uninstall	true
+mcp-config	true
+mcp-token-rotate	true
+migrate	true
+migrate kdf	true
+migrate paths	true
+migrate pseudonymize	true
+migrate session	true
+migrate v4	true
+policy	false
+policy apply	false
+policy list	false
+policy remove	false
+policy validate	false
+profile	false
+profile add	false
+profile list	false
+profile use	false
+recipients	true
+recipients add	true
+recipients list	true
+recipients remove	true
+remote	false
+remote init	false
+remote status	false
+restore	true
+run	true
+serve	true
+serve install	true
+serve status	true
+serve token	true
+serve token create	true
+serve token list	true
+serve token revoke	true
+serve uninstall	true
+set	true
+setup	false
+share	true
+share list	true
+share revoke	true
+startup-profile	false
+sync	true
+template	true
+template generate	true
+ui	true
+unlock	true
+update	false
+update apply	false
+update check	false
+update info	false
+verify	true
+version	false

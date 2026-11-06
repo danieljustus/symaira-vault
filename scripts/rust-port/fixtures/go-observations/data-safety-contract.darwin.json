@@ -1,0 +1,377 @@
+{
+  "args": [
+    "data_safety_contract.py",
+    "--capture-go"
+  ],
+  "contract": "data-safety-contract",
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "darwin",
+  "observations": {
+    "calls": [
+      {
+        "args": [
+          "init",
+          "--auth",
+          "passphrase"
+        ],
+        "delta": {
+          "dirs": [
+            "vault/.git",
+            "vault/.git/objects",
+            "vault/.git/objects/info",
+            "vault/.git/objects/pack",
+            "vault/.git/refs",
+            "vault/.git/refs/heads",
+            "vault/.git/refs/tags",
+            "vault/entries"
+          ],
+          "files": {
+            "vault/.git/HEAD": {
+              "b64": "cmVmOiByZWZzL2hlYWRzL21hc3Rlcgo=",
+              "mode": 420
+            },
+            "vault/.git/config": {
+              "b64": "W2NvcmVdCgliYXJlID0gZmFsc2UK",
+              "mode": 420
+            },
+            "vault/.gitignore": {
+              "b64": "IyBTeW1haXJhIFZhdWx0IHZhdWx0IC0gaWdub3JlIHNlbnNpdGl2ZSBmaWxlcwppZGVudGl0eS5hZ2UKLmRldmljZS1pZAoqLmtleQoqLnBlbQojIElnbm9yZSBTeW1haXJhIFZhdWx0IHJ1bnRpbWUgYXJ0aWZhY3RzCm1jcC10b2tlbgptY3AtdG9rZW5zLmpzb24KLnJ1bnRpbWUtcG9ydAojIElnbm9yZSBPUyBmaWxlcwouRFNfU3RvcmUKVGh1bWJzLmRiCiMgSWdub3JlIElERSBmaWxlcwouaWRlYS8KLnZzY29kZS8KKi5zd3AKKi5zd28KKn4K",
+              "mode": 384
+            },
+            "vault/config.yaml": {
+              "b64": "YWdlbnRzOgogICAgY2xpOgogICAgICAgIGFsbG93ZWRQYXRoczoKICAgICAgICAgICAgLSAnKicKICAgICAgICBjYW5Xcml0ZTogdHJ1ZQogICAgICAgIHJlcXVpcmVBcHByb3ZhbDogZmFsc2UKdmF1bHQ6CiAgICBhdXRoTWV0aG9kOiBwYXNzcGhyYXNlCiAgICBzZWFyY2hfaW5kZXg6IHRydWUKICAgIGF1dG9faGVhbF96ZXJvX2tleTogdHJ1ZQpnaXQ6CiAgICBjb21taXRfdGVtcGxhdGU6IFVwZGF0ZSBmcm9tIFN5bWFpcmEgVmF1bHQKICAgIGF1dG9fcHVzaDogdHJ1ZQp2YXVsdERpcjogQFdPUktAL2dvLWluaXQvdmF1bHQKZGVmYXVsdEFnZW50OiBjbGkKc2Vzc2lvblRpbWVvdXQ6IDE1bTBzCnNlc3Npb25NYXhMaWZldGltZTogOGgwbTBzCmF1dGhNZXRob2Q6IHBhc3NwaHJhc2UKdXNlVG91Y2hJRDogZmFsc2UK",
+              "mode": 384
+            },
+            "vault/identity.age": {
+              "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIEdyK0p6SXIxMWJtSHc5RzNJNEFnQ2cgdD0zLG09NjU1MzYscD00CkI3QVJFeGRPd1VqdmZnbTZKb1lzL1hHNWF6eVNPUVhIUlQzK1JmRWdhYm1vL1RZS0F2c0ltdXBoK0xRCi0tLSB3by80aXp0Rzkxc3dtQnA0ZDVRQUo1a1lyNDRLUGo3SHF0YllYYXdSb3NvCgs6Lp8tnLSJ8SCxHoJx2sqj1wqvxig9Xxj8jmEH6rcXLjkCZM4ZhiRNa75YWX1GSslzouNdAeUwuhZYaIbMnmWxyhVqbD4mU21VMG6oZZKzdE5+XF4kXXfRL9TsBA3KCIeieVK9SpxIZfA=",
+              "mode": 384
+            }
+          },
+          "removed": []
+        },
+        "key": "go-init#0",
+        "returncode": 0,
+        "role": "seed",
+        "stderr": "",
+        "stdout": "Vault initialized at @WORK@/go-init/vault\nPublic key: age1x3dzr320r8u65hyuwmvy2dwf8s7yc7jfg7kdadkq0cu8v4hlvsls4kkedp\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  @WORK@/go-init/vault/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+      },
+      {
+        "args": [
+          "set",
+          "work/github.password",
+          "--value",
+          "StrongPassword123!"
+        ],
+        "delta": {
+          "dirs": [
+            "vault/.git/objects/2e",
+            "vault/.git/objects/76",
+            "vault/.git/objects/87",
+            "vault/.git/objects/91",
+            "vault/.git/objects/a8",
+            "vault/.git/objects/aa",
+            "vault/.git/objects/eb",
+            "vault/entries/work"
+          ],
+          "files": {
+            "vault/.git/index": {
+              "b64": "RElSQwAAAAIAAAADauqWzTiB/5tq6pbNOCEl1wEAABBLsSScAACBpAAAAfUAAAAUAAAA/IcPLVYXulxI6Xp1MS60UlDz7c77AAouZ2l0aWdub3JlAAAAAAAAAABq6pbOBNF/Lmrqls4EHhXgAQAAEEuxJNQAAIGkAAAB9QAAABQAAAHHqBd1XfeKiBCvnYtlifeRhzsoWVgAF2VudHJpZXMvd29yay9naXRodWIuYWdlAAAAauqWzgTf6H1q6pbOBHc6+AEAABBLsSTVAACBpAAAAfUAAAAUAAABzS79PlAxOy3s8cdkBWbF6xsHvAtiAAxtYW5pZmVzdC5hZ2UAAAAAAACIKxGXU10Kr+29ZbnJnv1eC1sCRg==",
+              "mode": 420
+            },
+            "vault/.git/objects/2e/fd3e50313b2decf1c7640566c5eb1b07bc0b62": {
+              "b64": "eJwA1gEp/mJsb2IgNDYxAGFnZS1lbmNyeXB0aW9uLm9yZy92MQotPiBYMjU1MTkgajJ5NEYwaHV3OWVBZ2VZS0E2enQ0MkdhMHE1VWNkWnFMcWJtYW1pL0FsWQpGSHVka1FvOUFybWdVUkxpeUtrVi8rMFllMTRnb09RY1pmZWxGWGE2NHY0Ci0tLSBIeFdjL1Y2aDl0aTlGRmZGbGRuRW96eElwdXBJNFhzSUZxdnNCMm9Fc3BBCuzGa/4xoLznvspdgQGK837icEukHYNWoIGJw0MbHB+IHpQYoSKb6Cu7UWx0bQ9Y3JzbORpAwPCgDtgM8RXHc/w2o0sJBIaiuhJxkapBkY5n8XXCzCRJlRUodKN8fJT/UXp8TAD8I00VCF3JpuSePJsZA4VHJ2XpyOnZaC0d7djC/CHJZ1D6KuQSzeaOy8ceyAPrji8i/wYU9Z/uXf86pl1BJGWp7ubenaPmLU+hpogoD0oOrEgTn/BqdTYZL0P6LchAIayb9FrxBrGOGhC3lQFQANSALsDFjJiQR3zFf4M73wQhotJNL/vgSN0sMZbvM/nabocwPDdBe9SnpaOSMFNVrUolb2s/lHllB7EpgojYtdw7MTiXPf32/Fm+9dkw0X4sSRBmAQAA//+M/8hN",
+              "mode": 292
+            },
+            "vault/.git/objects/76/c2d72bea6329825e4727fed767a05d7952979a": {
+              "b64": "eJwqKUpNVTC2YDA0MDAzMVFIzyzJKE3SS0xPZVghXhr7vatDYP3c7tTO7xPbrTUiIwABAAD//18cEPs=",
+              "mode": 292
+            },
+            "vault/.git/objects/87/0f2d5617ba5c48e97a75312eb45250f3edcefb": {
+              "b64": "eJxUjrFqw0AMhjvrKQTZDFYg0DdIh0wdXLqWs09J1fhOx0m+4qXPXkhTTJYPDZ8+/nHWEQ/Ph6cdDmsKUgO+h2V2bDf2KJesldE4m7g0xrPMbCCRs4uvFC4MFLnJxL1E6OjKK3RUOMEOT3/Pj+W6ZJfEGKrLOUxukKbSu145b5fRl2kGust90epb8HW4z6Dj8DG4Voa3zyWNRnHcrNPx5V+TyGEP1GzSyHvoyL7LjQrdD/wGAAD//7AMV5k=",
+              "mode": 292
+            },
+            "vault/.git/objects/91/f3653c7d7ab7798419f9bd42a77fe1f1bb8a25": {
+              "b64": "eJwqKUpNVTA2ZDAxMDAwUCjPL8pmKDt0XftVsmZTnLv6v+vpC2Irg6bPAgQAAP//BfYPPw==",
+              "mode": 292
+            },
+            "vault/.git/objects/a8/17755df78a8810af9d8b6589f791873b285958": {
+              "b64": "eJwA0AEv/mJsb2IgNDU1AGFnZS1lbmNyeXB0aW9uLm9yZy92MQotPiBYMjU1MTkgWEF1ZTE0Ry9TdTczWWtySWJNRGtDeG5wQThxVDZEc2psL0w5QmQ3VWRUNApoVkdJSk95M3EyZ2VVU3cwNlZ0eVdZd1dma2ZlV0pLSW13N2FJeGpRUXZvCi0tLSArZTd4bGs4Z3NJbnVIOEdQNGx2TTNSV1d0VHIwbWFlY1MxZHRaWUtJd3B3CjRvpDY3uSwvf8FMkWbu/Uf1PqeB0WzuNJaZ195WGO0Op1XSBSamWz8X8umNQoTnz/pGx90Ss8kiPDB7MyXP+zGJJPLu0AklMhJgJuHUQOmk5IpP+lKeqxo0PvcrSR0/woXRK5ReTZ96iSQcEF64jbFKOCzYtTtKwtmSVsGdPqZ0G6G//lVd1Frh9iDYMUv5Yhaa6Em44RIqvZ0PJqnWzbucw36b1brVoECOqccilQhagwGCLx3gK5CyEllsWXaxDPkp01buUfcqUx2IAWuCRwpZK0+swMnlplBtg0cM/kV5IsK+8lQd/uAbL1SKWMrCPmEWT0pYlOrWl31XupakHd6nkuRLTBaT2n3KK4q7iMHfmsSr/xMN3ymzLQ27yjtgAQAA//+5Ssd2",
+              "mode": 292
+            },
+            "vault/.git/objects/aa/581a3be4b1870f15dc8ef2cca4a2d59e77935b": {
+              "b64": "eJyczUsKwkAMgGHXPUX2gmb6mAeIeAfRfdqktthhypiqvb2IN3D3b36+LsU4KpiAG80iIK133HBpqXUVWRcQe8/kqbaWsQ4dGsZeuKBFh5ThvEYaM8GVlknh8Fjj81sneVOcJ9l1KR7BuFC5xofSwhYNYvFTVf79i8vMpAKvlO/726jD0n4CAAD//x+AQCw=",
+              "mode": 292
+            },
+            "vault/.git/objects/eb/87d5d26ab73a67900f8da8a466d049c01d0fed": {
+              "b64": "eJwqKUpNVTA0NGIwNDAwMzFR0EvPLMlMz8svSmVo59cNE98V4/GyqtRQb0tQwOe3536bGBgYGCik5pUUZaYWM0z8nGpTW7W9skXy516n5fUPP+7uUoWak5uYl5mWWlyil5ieyqD31y7A0Fr3zcfjKaxpR19Ls+/hTgIEAAD//7OfL4A=",
+              "mode": 292
+            },
+            "vault/.git/refs/heads/master": {
+              "b64": "YWE1ODFhM2JlNGIxODcwZjE1ZGM4ZWYyY2NhNGEyZDU5ZTc3OTM1Ygo=",
+              "mode": 420
+            },
+            "vault/.lock": {
+              "b64": "",
+              "mode": 384
+            },
+            "vault/.symvault-migrated": {
+              "b64": "",
+              "mode": 384
+            },
+            "vault/config.yaml": {
+              "b64": "YWdlbnRzOgogICAgY2xhdWRlLWNvZGU6CiAgICAgICAgYXBwcm92YWxNb2RlOiBkZW55CiAgICAgICAgY2FuV3JpdGU6IHRydWUKICAgICAgICBjYW5SdW5Db21tYW5kczogdHJ1ZQogICAgICAgIGV4cG9zZVZhbHVlVG9vbHM6IHRydWUKICAgICAgICBhdXRvVW5zZWFsOiBmYWxzZQogICAgICAgIHNraWxsUGF0aDogfi8uY2xhdWRlL3NraWxscy9zeW12YXVsdC9TS0lMTC5tZAogICAgY2xpOgogICAgICAgIGFwcHJvdmFsTW9kZTogbm9uZQogICAgICAgIGFsbG93ZWRQYXRoczoKICAgICAgICAgICAgLSAnKicKICAgICAgICBjYW5Xcml0ZTogdHJ1ZQogICAgICAgIGV4cG9zZVZhbHVlVG9vbHM6IHRydWUKICAgICAgICByZXF1aXJlQXBwcm92YWw6IGZhbHNlCiAgICBjb2RleDoKICAgICAgICBhcHByb3ZhbE1vZGU6IGRlbnkKICAgICAgICBjYW5Xcml0ZTogZmFsc2UKICAgICAgICBjYW5SdW5Db21tYW5kczogdHJ1ZQogICAgICAgIGV4cG9zZVZhbHVlVG9vbHM6IHRydWUKICAgICAgICBhdXRvVW5zZWFsOiBmYWxzZQogICAgICAgIHNraWxsUGF0aDogfi8uY29kZXgvc2tpbGxzL3N5bXZhdWx0L0FHRU5UUy5tZAogICAgZGVmYXVsdDoKICAgICAgICBhcHByb3ZhbE1vZGU6IGRlbnkKICAgICAgICBjYW5Xcml0ZTogZmFsc2UKICAgICAgICBjYW5SdW5Db21tYW5kczogZmFsc2UKICAgICAgICBleHBvc2VWYWx1ZVRvb2xzOiB0cnVlCiAgICAgICAgYXV0b1Vuc2VhbDogZmFsc2UKICAgIGhlcm1lczoKICAgICAgICBhcHByb3ZhbE1vZGU6IGRlbnkKICAgICAgICBjYW5Xcml0ZTogdHJ1ZQogICAgICAgIGNhblJ1bkNvbW1hbmRzOiB0cnVlCiAgICAgICAgZXhwb3NlVmFsdWVUb29sczogdHJ1ZQogICAgICAgIGF1dG9VbnNlYWw6IGZhbHNlCiAgICAgICAgc2tpbGxQYXRoOiB+Ly5oZXJtZXMvc2tpbGxzL3N5bXZhdWx0L1NLSUxMLm1kCiAgICBvcGVuY2xhdzoKICAgICAgICBhcHByb3ZhbE1vZGU6IGRlbnkKICAgICAgICBjYW5Xcml0ZTogdHJ1ZQogICAgICAgIGNhblJ1bkNvbW1hbmRzOiB0cnVlCiAgICAgICAgZXhwb3NlVmFsdWVUb29sczogdHJ1ZQogICAgICAgIGF1dG9VbnNlYWw6IGZhbHNlCiAgICAgICAgc2tpbGxQYXRoOiB+Ly5vcGVuY2xhdy9za2lsbHMvc3ltdmF1bHQvU0tJTEwubWQKICAgIG9wZW5jb2RlOgogICAgICAgIGFwcHJvdmFsTW9kZTogZGVueQogICAgICAgIGNhbldyaXRlOiBmYWxzZQogICAgICAgIGNhblJ1bkNvbW1hbmRzOiB0cnVlCiAgICAgICAgZXhwb3NlVmFsdWVUb29sczogdHJ1ZQogICAgICAgIGF1dG9VbnNlYWw6IGZhbHNlCiAgICAgICAgc2tpbGxQYXRoOiB+Ly5vcGVuY29kZS9za2lsbHMvc3ltdmF1bHQvU0tJTEwubWQKdmF1bHQ6CiAgICBhdXRoTWV0aG9kOiBwYXNzcGhyYXNlCiAgICBsZWdhY3lfbW9kZTogZmFsc2UKICAgIHNlYXJjaF9pbmRleDogdHJ1ZQogICAgc2NyeXB0X3dvcmtfZmFjdG9yOiAxOAogICAgYXV0b19oZWFsX3plcm9fa2V5OiB0cnVlCiAgICBmb3JtYXRfdmVyc2lvbjogMQpnaXQ6CiAgICBjb21taXRfdGVtcGxhdGU6IFVwZGF0ZSBmcm9tIFN5bWFpcmEgVmF1bHQKICAgIGF1dG9fcHVzaDogdHJ1ZQogICAgYXV0b19wdWxsOiB0cnVlCiAgICBhdXRvX3B1bGxfaW50ZXJ2YWw6IDEwcwp2YXVsdERpcjogQFdPUktAL2dvLWluaXQvdmF1bHQKZGVmYXVsdEFnZW50OiBjbGkKc2Vzc2lvblRpbWVvdXQ6IDE1bTBzCnNlc3Npb25NYXhMaWZldGltZTogOGgwbTBzCmF1dGhNZXRob2Q6IHBhc3NwaHJhc2UKdXNlVG91Y2hJRDogZmFsc2UK",
+              "mode": 384
+            },
+            "vault/entries/work/github.age": {
+              "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBYQXVlMTRHL1N1NzNZa3JJYk1Ea0N4bnBBOHFUNkRzamwvTDlCZDdVZFQ0CmhWR0lKT3kzcTJnZVVTdzA2VnR5V1l3V2ZrZmVXSktJbXc3YUl4alFRdm8KLS0tICtlN3hsazhnc0ludUg4R1A0bHZNM1JXV3RUcjBtYWVjUzFkdFpZS0l3cHcKNG+kNje5LC9/wUyRZu79R/U+p4HRbO40lpnX3lYY7Q6nVdIFJqZbPxfy6Y1ChOfP+kbH3RKzySI8MHszJc/7MYkk8u7QCSUyEmAm4dRA6aTkik/6Up6rGjQ+9ytJHT/ChdErlF5Nn3qJJBwQXriNsUo4LNi1O0rC2ZJWwZ0+pnQbob/+VV3UWuH2INgxS/liFproSbjhEiq9nQ8mqdbNu5zDfpvVutWgQI6pxyKVCFqDAYIvHeArkLISWWxZdrEM+SnTVu5R9ypTHYgBa4JHClkrT6zAyeWmUG2DRwz+RXkiwr7yVB3+4BsvVIpYysI+YRZPSliU6taXfVe6lqQd3qeS5EtMFpPafcoriruIwd+axKv/Ew3fKbMtDbvKO2A=",
+              "mode": 384
+            },
+            "vault/manifest.age": {
+              "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBqMnk0RjBodXc5ZUFnZVlLQTZ6dDQyR2EwcTVVY2RacUxxYm1hbWkvQWxZCkZIdWRrUW85QXJtZ1VSTGl5S2tWLyswWWUxNGdvT1FjWmZlbEZYYTY0djQKLS0tIEh4V2MvVjZoOXRpOUZGZkZsZG5Fb3p4SXB1cEk0WHNJRnF2c0Iyb0VzcEEK7MZr/jGgvOe+yl2BAYrzfuJwS6Qdg1aggYnDQxscH4gelBihIpvoK7tRbHRtD1jcnNs5GkDA8KAO2AzxFcdz/DajSwkEhqK6EnGRqkGRjmfxdcLMJEmVFSh0o3x8lP9RenxMAPwjTRUIXcmm5J48mxkDhUcnZenI6dloLR3t2ML8IclnUPoq5BLN5o7Lxx7IA+uOLyL/BhT1n+5d/zqmXUEkZanu5t6do+YtT6GmiCgPSg6sSBOf8Gp1NhkvQ/otyEAhrJv0WvEGsY4aELeVAVAA1IAuwMWMmJBHfMV/gzvfBCGi0k0v++BI3Swxlu8z+dpuhzA8N0F71Kelo5IwU1WtSiVvaz+UeWUHsSmCiNi13DsxOJc9/fb8Wb712TDRfixJEGY=",
+              "mode": 384
+            }
+          },
+          "removed": []
+        },
+        "key": "go-init#1",
+        "returncode": 0,
+        "role": "seed",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: work/github\n"
+      },
+      {
+        "args": [
+          "set",
+          "notes/a",
+          "--value",
+          "StrongPassword123!"
+        ],
+        "delta": {
+          "dirs": [
+            "vault/.git/objects/0b",
+            "vault/.git/objects/18",
+            "vault/.git/objects/5c",
+            "vault/.git/objects/cc",
+            "vault/.git/objects/ee",
+            "vault/.git/objects/fd",
+            "vault/entries/notes"
+          ],
+          "files": {
+            "vault/.git/index": {
+              "b64": "RElSQwAAAAIAAAAEauqWzTiB/5tq6pbNOCEl1wEAABBLsSScAACBpAAAAfUAAAAUAAAA/IcPLVYXulxI6Xp1MS60UlDz7c77AAouZ2l0aWdub3JlAAAAAAAAAABq6pbOFKW0aWrqls4UBI+SAQAAEEuxJOkAAIGkAAAB9QAAABQAAAHIzH0cygti7icjCUFXcM/RQMKABIcAE2VudHJpZXMvbm90ZXMvYS5hZ2UAAAAAAAAAauqWzgTRfy5q6pbOBB4V4AEAABBLsSTUAACBpAAAAfUAAAAUAAABx6gXdV33iogQr52LZYn3kYc7KFlYABdlbnRyaWVzL3dvcmsvZ2l0aHViLmFnZQAAAGrqls4UvBpVauqWzhRRT3gBAAAQS7Ek6gAAgaQAAAH1AAAAFAAAAlbuoiFdZpMXjTj9etVwBnRO/znPWgAMbWFuaWZlc3QuYWdlAAAAAAAAGBksb8lM9QS9ub643v3n70CfrnY=",
+              "mode": 420
+            },
+            "vault/.git/objects/0b/821f2b5317ba71580b33c52e61f3d0a8c73dc4": {
+              "b64": "eJwqKUpNVTA0NGIwNDAwMzFR0EvPLMlMz8svSmVo59cNE98V4/GyqtRQb0tQwOe3536bGBgYGCik5pUUZaYWM/zVKLNP3TBnv8Z2Ps1wpZ5fvi+7Z0HNyU3My0xLLS7RS0xPZXi3SDE2bbJ4r8XfqqsFbCV+/y3PRwECAAD//22KLv8=",
+              "mode": 292
+            },
+            "vault/.git/objects/18/8091a0a20d353513c705bcb7ca0d96c738fd55": {
+              "b64": "eJyczsFKA0EMgGHP+xS5CzqZbJpZEPEdRO+ZTBYLne4yTcW+vYhv0Nt/+eGzrfdjQKb5IYY7pFoyrrkyoVQV5JIqkXH2A67UkhYTajZPuw4/B6hyQaXqc8UiaUVuVnzNZjprbry4yEJcJ73G1zbg/db1OBQ+9XoKeLnc+vdfvfmP9v3kT7b1V0BZSLgs+QCPCVOa/pXh9/7Tx940HM5b+OVZfwMAAP//3V9L+g==",
+              "mode": 292
+            },
+            "vault/.git/objects/5c/8dfba0b7d4fb4c6a1966ea1c59e7feaa8e197a": {
+              "b64": "eJwqKUpNVTA2ZjA0MDAzMVFI1EtMT2U4Uytzijvpnboyp2N4wfmLDocaWNoBAQAA//8Alg3U",
+              "mode": 292
+            },
+            "vault/.git/objects/cc/7d1cca0b62ee272309415770cfd140c2800487": {
+              "b64": "eJwA0QEu/mJsb2IgNDU2AGFnZS1lbmNyeXB0aW9uLm9yZy92MQotPiBYMjU1MTkgK01zTzYwbEVwTHlRVmsvUmQzV1VrYkZIR3BmOXExdUdhQTFYZ2gyQ2ttUQozTGw5dlN3SXlxSml3MkFSK2wvNHp5NEQ1KzAwWnZNWHZkUmRzbHo5WStjCi0tLSBLWXRxWFk4L0RzT3U1TVl2ZDgrRG5yVWRieHVQUi9zMytHaXZwSHptckFrCjTl/HFkVbirPKp25iLMdzgJi42rlSkY5HOqkoaPWgVYtEPUwOh501FPhTUx9eKb7pYRKmZR+0Q0BwidEVuUhC7bcN3gPRiAfUaMOsYyelVA9ta5gxu+eZZNEeoCKTNSjNONVaiu1wokv35RRyLhkct35194kacAWex5OrzgjNorluMBnATQ6n7Zf+GXekdOtOzEFGZOqt+9vJNAFYjZpFX150DkXKZ8Ardfh6IbCgDKttK16gcxNYUU5DBX8SsUiXFGhbIlP6z5cPgXESWqQ1UClFIwMDuPvCDhLdr4xjZRqdOCuupNddiPwCC2DjGd3zFhLCIJbj+QK75L1IO8OiY/A98U5cqcY6zEEkERkawm96xnPRpUUO85Ttggjkb8RQEAAP//GvfCqQ==",
+              "mode": 292
+            },
+            "vault/.git/objects/ee/a2215d6693178d38fd7ad57006744eff39cf5a": {
+              "b64": "eJwAXwKg/WJsb2IgNTk4AGFnZS1lbmNyeXB0aW9uLm9yZy92MQotPiBYMjU1MTkgUXgyRUQxYlQrVzVrS3QyOWc1NUVBdE1RajNZcEpZODFtaXlkKzhQSjYwawpod3lqT0FremJtZVhrNEszRExVRmZuL1AxUWZsRXlVWk9wQ1BiMlRoZ0ZRCi0tLSArOWdyWEY4SWVSUEVRejgrZ2Q3NUhVcC96R29WVXdpTTRBS1NtRVdjQjRrCjEckan/yzjYeN4lB5EuvQjLNe3Z57zaHnc+zI9iwpkLqHDYns11ehU37E22T/hu0PxtjNca0NzXsmKfUJbkMwI8YmwwGutcm/Y4w4c79aEfKx8FMxG6oK/lmmPpK7N5qXoE92164fdvi0WYbvL4e0qHZylgIHucxDfA3SmnKFuTOl6lNMgSEyfubGffiTuCNV2YpSFwGYR9ohMEMZNzmyQ9Urguk8WuLa0CrNV2ON3/NZm4unDeciumthynBXl9JzgfUBEedfeIxJMifgBXacvqXI0e30dIys3854XiAtCuLWEnYLqYBpuegEXPRULAyobrATBL8jYavlkvv3gFs8+0XtzIoH/3cKpUaUHwQ7NGRhtVKXqX3aphdCs3Zi977JADoXIGQnFkka+8TYVM+pcFVHUSpRfEelwd616sHhBaDBvuQJDQoyA4ohTmubtIjMQ6ObQR2t3XfG9Imc19q0HuunV5vML4IdpLJKAynqlq7VYx21bYVHVkBFq0b7FH3Q2XsfsLrgmieA4ZiblQOQGo+WY67CTAwZsIxuqfdCCMTwVkBxr2LxkTevQIwLsBAAD//5xTBfo=",
+              "mode": 292
+            },
+            "vault/.git/objects/fd/28763f65b09cbf28b70e2957228cfa4de98b9a": {
+              "b64": "eJwqKUpNVTAzZjAxMDAwUMjLL0ktZojp/b1g+5XfPlmSaa9kIp//W9UnWQWRL88vymYoO3Rd+1WyZlOcu/q/6+kLYiuDps8CBAAA///g9h3P",
+              "mode": 292
+            },
+            "vault/.git/refs/heads/master": {
+              "b64": "MTg4MDkxYTBhMjBkMzUzNTEzYzcwNWJjYjdjYTBkOTZjNzM4ZmQ1NQo=",
+              "mode": 420
+            },
+            "vault/entries/notes/a.age": {
+              "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSArTXNPNjBsRXBMeVFWay9SZDNXVWtiRkhHcGY5cTF1R2FBMVhnaDJDa21RCjNMbDl2U3dJeXFKaXcyQVIrbC80enk0RDUrMDBadk1YdmRSZHNsejlZK2MKLS0tIEtZdHFYWTgvRHNPdTVNWXZkOCtEbnJVZGJ4dVBSL3MzK0dpdnBIem1yQWsKNOX8cWRVuKs8qnbmIsx3OAmLjauVKRjkc6qSho9aBVi0Q9TA6HnTUU+FNTH14pvulhEqZlH7RDQHCJ0RW5SELttw3eA9GIB9Row6xjJ6VUD21rmDG755lk0R6gIpM1KM041VqK7XCiS/flFHIuGRy3fnX3iRpwBZ7Hk6vOCM2iuW4wGcBNDqftl/4Zd6R0607MQUZk6q3728k0AViNmkVfXnQORcpnwCt1+HohsKAMq20rXqBzE1hRTkMFfxKxSJcUaFsiU/rPlw+BcRJapDVQKUUjAwO4+8IOEt2vjGNlGp04K66k112I/AILYOMZ3fMWEsIgluP5ArvkvUg7w6Jj8D3xTlypxjrMQSQRGRrCb3rGc9GlRQ7zlO2CCORvxF",
+              "mode": 384
+            },
+            "vault/manifest.age": {
+              "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBReDJFRDFiVCtXNWtLdDI5ZzU1RUF0TVFqM1lwSlk4MW1peWQrOFBKNjBrCmh3eWpPQWt6Ym1lWGs0SzNETFVGZm4vUDFRZmxFeVVaT3BDUGIyVGhnRlEKLS0tICs5Z3JYRjhJZVJQRVF6OCtnZDc1SFVwL3pHb1ZVd2lNNEFLU21FV2NCNGsKMRyRqf/LONh43iUHkS69CMs17dnnvNoedz7Mj2LCmQuocNiezXV6FTfsTbZP+G7Q/G2M1xrQ3NeyYp9QluQzAjxibDAa61yb9jjDhzv1oR8rHwUzEbqgr+WaY+krs3mpegT3bXrh92+LRZhu8vh7SodnKWAge5zEN8DdKacoW5M6XqU0yBITJ+5sZ9+JO4I1XZilIXAZhH2iEwQxk3ObJD1SuC6Txa4trQKs1XY43f81mbi6cN5yK6a2HKcFeX0nOB9QER5194jEkyJ+AFdpy+pcjR7fR0jKzfznheIC0K4tYSdgupgGm56ARc9FQsDKhusBMEvyNhq+WS+/eAWzz7Re3Migf/dwqlRpQfBDs0ZGG1UpepfdqmF0KzdmL3vskAOhcgZCcWSRr7xNhUz6lwVUdRKlF8R6XB3rXqweEFoMG+5AkNCjIDiiFOa5u0iMxDo5tBHa3dd8b0iZzX2rQe66dXm8wvgh2kskoDKeqWrtVjHbVthUdWQEWrRvsUfdDZex+wuuCaJ4DhmJuVA5Aaj5ZjrsJMDBmwjG6p90IIxPBWQHGvYvGRN69AjAuw==",
+              "mode": 384
+            }
+          },
+          "removed": []
+        },
+        "key": "go-init#2",
+        "returncode": 0,
+        "role": "seed",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: notes/a\n"
+      },
+      {
+        "args": [
+          "init",
+          "--auth",
+          "passphrase"
+        ],
+        "delta": {
+          "dirs": [
+            "vault/.git",
+            "vault/.git/objects",
+            "vault/.git/objects/info",
+            "vault/.git/objects/pack",
+            "vault/.git/refs",
+            "vault/.git/refs/heads",
+            "vault/.git/refs/tags",
+            "vault/entries"
+          ],
+          "files": {
+            "vault/.git/HEAD": {
+              "b64": "cmVmOiByZWZzL2hlYWRzL21hc3Rlcgo=",
+              "mode": 420
+            },
+            "vault/.git/config": {
+              "b64": "W2NvcmVdCgliYXJlID0gZmFsc2UK",
+              "mode": 420
+            },
+            "vault/.gitignore": {
+              "b64": "IyBTeW1haXJhIFZhdWx0IHZhdWx0IC0gaWdub3JlIHNlbnNpdGl2ZSBmaWxlcwppZGVudGl0eS5hZ2UKLmRldmljZS1pZAoqLmtleQoqLnBlbQojIElnbm9yZSBTeW1haXJhIFZhdWx0IHJ1bnRpbWUgYXJ0aWZhY3RzCm1jcC10b2tlbgptY3AtdG9rZW5zLmpzb24KLnJ1bnRpbWUtcG9ydAojIElnbm9yZSBPUyBmaWxlcwouRFNfU3RvcmUKVGh1bWJzLmRiCiMgSWdub3JlIElERSBmaWxlcwouaWRlYS8KLnZzY29kZS8KKi5zd3AKKi5zd28KKn4K",
+              "mode": 384
+            },
+            "vault/config.yaml": {
+              "b64": "YWdlbnRzOgogICAgY2xpOgogICAgICAgIGFsbG93ZWRQYXRoczoKICAgICAgICAgICAgLSAnKicKICAgICAgICBjYW5Xcml0ZTogdHJ1ZQogICAgICAgIHJlcXVpcmVBcHByb3ZhbDogZmFsc2UKdmF1bHQ6CiAgICBhdXRoTWV0aG9kOiBwYXNzcGhyYXNlCiAgICBzZWFyY2hfaW5kZXg6IHRydWUKICAgIGF1dG9faGVhbF96ZXJvX2tleTogdHJ1ZQpnaXQ6CiAgICBjb21taXRfdGVtcGxhdGU6IFVwZGF0ZSBmcm9tIFN5bWFpcmEgVmF1bHQKICAgIGF1dG9fcHVzaDogdHJ1ZQp2YXVsdERpcjogQFdPUktAL3plcm8ta2V5L3ZhdWx0CmRlZmF1bHRBZ2VudDogY2xpCnNlc3Npb25UaW1lb3V0OiAxNW0wcwpzZXNzaW9uTWF4TGlmZXRpbWU6IDhoMG0wcwphdXRoTWV0aG9kOiBwYXNzcGhyYXNlCnVzZVRvdWNoSUQ6IGZhbHNlCg==",
+              "mode": 384
+            },
+            "vault/identity.age": {
+              "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDF1dmY1Wi9nZkNjaGRXWGFSNWJ0cncgdD0zLG09NjU1MzYscD00CjE0WWJhSzJhWnlXTk5jd01qaUN5MHk1NEIzcmoxT2h4anl1Y1B5Wm5SNjdJcTFwd1pSd1BzVWNWeDE0Ci0tLSBEekg0MjlJUmV5dHo3TVlaSWxXNDNtZUFaRHVGSUJNemhsazFvd29wemVvCmPwtYYuCgbzr5rOVqLP7/BDytty6balatMtenDZ3bTcxnDoNlnJaf21VoOsczLPYoEUqoAFgIe29fts0wpi47CTAD4SgbcycaZIstKgP9dSJld1RpfvPnGOF3O4R4ODH0sqrwJn4UbHmLg=",
+              "mode": 384
+            }
+          },
+          "removed": []
+        },
+        "key": "zero-key#0",
+        "returncode": 0,
+        "role": "seed",
+        "stderr": "",
+        "stdout": "Vault initialized at @WORK@/zero-key/vault\nPublic key: age18s8vwv2uydvayc3vqcr0l2hemc3df2wza0nfunq4gnuh4etw8qvqs4jnsj\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  @WORK@/zero-key/vault/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+      },
+      {
+        "args": [
+          "set",
+          "w/a.password",
+          "--value",
+          "StrongPassword123!"
+        ],
+        "delta": {
+          "dirs": [
+            "vault/.git/objects/1e",
+            "vault/.git/objects/5f",
+            "vault/.git/objects/87",
+            "vault/.git/objects/b4",
+            "vault/.git/objects/cc",
+            "vault/.git/objects/f4",
+            "vault/entries/w"
+          ],
+          "files": {
+            "vault/.git/index": {
+              "b64": "RElSQwAAAAIAAAADauqW6iaOEwRq6pbqJllzGQEAABBLsSc0AACBpAAAAfUAAAAUAAAA/IcPLVYXulxI6Xp1MS60UlDz7c77AAouZ2l0aWdub3JlAAAAAAAAAABq6pbqKhMW4mrqluopmufxAQAAEEuxJzwAAIGkAAAB9QAAABQAAAHIX/2wRdrN1mceMTt2g0v8TsRGTugAD2VudHJpZXMvdy9hLmFnZQAAAGrqluoqGqmzauqW6inTDbkBAAAQS7EnPQAAgaQAAAH1AAAAFAAAAcXM9R0vgJ5YC6kltw9y75qWWB45JwAMbWFuaWZlc3QuYWdlAAAAAAAAeKHNgtT/AS8LgcBUa3E5GHdx9s8=",
+              "mode": 420
+            },
+            "vault/.git/objects/1e/fe0eaa8a09060d79600b832a08f66e92f34a95": {
+              "b64": "eJwqKUpNVTCyYDAxMDAwUChn2KK3x3Tz+vOrP69yWi7sNPuip/WOK4AAAAD//+YFDsw=",
+              "mode": 292
+            },
+            "vault/.git/objects/5f/fdb045dacdd6671e313b76834bfc4ec4464ee8": {
+              "b64": "eJwA0QEu/mJsb2IgNDU2AGFnZS1lbmNyeXB0aW9uLm9yZy92MQotPiBYMjU1MTkgVkYwbTFEbDRhYW1RN0JlMDZmZi81V0hIQjRpa2lsMDIrblppNGRFa1NUSQpLUVQ2TXhrWnhsUjZjK0FBRjUwQkpKMllKTEVKZG0xeXdJK3BHbWd4dTk0Ci0tLSBaVDNCMW1sWWJJbFdsSFZJRjM0eGZLMWZGNVdoa2NSeEpqb1hQbmlSNkp3CvbNU9Apb4ffr+kckNxM84mBVQnhxe/ubO78P93u68L/NNr2SYeMx1QSmsFNWv2a6DKQQicTb1rVvFie26X18yhYu3gbJbKO4w0HJUudiMtpMvVVQiIVprS/Szwf8IOpYmFML4Htvcajog4ZsgB1mVEwAOYZWD7gJTXdoGK3FzUgmBS0BEVhETyYYPG/GcJ7V4CXV/hQeNTR/LpQB4EFH/2i9hlJdOQNfkOohEPNQcX+aMuNNuPQ883RqgxlZm9HwVQZQ/O1ARg/8pGfKKw6N5NjPk5YZjcer8TkWYDV95dFAUADxGQy3R7ROhzV+wGwzNsGhbViMPNt2oqUtAfa3AKQU92slY1CCv3IZC/e1cKamo3Lz5UMXfnrBTcH05vvrAEAAP//B7PJJg==",
+              "mode": 292
+            },
+            "vault/.git/objects/87/0f2d5617ba5c48e97a75312eb45250f3edcefb": {
+              "b64": "eJxUjrFqw0AMhjvrKQTZDFYg0DdIh0wdXLqWs09J1fhOx0m+4qXPXkhTTJYPDZ8+/nHWEQ/Ph6cdDmsKUgO+h2V2bDf2KJesldE4m7g0xrPMbCCRs4uvFC4MFLnJxL1E6OjKK3RUOMEOT3/Pj+W6ZJfEGKrLOUxukKbSu145b5fRl2kGust90epb8HW4z6Dj8DG4Voa3zyWNRnHcrNPx5V+TyGEP1GzSyHvoyL7LjQrdD/wGAAD//7AMV5k=",
+              "mode": 292
+            },
+            "vault/.git/objects/b4/2ebc35b3afcfabf3aa42a713429bd1493bb8d4": {
+              "b64": "eJwqKUpNVTA2ZjA0MDAzMVFI1EtMT2WI/7vB9dbZa+lyhtZlzd5//I64+b0ABAAA//8ZNA/P",
+              "mode": 292
+            },
+            "vault/.git/objects/cc/044815682133aa79fe6aebfdf58646bf4b0fdf": {
+              "b64": "eJwqKUpNVTA0NGIwNDAwMzFR0EvPLMlMz8svSmVo59cNE98V4/GyqtRQb0tQwOe3536bGBgYGCik5pUUZaYWM8j941vVxcnGW5nA3azF8S1v0mevqVBzchPzMtNSi0v0EtNTGc58ldVvmBfBvVJ1O3/R+1nTIuQs1QEBAAD//wTnK+E=",
+              "mode": 292
+            },
+            "vault/.git/objects/cc/f51d2f809e580ba925b70f72ef9a96581e3927": {
+              "b64": "eJwAzgEx/mJsb2IgNDUzAGFnZS1lbmNyeXB0aW9uLm9yZy92MQotPiBYMjU1MTkgMGg3amxPRU5tenBxWmpWMjBmSTd1SThzVGRucExoaGNMV3Z1N2d5VEdEdwovUmJ4dWdIZHBCMjh2SjVVMWdHOERiQ28rc2srQXhpaUJEUnFHZGhjRjZzCi0tLSBuSmszb3U3ZHJSd053SDFtdWNkVnQ0UnlTRmh0MVY4RkJRdzNReCtlZGpzCrmwhfLQob30iD+dYNhAYrc2+sPWCgwLs9hk44X+QSSoe+lbzT1mGl6zE+HKnpNpKzzIn+tKRH7RhVxJ/hjIBlpfiVPkVQTuxd0B6SAcu4tehzJl6IaKt9n/+U8Vj7Skwb4AYF/roBg9w3BOZtX+5U44HMFvI48SwOu63L97ZVBwTVCXbQgDuCCCBuiuyEtMe6rdrB9o+AdiAJcAADbQIpYrbqEJqRWSAITqTNECCzG1ANHCpmKaBn2M39xg73OJx9vtFDn6ter33mNwMdz9NX2SLMBZz+srjpZpSFYN3D5bJxbe6iGtLlmLi6N53mMTlJtNReU0cIba3JKEiBrgEtP09ErxZuEnylQdCYWAk3d4ya3eLvlhTiW3t1SfMwEAAP//Y0/J0Q==",
+              "mode": 292
+            },
+            "vault/.git/objects/f4/210233dd753d7cf636faa78a4fef2953818e1f": {
+              "b64": "eJyczUGqwjAQgOG37ilm/0CTNklTEPEOovtpMoOFDilxqvb2It7A3b/5+VIRmRRsbP+0EkFKxrlofYit7TrEfmAKSCNn9jG4MLIbDWducNVbqXDeBKeKcMV1VjjcN3l86kQvlGWmXSpyBNsPXe/j4B38G2tM81WVfv2by5JRCZ57fAcAAP//PfA89w==",
+              "mode": 292
+            },
+            "vault/.git/refs/heads/master": {
+              "b64": "ZjQyMTAyMzNkZDc1M2Q3Y2Y2MzZmYWE3OGE0ZmVmMjk1MzgxOGUxZgo=",
+              "mode": 420
+            },
+            "vault/.lock": {
+              "b64": "",
+              "mode": 384
+            },
+            "vault/.symvault-migrated": {
+              "b64": "",
+              "mode": 384
+            },
+            "vault/config.yaml": {
+              "b64": "YWdlbnRzOgogICAgY2xhdWRlLWNvZGU6CiAgICAgICAgYXBwcm92YWxNb2RlOiBkZW55CiAgICAgICAgY2FuV3JpdGU6IHRydWUKICAgICAgICBjYW5SdW5Db21tYW5kczogdHJ1ZQogICAgICAgIGV4cG9zZVZhbHVlVG9vbHM6IHRydWUKICAgICAgICBhdXRvVW5zZWFsOiBmYWxzZQogICAgICAgIHNraWxsUGF0aDogfi8uY2xhdWRlL3NraWxscy9zeW12YXVsdC9TS0lMTC5tZAogICAgY2xpOgogICAgICAgIGFwcHJvdmFsTW9kZTogbm9uZQogICAgICAgIGFsbG93ZWRQYXRoczoKICAgICAgICAgICAgLSAnKicKICAgICAgICBjYW5Xcml0ZTogdHJ1ZQogICAgICAgIGV4cG9zZVZhbHVlVG9vbHM6IHRydWUKICAgICAgICByZXF1aXJlQXBwcm92YWw6IGZhbHNlCiAgICBjb2RleDoKICAgICAgICBhcHByb3ZhbE1vZGU6IGRlbnkKICAgICAgICBjYW5Xcml0ZTogZmFsc2UKICAgICAgICBjYW5SdW5Db21tYW5kczogdHJ1ZQogICAgICAgIGV4cG9zZVZhbHVlVG9vbHM6IHRydWUKICAgICAgICBhdXRvVW5zZWFsOiBmYWxzZQogICAgICAgIHNraWxsUGF0aDogfi8uY29kZXgvc2tpbGxzL3N5bXZhdWx0L0FHRU5UUy5tZAogICAgZGVmYXVsdDoKICAgICAgICBhcHByb3ZhbE1vZGU6IGRlbnkKICAgICAgICBjYW5Xcml0ZTogZmFsc2UKICAgICAgICBjYW5SdW5Db21tYW5kczogZmFsc2UKICAgICAgICBleHBvc2VWYWx1ZVRvb2xzOiB0cnVlCiAgICAgICAgYXV0b1Vuc2VhbDogZmFsc2UKICAgIGhlcm1lczoKICAgICAgICBhcHByb3ZhbE1vZGU6IGRlbnkKICAgICAgICBjYW5Xcml0ZTogdHJ1ZQogICAgICAgIGNhblJ1bkNvbW1hbmRzOiB0cnVlCiAgICAgICAgZXhwb3NlVmFsdWVUb29sczogdHJ1ZQogICAgICAgIGF1dG9VbnNlYWw6IGZhbHNlCiAgICAgICAgc2tpbGxQYXRoOiB+Ly5oZXJtZXMvc2tpbGxzL3N5bXZhdWx0L1NLSUxMLm1kCiAgICBvcGVuY2xhdzoKICAgICAgICBhcHByb3ZhbE1vZGU6IGRlbnkKICAgICAgICBjYW5Xcml0ZTogdHJ1ZQogICAgICAgIGNhblJ1bkNvbW1hbmRzOiB0cnVlCiAgICAgICAgZXhwb3NlVmFsdWVUb29sczogdHJ1ZQogICAgICAgIGF1dG9VbnNlYWw6IGZhbHNlCiAgICAgICAgc2tpbGxQYXRoOiB+Ly5vcGVuY2xhdy9za2lsbHMvc3ltdmF1bHQvU0tJTEwubWQKICAgIG9wZW5jb2RlOgogICAgICAgIGFwcHJvdmFsTW9kZTogZGVueQogICAgICAgIGNhbldyaXRlOiBmYWxzZQogICAgICAgIGNhblJ1bkNvbW1hbmRzOiB0cnVlCiAgICAgICAgZXhwb3NlVmFsdWVUb29sczogdHJ1ZQogICAgICAgIGF1dG9VbnNlYWw6IGZhbHNlCiAgICAgICAgc2tpbGxQYXRoOiB+Ly5vcGVuY29kZS9za2lsbHMvc3ltdmF1bHQvU0tJTEwubWQKdmF1bHQ6CiAgICBhdXRoTWV0aG9kOiBwYXNzcGhyYXNlCiAgICBsZWdhY3lfbW9kZTogZmFsc2UKICAgIHNlYXJjaF9pbmRleDogdHJ1ZQogICAgc2NyeXB0X3dvcmtfZmFjdG9yOiAxOAogICAgYXV0b19oZWFsX3plcm9fa2V5OiB0cnVlCiAgICBmb3JtYXRfdmVyc2lvbjogMQpnaXQ6CiAgICBjb21taXRfdGVtcGxhdGU6IFVwZGF0ZSBmcm9tIFN5bWFpcmEgVmF1bHQKICAgIGF1dG9fcHVzaDogdHJ1ZQogICAgYXV0b19wdWxsOiB0cnVlCiAgICBhdXRvX3B1bGxfaW50ZXJ2YWw6IDEwcwp2YXVsdERpcjogQFdPUktAL3plcm8ta2V5L3ZhdWx0CmRlZmF1bHRBZ2VudDogY2xpCnNlc3Npb25UaW1lb3V0OiAxNW0wcwpzZXNzaW9uTWF4TGlmZXRpbWU6IDhoMG0wcwphdXRoTWV0aG9kOiBwYXNzcGhyYXNlCnVzZVRvdWNoSUQ6IGZhbHNlCg==",
+              "mode": 384
+            },
+            "vault/entries/w/a.age": {
+              "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBWRjBtMURsNGFhbVE3QmUwNmZmLzVXSEhCNGlraWwwMituWmk0ZEVrU1RJCktRVDZNeGtaeGxSNmMrQUFGNTBCSkoyWUpMRUpkbTF5d0krcEdtZ3h1OTQKLS0tIFpUM0IxbWxZYklsV2xIVklGMzR4ZksxZkY1V2hrY1J4SmpvWFBuaVI2SncK9s1T0Clvh9+v6RyQ3EzziYFVCeHF7+5s7vw/3e7rwv802vZJh4zHVBKawU1a/ZroMpBCJxNvWtW8WJ7bpfXzKFi7eBslso7jDQclS52Iy2ky9VVCIhWmtL9LPB/wg6liYUwvge29xqOiDhmyAHWZUTAA5hlYPuAlNd2gYrcXNSCYFLQERWERPJhg8b8ZwntXgJdX+FB41NH8ulAHgQUf/aL2GUl05A1+Q6iEQ81Bxf5oy40249DzzdGqDGVmb0fBVBlD87UBGD/ykZ8orDo3k2M+TlhmNx6vxORZgNX3l0UBQAPEZDLdHtE6HNX7AbDM2waFtWIw823aipS0B9rcApBT3ayVjUIK/chkL97VwpqajcvPlQxd+esFNwfTm++s",
+              "mode": 384
+            },
+            "vault/manifest.age": {
+              "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAwaDdqbE9FTm16cHFaalYyMGZJN3VJOHNUZG5wTGhoY0xXdnU3Z3lUR0R3Ci9SYnh1Z0hkcEIyOHZKNVUxZ0c4RGJDbytzaytBeGlpQkRScUdkaGNGNnMKLS0tIG5KazNvdTdkclJ3TndIMW11Y2RWdDRSeVNGaHQxVjhGQlF3M1F4K2VkanMKubCF8tChvfSIP51g2EBitzb6w9YKDAuz2GTjhf5BJKh76VvNPWYaXrMT4cqek2krPMif60pEftGFXEn+GMgGWl+JU+RVBO7F3QHpIBy7i16HMmXohoq32f/5TxWPtKTBvgBgX+ugGD3DcE5m1f7lTjgcwW8jjxLA67rcv3tlUHBNUJdtCAO4IIIG6K7IS0x7qt2sH2j4B2IAlwAANtAilituoQmpFZIAhOpM0QILMbUA0cKmYpoGfYzf3GDvc4nH2+0UOfq16vfeY3Ax3P01fZIswFnP6yuOlmlIVg3cPlsnFt7qIa0uWYuLo3neYxOUm01F5TRwhtrckoSIGuAS0/T0SvFm4SfKVB0JhYCTd3jJrd4u+WFOJbe3VJ8z",
+              "mode": 384
+            }
+          },
+          "removed": []
+        },
+        "key": "zero-key#1",
+        "returncode": 0,
+        "role": "seed",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      {
+        "args": [
+          "recipients",
+          "add",
+          "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+        ],
+        "delta": {
+          "dirs": [],
+          "files": {
+            "vault/.lock": {
+              "b64": "",
+              "mode": 384
+            },
+            "vault/.symvault-migrated": {
+              "b64": "",
+              "mode": 384
+            },
+            "vault/recipients.txt": {
+              "b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkK",
+              "mode": 384
+            }
+          },
+          "removed": []
+        },
+        "key": "sweep-recipients-remove#0",
+        "returncode": 0,
+        "role": "seed",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Recipient added successfully.\nNote: existing entries are not yet shared with this recipient. Run 'symvault recipients add <key> --reencrypt' or 'symvault auth rotate' to re-encrypt existing entries.\n"
+      }
+    ],
+    "counts": {
+      "seed": 6
+    }
+  },
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "schema": 1
+}

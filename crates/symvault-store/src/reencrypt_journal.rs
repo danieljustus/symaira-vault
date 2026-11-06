@@ -157,10 +157,21 @@ fn recover_locked(store: &Store, identity: &Identity) -> Result<(), StoreError> 
                 )));
             }
         } else if regular_exists(store, &entry.target)? {
-            return Err(StoreError::Config(format!(
-                "re-encryption target changed without an original backup: {}",
-                entry.target.display()
-            )));
+            // No backup was journaled. Both implementations journal the backup
+            // path before the original is ever moved, so a target that is not
+            // the staged digest is still the untouched original: the crash hit
+            // between staging the replacement and journaling the backup. Roll
+            // back exactly as Go does (keep the original, drop the staged
+            // temp file below). That is only sound when the journal records
+            // the staged replacement (its temp artifact); a digest with no
+            // temp and no backup has no provenance, so a changed target is
+            // refused rather than assumed to be the original.
+            if entry.temp.is_none() {
+                return Err(StoreError::Config(format!(
+                    "re-encryption target changed without an original backup: {}",
+                    entry.target.display()
+                )));
+            }
         } else {
             return Err(StoreError::Config(format!(
                 "target and original backup are both missing: {}",

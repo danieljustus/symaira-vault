@@ -18,6 +18,7 @@ fn fixture() -> (PathBuf, Identity, SecretBytes, Vec<u8>) {
     let original = symvault_crypto::encrypt_identity_scrypt(&identity, &passphrase, 10)
         .expect("legacy envelope");
     fs::write(root.join("identity.age"), &original).expect("identity");
+    symvault_store::data_safety::test_support_pre_marked(&root);
     fs::write(
         root.join("config.yaml"),
         b"vault:\n  format_version: 1\n  scrypt_work_factor: 18\n  auto_migrate_kdf: false\ncustom: retained\n",
@@ -168,6 +169,7 @@ fn policy_fixture() -> (tempfile::TempDir, SecretBytes, Vec<u8>, Vec<u8>) {
         .unwrap();
     let config = b"vault:\n  format_version: 2\n  argon2id_time: 5\n  argon2id_memory: 65536\n  argon2id_threads: 4\n  custom: retained\nroot_unknown: [true, 7]\n".to_vec();
     fs::write(root.path().join("identity.age"), &original).unwrap();
+    symvault_store::data_safety::test_support_pre_marked(root.path());
     fs::write(root.path().join("config.yaml"), &config).unwrap();
     (
         root,
@@ -291,4 +293,32 @@ fn policy_migration_accepts_null_vault_configuration() {
     );
     let rendered = fs::read_to_string(root.path().join("config.yaml")).unwrap();
     assert!(rendered.contains("custom: retained") && rendered.contains("argon2id_time: 3"));
+}
+
+/// Go's `prepareResourceMigrationConfig` wraps each stage as
+/// `<stage> migration config: %w`; nothing is written when a stage fails.
+#[test]
+fn policy_migration_wraps_config_failures_like_go() {
+    for (config, expected) in [
+        (&b"vault: [malformed\n"[..], "load migration config: "),
+        (
+            &b"sessionTimeout: 0s\n"[..],
+            "load migration config: sessionTimeout: must be greater than 0, got 0s",
+        ),
+        (
+            &b"vault:\n  argon2id_time: 99\n"[..],
+            "validate migration config: vault.argon2id_time: 99 exceeds maximum ceiling of 16",
+        ),
+    ] {
+        let (root, passphrase, original, _) = policy_fixture();
+        fs::write(root.path().join("config.yaml"), config).unwrap();
+        let error = migrate_resource_policy(root.path(), &passphrase).unwrap_err();
+        assert!(error.starts_with(expected), "{error}");
+        assert_eq!(
+            fs::read(root.path().join("identity.age")).unwrap(),
+            original
+        );
+        assert_eq!(fs::read(root.path().join("config.yaml")).unwrap(), config);
+        assert!(!root.path().join("identity.age.bak").exists());
+    }
 }

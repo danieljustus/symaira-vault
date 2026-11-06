@@ -1,19 +1,21 @@
-//! CLI backup/restore orchestration over the shared archive implementation.
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+//! CLI backup/restore orchestration.
+//!
+//! `backup` is a port of Go's `admin.CreateBackup` (`cmd/admin/backup.go`),
+//! including its observable side effects: the archive is created in place
+//! (`O_CREATE|O_WRONLY|O_TRUNC`, 0600 only for a new file), missing parent
+//! directories are made with mode 0700, and a walk or read failure leaves the
+//! members written so far in the archive. `restore` goes through the shared
+//! `symvault_sync::archive::restore`, which already follows `RestoreBackup`.
+use std::{fs, path::Path};
 use symvault_sync::archive;
 
-pub fn backup(root: &Path, destination: &Path, exclude_git: bool) -> Result<PathBuf, String> {
-    let mut destination = destination.as_os_str().to_owned();
-    if !destination.as_encoded_bytes().ends_with(b".tar.gz") {
-        destination.push(".tar.gz");
-    }
-    let destination = PathBuf::from(destination);
-    archive::backup(root, &destination, exclude_git)
-        .map_err(|error| format!("backup failed: {error}"))?;
-    Ok(destination)
+/// `backup`: the Go-faithful writer shared with the pre-mutation data-safety gate.
+pub fn backup(
+    root: &Path,
+    destination: &Path,
+    exclude_git: bool,
+) -> Result<std::path::PathBuf, String> {
+    symvault_sync::backup_writer::backup(root, destination, exclude_git)
 }
 
 /// The operation name in the `*PathError` Go's `os.Stat` returns. Unix reports

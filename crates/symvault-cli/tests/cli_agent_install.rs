@@ -24,11 +24,20 @@ use std::process::{Command, Output};
 
 use tempfile::TempDir;
 
-/// Tool-registry hash the pinned oracle stamps into install tokens
-/// (`server.init()` over the compiled MCP tool definitions). Must match
-/// `PINNED_TOOL_REGISTRY_HASH` in `agent_install_commands.rs`.
-const PINNED_TOOL_REGISTRY_HASH: &str =
-    "01c5ea5101379933ab1ffba00f6b11b0f71afed220890cd7cb3460aeedcbb77f";
+/// Tool-registry hash Go stamps into install tokens (`server.init()` over the
+/// compiled MCP tool definitions), as recorded by `TestGenerateToolRegistryHashFixture`
+/// (`testdata/port/mcp/tool-registry-hash.json`). The Rust binary computes the
+/// same digest from its tool catalog; nothing is pinned in the source.
+fn go_tool_registry_hash() -> String {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../testdata/port/mcp/tool-registry-hash.json"
+    ))
+    .expect("Go tool-registry-hash fixture");
+    fixture["registry"]["hash"]
+        .as_str()
+        .expect("registry hash")
+        .to_owned()
+}
 
 fn rust_binary() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_symvault"))
@@ -424,7 +433,7 @@ fn install_hermes_stdio_matches_oracle() {
     let token = tokens.values().next().expect("token");
     assert_eq!(token["label"], "agent-install-hermes");
     assert_eq!(token["agent_name"], "hermes");
-    assert_eq!(token["tool_registry_hash"], PINNED_TOOL_REGISTRY_HASH);
+    assert_eq!(token["tool_registry_hash"], go_tool_registry_hash());
     assert_eq!(token["allowed_tools"], serde_json::json!(["*"]));
     assert_eq!(token["revoked"], false);
     assert!(token["expires_at"].is_null(), "display token never expires");
@@ -611,7 +620,7 @@ fn install_hermes_http_matches_oracle() {
     labels.sort_unstable();
     assert_eq!(labels, ["agent-install-hermes", "mcp-install-hermes"]);
     for token in tokens.values() {
-        assert_eq!(token["tool_registry_hash"], PINNED_TOOL_REGISTRY_HASH);
+        assert_eq!(token["tool_registry_hash"], go_tool_registry_hash());
     }
     let scoped = tokens
         .values()

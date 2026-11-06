@@ -1,5 +1,7 @@
 #![deny(unsafe_code)]
 
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
 
@@ -34,33 +36,41 @@ fn first_json(bytes: &[u8]) -> serde_json::Value {
 }
 
 fn go_export(go: &Path, home: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(go)
-        .args(["audit", "export"])
-        .args(args)
-        .env("HOME", home)
-        .env("USERPROFILE", home)
-        .env("CI", "1")
-        .output()
-        .expect("run Go audit export")
+    go_oracle::output(
+        Command::new(go)
+            .args(["audit", "export"])
+            .args(args)
+            .env("HOME", home)
+            .env("USERPROFILE", home)
+            .env("CI", "1"),
+    )
+    .expect("run Go audit export")
 }
 
 fn cli_export(binary: &Path, home: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(binary)
-        .args(args)
-        .env("HOME", home)
-        .env("USERPROFILE", home)
-        .env("CI", "1")
-        .env("SYMVAULT_TEST_KEYRING", "memory")
-        .output()
-        .expect("run audit export")
+    go_oracle::output(
+        Command::new(binary)
+            .args(args)
+            .env("HOME", home)
+            .env("USERPROFILE", home)
+            .env("CI", "1")
+            .env("SYMVAULT_TEST_KEYRING", "memory"),
+    )
+    .expect("run audit export")
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn audit_export_json_matches_go_for_filters_and_redaction() {
-    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
+    let oracle = go_oracle::GoOracle::begin(
+        "audit_export_commands",
+        "audit_export_json_matches_go_for_filters_and_redaction",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go = oracle.binary();
     let home = TempDir::new("fixture");
     fs::create_dir_all(home.0.join(".symvault")).expect("audit directory");
     fs::write(
@@ -73,7 +83,6 @@ fn audit_export_json_matches_go_for_filters_and_redaction() {
     )
     .expect("audit fixture");
 
-    let go = PathBuf::from(go);
     let cases: &[&[&str]] = &[
         &["--agent", "fixture", "--format", "json"],
         &[
@@ -165,11 +174,17 @@ fn audit_export_accepts_injected_hmac_generations_without_keychain_access() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn audit_export_cli_bytes_match_go_for_formats_empty_and_file_output() {
-    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
+    let oracle = go_oracle::GoOracle::begin(
+        "audit_export_commands",
+        "audit_export_cli_bytes_match_go_for_formats_empty_and_file_output",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go = oracle.binary();
     let home = TempDir::new("cli");
     fs::create_dir_all(home.0.join(".symvault")).expect("audit directory");
     fs::write(
@@ -177,7 +192,6 @@ fn audit_export_cli_bytes_match_go_for_formats_empty_and_file_output() {
         b"{\"ts\":\"2020-01-01T00:00:00.123456789Z\",\"agent\":\"fixture\",\"action\":\"set\",\"path\":\"safe/<password>&\",\"transport\":\"cli\",\"ok\":true}\n",
     )
     .expect("audit fixture");
-    let go = PathBuf::from(go);
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
 
     for args in [

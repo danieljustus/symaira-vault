@@ -1,0 +1,528 @@
+# Reproducible Builds & Signed Releases: Go-era proposal (archived)
+
+> **Archived, not a procedure.** This appendix was moved out of
+> [reproducible-builds.md](../reproducible-builds.md) when the Go implementation
+> was removed ([ADR 0036](../adr/0036-go-removal.md)). Everything below was
+> written for the Go implementation (`go build`, `-ldflags`, `main.version`,
+> `setup-go`, a GPG-signed release job) and for a release pipeline this repository
+> does not have. The Go toolchain is no longer used anywhere in this repository
+> and the scripts, Dockerfile, secrets and workflow shown here do not exist. Do not
+> run these examples to reproduce or verify a release; the current procedure is
+> in [reproducible-builds.md](../reproducible-builds.md).
+
+> **Historical (Go era):** everything from here to the end of this document was written for the Go implementation (`go build`, `-ldflags`, `main.version`) and is not a current procedure.
+
+Everything below through Security Considerations is a superseded proposal,
+not current build, signing, verification or publishing instructions. In
+particular, the GPG key, required secrets and displayed workflow are not the
+repository's release pipeline; the build scripts, Dockerfile and `./cmd/symvault`
+target shown below are absent. The old `main.buildTime` examples do not set the
+current `main.date` variable. Do not execute these examples to reproduce or
+verify current releases. Historical examples below are retained, with the clone-directory typo corrected.
+
+
+## Overview
+
+Reproducible builds ensure that anyone can independently verify that the distributed binary was built from the claimed source code. Signed releases provide authenticity guarantees through cryptographic signatures.
+
+## Prerequisites
+
+- Rust (the toolchain pinned in `rust-toolchain.toml`)
+- Git
+- GnuPG (for release signing)
+- `shasum` or `sha256sum`
+- Docker (optional, for containerized builds)
+
+## Reproducible Builds
+
+### Why Reproducible Builds Matter
+
+Reproducible builds protect against:
+- **Supply chain attacks**: Verification that distributed binaries match source
+- **Build environment compromise**: Independent verification catches tampering
+- **Accidental build differences**: Ensures consistent output across environments
+
+### Build Environment Standardization
+
+To achieve reproducible builds, we standardize:
+
+1. **Rust version**: pinned in `rust-toolchain.toml`
+2. **Dependencies**: committed `Cargo.lock`, every build uses `--locked`
+3. **Build flags**: release profile from `Cargo.toml`; the only build stamp the CLI reads is `SYMVAULT_VERSION`
+4. **Architecture**: explicit `--target` triple per release artifact
+
+> **Historical (Go era):** the `Dockerfile.build`, workflow and `go build`
+> examples further down document the retired Go release pipeline (Go sources
+> removed, see [ADR 0036](adr/0036-go-removal.md)). They are kept only as a
+> template for the verification procedure (checksums, signatures); the Go
+> toolchain is no longer used anywhere in this repository.
+
+### Build Process
+
+#### Local Build
+
+```bash
+# Clean module cache to ensure fresh dependencies
+go clean -modcache
+
+# Download dependencies
+go mod download
+
+# Set reproducible build parameters
+export CGO_ENABLED=0
+export GOFLAGS="-trimpath"
+export BUILD_TIME=$(git log -1 --format=%ct)
+export BUILD_COMMIT=$(git rev-parse HEAD)
+export BUILD_VERSION=$(git describe --tags --always)
+
+# Build for current platform
+go build -trimpath -ldflags "\
+  -s -w \
+  -X main.version=${BUILD_VERSION} \
+  -X main.commit=${BUILD_COMMIT} \
+  -X main.buildTime=${BUILD_TIME} \
+  -buildid=" \
+  -o symvault \
+  ./cmd/symvault
+```
+
+#### Cross-Platform Builds
+
+```bash
+# Build script for all supported platforms
+#!/bin/bash
+set -euo pipefail
+
+VERSION=$(git describe --tags --always)
+COMMIT=$(git rev-parse HEAD)
+BUILD_TIME=$(git log -1 --format=%ct)
+LDFLAGS="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildTime=${BUILD_TIME} -buildid="
+
+PLATFORMS=(
+  "darwin/amd64"
+  "darwin/arm64"
+  "linux/amd64"
+  "linux/arm64"
+  "windows/amd64"
+)
+
+mkdir -p dist
+
+for platform in "${PLATFORMS[@]}"; do
+  GOOS=${platform%/*}
+  GOARCH=${platform#*/}
+  output="dist/symvault-${VERSION}-${GOOS}-${GOARCH}"
+  
+  if [ "$GOOS" = "windows" ]; then
+    output="${output}.exe"
+  fi
+  
+  echo "Building for ${GOOS}/${GOARCH}..."
+  GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=0 \
+    go build -trimpath -ldflags "$LDFLAGS" \
+    -o "$output" ./cmd/symvault
+done
+```
+
+#### Docker Build (Fully Reproducible)
+
+```bash
+# Build in a controlled environment
+docker build -f Dockerfile.build -t openpass-builder .
+docker run --rm -v "$(pwd)/dist:/dist" openpass-builder
+```
+
+`Dockerfile.build`:
+```dockerfile
+FROM golang:1.26-alpine AS builder
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_TIME=0
+
+ENV CGO_ENABLED=0
+ENV GOFLAGS=-trimpath
+
+RUN go build -trimpath -ldflags "\
+  -s -w \
+  -X main.version=${VERSION} \
+  -X main.commit=${COMMIT} \
+  -X main.buildTime=${BUILD_TIME} \
+  -buildid=" \
+  -o /dist/symvault \
+  ./cmd/symvault
+
+FROM scratch
+COPY --from=builder /dist/symvault /symvault
+ENTRYPOINT ["/symvault"]
+```
+
+### Verifying Reproducibility
+
+After building, verify reproducibility by comparing hashes:
+
+```bash
+# Build once
+./scripts/build.sh
+mv dist dist-first
+
+# Build again with clean environment
+./scripts/build.sh
+
+# Compare
+for f in dist-first/*; do
+  name=$(basename "$f")
+  hash1=$(sha256sum "dist-first/$name" | cut -d' ' -f1)
+  hash2=$(sha256sum "dist/$name" | cut -d' ' -f1)
+  
+  if [ "$hash1" = "$hash2" ]; then
+    echo "✓ $name: reproducible"
+  else
+    echo "✗ $name: DIFFERS"
+    echo "  First:  $hash1"
+    echo "  Second: $hash2"
+  fi
+done
+```
+
+## Release Signing
+
+### GPG Key Setup
+
+1. **Create or import release signing key**:
+   ```bash
+   # Generate a new dedicated release signing key
+   gpg --full-generate-key
+   # Select: RSA and RSA, 4096 bits, no expiration
+   # Use: Symaira Vault Release Signing Key <releases@symvault.dev>
+   ```
+
+2. **Export public key**:
+   ```bash
+   gpg --armor --export releases@symvault.dev > openpass-release-key.asc
+   ```
+
+3. **Publish public key**:
+   - Upload to keyservers: `gpg --send-keys KEYID`
+   - Add to repository: `cp openpass-release-key.asc docs/`
+   - Publish on website and in release notes
+
+4. **Configure Git to use signing key**:
+   ```bash
+   git config --global user.signingkey KEYID
+   git config --global commit.gpgsign true
+   ```
+
+### Release Process
+
+1. **Prepare release**:
+   ```bash
+   # Update version
+   export VERSION=v1.2.3
+   
+   # Create release branch
+   git checkout -b release/${VERSION}
+   
+   # Update CHANGELOG.md
+   # Update version in cmd/version.go or main.go
+   
+   # Commit and tag
+   git add -A
+   git commit -S -m "release: ${VERSION}"
+   git tag -s ${VERSION} -m "Release ${VERSION}"
+   ```
+
+2. **Build release artifacts**:
+   ```bash
+   # Clean build environment
+   go clean -cache
+   rm -rf dist/
+   
+   # Build all platforms
+   ./scripts/build-release.sh ${VERSION}
+   
+   # Generate checksums
+   cd dist
+   sha256sum symvault-* > checksums.txt
+   cd ..
+   ```
+
+3. **Sign release artifacts**:
+   ```bash
+   cd dist
+   
+   # Sign each binary
+   for f in symvault-*; do
+     gpg --detach-sign --armor "$f"
+   done
+   
+   # Sign checksums file
+   gpg --detach-sign --armor checksums.txt
+   
+   cd ..
+   ```
+
+4. **Verify signatures**:
+   ```bash
+   cd dist
+   
+   # Verify checksums signature
+   gpg --verify checksums.txt.asc checksums.txt
+   
+   # Verify all binaries
+   for f in symvault-*; do
+     if [ -f "${f}.asc" ]; then
+       gpg --verify "${f}.asc" "$f"
+     fi
+   done
+   
+   cd ..
+   ```
+
+5. **Create GitHub release**:
+   ```bash
+   # Create release with artifacts
+   gh release create ${VERSION} \
+     --title "Symaira Vault ${VERSION}" \
+     --notes-file CHANGELOG-${VERSION}.md \
+     dist/*
+   ```
+
+### Release Artifact Structure
+
+```
+dist/
+├── openpass-v1.2.3-darwin-amd64
+├── openpass-v1.2.3-darwin-amd64.asc
+├── openpass-v1.2.3-darwin-arm64
+├── openpass-v1.2.3-darwin-arm64.asc
+├── openpass-v1.2.3-linux-amd64
+├── openpass-v1.2.3-linux-amd64.asc
+├── openpass-v1.2.3-linux-arm64
+├── openpass-v1.2.3-linux-arm64.asc
+├── openpass-v1.2.3-windows-amd64.exe
+├── openpass-v1.2.3-windows-amd64.exe.asc
+├── checksums.txt
+└── checksums.txt.asc
+```
+
+## Automated Release Pipeline
+
+### GitHub Actions Workflow
+
+`.github/workflows/release.yml`:
+
+```yaml
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+          GOFLAGS: -trimpath
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          COMMIT=$(git rev-parse HEAD)
+          BUILD_TIME=$(git log -1 --format=%ct)
+          
+          output="symvault-${VERSION}-${GOOS}-${GOARCH}"
+          if [ "$GOOS" = "windows" ]; then
+            output="${output}.exe"
+          fi
+          
+          go build -trimpath -ldflags "\
+            -s -w \
+            -X main.version=${VERSION} \
+            -X main.commit=${COMMIT} \
+            -X main.buildTime=${BUILD_TIME} \
+            -buildid=" \
+            -o "$output" ./cmd/symvault
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: symvault-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: symvault-*
+
+  sign:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: symvault-*
+          merge-multiple: true
+      
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+      
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum symvault-* > checksums.txt
+      
+      - name: Sign artifacts
+        run: |
+          cd dist
+          for f in symvault-* checksums.txt; do
+            gpg --detach-sign --armor "$f"
+          done
+      
+      - name: Upload signed artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-dist
+          path: dist/*
+
+  release:
+    needs: sign
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download signed artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: signed-dist
+          path: dist
+      
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*
+          generate_release_notes: true
+```
+
+### Required Secrets
+
+Configure these in GitHub repository settings:
+
+- `GPG_PRIVATE_KEY`: Full ASCII-armored GPG private key for release signing
+- `GPG_PASSPHRASE`: Passphrase for the GPG signing key
+
+## Verification by Users
+
+### Verifying Signatures
+
+Users should verify downloaded binaries before use:
+
+```bash
+# Import the release signing key
+gpg --import docs/openpass-release-key.asc
+
+# Download binary and signature
+curl -LO https://github.com/danieljustus/symaira-vault/releases/download/v1.2.3/openpass-v1.2.3-linux-amd64
+curl -LO https://github.com/danieljustus/symaira-vault/releases/download/v1.2.3/openpass-v1.2.3-linux-amd64.asc
+
+# Verify signature
+gpg --verify openpass-v1.2.3-linux-amd64.asc openpass-v1.2.3-linux-amd64
+
+# Expected output: Good signature from "Symaira Vault Release Signing Key"
+```
+
+### Verifying Checksums
+
+```bash
+# Download checksums and signature
+curl -LO https://github.com/danieljustus/symaira-vault/releases/download/v1.2.3/checksums.txt
+curl -LO https://github.com/danieljustus/symaira-vault/releases/download/v1.2.3/checksums.txt.asc
+
+# Verify checksums signature
+gpg --verify checksums.txt.asc checksums.txt
+
+# Verify binary against checksums
+sha256sum -c checksums.txt --ignore-missing
+```
+
+### Reproducing the Build
+
+Advanced users can reproduce the build independently:
+
+```bash
+# Clone the repository at the release tag
+git clone https://github.com/danieljustus/symaira-vault.git
+cd symaira-vault
+git checkout v1.2.3
+
+# Build with the same flags
+export VERSION=v1.2.3
+export COMMIT=$(git rev-parse HEAD)
+export BUILD_TIME=$(git log -1 --format=%ct)
+export CGO_ENABLED=0
+export GOFLAGS=-trimpath
+
+go build -trimpath -ldflags "\
+  -s -w \
+  -X main.version=${VERSION} \
+  -X main.commit=${COMMIT} \
+  -X main.buildTime=${BUILD_TIME} \
+  -buildid=" \
+  -o symvault-reproduced ./cmd/symvault
+
+# Compare with downloaded binary
+sha256sum symvault-reproduced
+sha256sum openpass-v1.2.3-linux-amd64
+```
+
+## Security Considerations
+
+1. **Signing key protection**: The GPG private key must be stored securely (HSM or encrypted offline storage)
+2. **Build environment integrity**: Use isolated build environments (Docker or GitHub Actions with minimal privileges)
+3. **Supply chain verification**: Pin all dependencies with `go.sum` and verify module checksums
+4. **Key rotation**: Plan for periodic signing key rotation and key revocation procedures
+5. **Audit trail**: Maintain logs of all releases with signatures and checksums
+
+## Related Documents
+
+- [docs/distribution.md](distribution.md) - Distribution channels and installation
+- [docs/macos-notarization.md](macos-notarization.md) - macOS-specific signing requirements
+- [SECURITY.md](../SECURITY.md) - Security policy
+- [CHANGELOG.md](../CHANGELOG.md) - Release history

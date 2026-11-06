@@ -25,8 +25,6 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use std::time::{Duration, Instant};
-#[path = "go_unicode_print_15.rs"]
-mod go_unicode_print_15;
 
 /// Default approval timeout, mirroring Go's `defaultTimeout`.
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -399,6 +397,67 @@ fn signal_cancel_error(_signal: Option<i32>) -> SecureInputError {
     SecureInputError::Canceled
 }
 
+/// SIGINT/SIGTERM that cleared an armed clipboard timer also request the stdio
+/// shutdown, but only when a terminator is installed. Embedders and tests
+/// without one keep the clear-and-continue behavior.
+#[cfg(unix)]
+fn shutdown_after_clipboard_clear(signal: i32) {
+    use signal_hook::consts::signal::{SIGINT, SIGTERM};
+
+    if matches!(signal, SIGINT | SIGTERM)
+        && let Some(terminator) = STDIO_SIGNAL_TERMINATOR.get()
+    {
+        terminator(signal);
+    }
+}
+
+#[cfg(unix)]
+fn clear_and_cancel_auto_clear(state: &SecureInputSignalState, active: &ActiveClipboardAutoClear) {
+    if !active.clear_claimed.swap(true, Ordering::AcqRel) {
+        let _ = state.clipboard.clear();
+    }
+    let _ = active.cancel.send(());
+    // Keep the registration active through clear(), like Go's signal.Notify
+    // subscription. Remove it before returning so a later signal regains
+    // the idle process disposition.
+    let mut inner = state
+        .state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if inner
+        .clipboard_auto_clear
+        .as_ref()
+        .is_some_and(|current| current.id == active.id)
+    {
+        inner.clipboard_auto_clear = None;
+    }
+}
+
+/// Clears an armed stdio auto-clear timer's clipboard before the process ends
+/// for a signal Go does not tie to the timer. Go's `serve` shuts down on
+/// SIGQUIT but its clipboard timer subscribes SIGINT/SIGTERM/SIGHUP only, so Go
+/// leaves the copied secret on the clipboard; clearing it is a declared
+/// Rust-safer difference. Returns whether a registered timer was cleared.
+#[cfg(unix)]
+pub fn clear_armed_stdio_clipboard() -> bool {
+    let Some(state) = SECURE_INPUT_SIGNAL_STATE.get() else {
+        return false;
+    };
+    let active = state
+        .state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clipboard_auto_clear
+        .clone();
+    match active {
+        Some(active) => {
+            clear_and_cancel_auto_clear(state, &active);
+            true
+        }
+        None => false,
+    }
+}
+
 #[cfg(unix)]
 fn dispatch_stdio_signal(signal: i32) {
     let Some(state) = SECURE_INPUT_SIGNAL_STATE.get() else {
@@ -413,12 +472,11 @@ fn dispatch_stdio_signal(signal: i32) {
         let prompt_active = state.prompt_active;
         let active = state.clipboard_auto_clear.clone();
         if active.is_some() {
-            if prompt_active
-                && state.secure_input_prompt
-                && signal != signal_hook::consts::signal::SIGHUP
-            {
-                // Go's secure-input helper has its own signal subscription, so
-                // it cancels the prompt while the clipboard subscription clears.
+            if prompt_active && signal != signal_hook::consts::signal::SIGHUP {
+                // Go's prompt (secure-input helper subscription or the serve
+                // context the approval read waits on) is canceled by the same
+                // signal that makes the clipboard subscription clear. SIGHUP is
+                // only subscribed by the clipboard timer, so it cancels nothing.
                 state.pending_signal = signal as usize;
             }
         } else {
@@ -427,23 +485,14 @@ fn dispatch_stdio_signal(signal: i32) {
         (prompt_active, active)
     };
     if let Some(active) = active {
-        if !active.clear_claimed.swap(true, Ordering::AcqRel) {
-            let _ = state.clipboard.clear();
-        }
-        let _ = active.cancel.send(());
-        // Keep the registration active through clear(), like Go's signal.Notify
-        // subscription. Remove it before returning so a later signal regains
-        // the idle process disposition.
-        let mut inner = state
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if inner
-            .clipboard_auto_clear
-            .as_ref()
-            .is_some_and(|current| current.id == active.id)
-        {
-            inner.clipboard_auto_clear = None;
+        clear_and_cancel_auto_clear(state, &active);
+        // Go's `serve` subscribes SIGINT/SIGTERM next to the clipboard timer:
+        // both subscribers receive the signal, so the timer clears and the
+        // server shuts down (real Go process: armed SIGTERM clears, then exit 0).
+        // SIGHUP is only subscribed by the timer: clear, then keep serving.
+        // A pending prompt performs the shutdown when its scope ends.
+        if !prompt_active {
+            shutdown_after_clipboard_clear(signal);
         }
         return;
     }
@@ -540,6 +589,120 @@ pub fn register_stdio_clipboard_auto_clear(
         let _ = previous.cancel.send(());
     }
     Some(StdioClipboardAutoClearRegistration { state, id })
+}
+
+/// An auto-clear timer armed outside the stdio router (HTTP `mcp`, where
+/// `copy_to_clipboard` and `generate_totp` arm Go's `StartAutoClear` too). The
+/// HTTP shutdown clears whatever is armed when SIGINT/SIGTERM/SIGQUIT arrives,
+/// like Go's per-timer `signal.Notify` subscription. Each handler runtime owns
+/// its own timer, so unlike the stdio slot a new entry never cancels another.
+#[cfg(unix)]
+struct ProcessClipboardTimer {
+    cancel: std::sync::mpsc::Sender<()>,
+    clear_claimed: Arc<AtomicBool>,
+    clipboard: Arc<dyn symvault_core::platform::Clipboard>,
+}
+
+#[cfg(unix)]
+static PROCESS_CLIPBOARD_TIMERS: Mutex<Vec<(usize, ProcessClipboardTimer)>> =
+    Mutex::new(Vec::new());
+#[cfg(unix)]
+static PROCESS_CLIPBOARD_TIMER_ID: AtomicUsize = AtomicUsize::new(1);
+
+/// Registration of a [`ProcessClipboardTimer`]; dropping it (timer fired,
+/// canceled or replaced) removes the entry.
+#[cfg(unix)]
+pub struct ProcessClipboardAutoClearRegistration {
+    id: usize,
+}
+
+#[cfg(unix)]
+impl Drop for ProcessClipboardAutoClearRegistration {
+    fn drop(&mut self) {
+        PROCESS_CLIPBOARD_TIMERS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .retain(|(id, _)| *id != self.id);
+    }
+}
+
+/// Registers an armed timer for the HTTP shutdown (see above). `clear_claimed`
+/// is shared with the timer thread so exactly one side clears.
+#[cfg(unix)]
+pub fn register_process_clipboard_auto_clear(
+    cancel: std::sync::mpsc::Sender<()>,
+    clear_claimed: Arc<AtomicBool>,
+    clipboard: Arc<dyn symvault_core::platform::Clipboard>,
+) -> ProcessClipboardAutoClearRegistration {
+    let id = PROCESS_CLIPBOARD_TIMER_ID.fetch_add(1, Ordering::Relaxed);
+    PROCESS_CLIPBOARD_TIMERS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .push((
+            id,
+            ProcessClipboardTimer {
+                cancel,
+                clear_claimed,
+                clipboard,
+            },
+        ));
+    ProcessClipboardAutoClearRegistration { id }
+}
+
+/// Armed process timers taken out of the registry by
+/// [`take_armed_process_clipboards`]. Taking is cheap and never touches a
+/// clipboard backend; [`ArmedProcessClipboards::clear_all`] does, so a caller
+/// that must not wait on a hung backend runs it on a thread it can abandon.
+#[cfg(unix)]
+pub struct ArmedProcessClipboards(Vec<ProcessClipboardTimer>);
+
+#[cfg(unix)]
+impl ArmedProcessClipboards {
+    /// How many timers were armed when they were taken.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Clears every taken clipboard whose timer has not claimed the clear yet
+    /// and cancels the timers. Returns how many it cleared.
+    pub fn clear_all(self) -> usize {
+        let mut cleared = 0;
+        for timer in self.0 {
+            if !timer.clear_claimed.swap(true, Ordering::AcqRel) {
+                let _ = timer.clipboard.clear();
+                cleared += 1;
+            }
+            let _ = timer.cancel.send(());
+        }
+        cleared
+    }
+}
+
+/// Removes every armed process timer from the registry (so the registration
+/// ends, like Go's `signal.Stop` after the clear) without touching a clipboard.
+#[cfg(unix)]
+pub fn take_armed_process_clipboards() -> ArmedProcessClipboards {
+    ArmedProcessClipboards(
+        PROCESS_CLIPBOARD_TIMERS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .drain(..)
+            .map(|(_, timer)| timer)
+            .collect(),
+    )
+}
+
+/// Clears every clipboard whose auto-clear timer is armed outside the stdio
+/// router and cancels those timers. Returns how many it cleared. Called by the
+/// HTTP shutdown at signal receipt and again after the drain (a request that
+/// was still in flight may have copied meanwhile).
+#[cfg(unix)]
+pub fn clear_armed_process_clipboards() -> usize {
+    take_armed_process_clipboards().clear_all()
 }
 
 #[cfg(unix)]
@@ -807,21 +970,8 @@ fn parse_secure_input(response: &str) -> Result<String, SecureInputError> {
     Ok(value.trim().to_owned())
 }
 
-/// Go `unicode.IsPrint`, using the same immutable table as secure rune input.
-pub fn go_is_print(character: char) -> bool {
-    let code = u32::from(character);
-    go_unicode_print_15::PRINT_RANGES
-        .binary_search_by(|(first, last)| {
-            if code < *first {
-                std::cmp::Ordering::Greater
-            } else if code > *last {
-                std::cmp::Ordering::Less
-            } else {
-                std::cmp::Ordering::Equal
-            }
-        })
-        .is_ok()
-}
+/// Go `unicode.IsPrint` (shared table in `symvault-core`).
+pub use symvault_core::go_is_print;
 
 fn build_secure_input_prompt(req: &SecureInputRequest) -> String {
     build_secure_input_prompt_with_mode(req, screen_reader_mode())
@@ -896,7 +1046,10 @@ fn terminal_safe_text(value: &str) -> String {
 
 /// Builds the approval prompt string with full context display, mirroring
 /// Go's `buildPrompt`.
-fn build_prompt(req: &ApprovalRequest) -> String {
+///
+/// Public so contract tests can compare the exact bytes a handler asks the
+/// human to confirm against Go-recorded prompts.
+pub fn build_prompt(req: &ApprovalRequest) -> String {
     let mut out = String::new();
 
     out.push('\n');
@@ -1918,7 +2071,9 @@ mod tests {
 
             signal_hook::low_level::raise(signal).unwrap();
             canceled
-                .recv_timeout(Duration::from_secs(3))
+                // Setup bound, not the behavior under test: generous so load and coverage
+                // instrumentation cannot win the race (#1564-#1567).
+                .recv_timeout(Duration::from_secs(30))
                 .expect("active signal cancels the timer");
             assert_eq!(clipboard.0.load(Ordering::SeqCst), 1);
             assert!(clear_claimed.load(Ordering::SeqCst));
@@ -1937,7 +2092,7 @@ mod tests {
             // active. Once its scoped registration ends, the same signal must
             // regain its normal process disposition.
             signal_hook::low_level::raise(signal).unwrap();
-            let deadline = Instant::now() + Duration::from_secs(3);
+            let deadline = Instant::now() + Duration::from_secs(30);
             while Instant::now() < deadline {
                 std::thread::sleep(Duration::from_millis(10));
             }
@@ -1953,7 +2108,7 @@ mod tests {
                 .arg("approval::tests::stdio_clipboard_signal_router_process_contract")
                 .arg("--nocapture")
                 .env("SYMVAULT_PLATFORM_SIGNAL_CHILD", signal_name);
-            let output = bounded_output(command, Duration::from_secs(8));
+            let output = bounded_output(command, Duration::from_secs(60));
             assert_eq!(
                 output.status.signal(),
                 Some(signal),
@@ -1990,7 +2145,7 @@ mod tests {
 
         fn read_response(&mut self, _deadline: Instant) -> Result<String, ReadFailure> {
             signal_hook::low_level::raise(self.0).unwrap();
-            let deadline = Instant::now() + Duration::from_secs(3);
+            let deadline = Instant::now() + Duration::from_secs(30);
             while Instant::now() < deadline {
                 if stdio_signal_is_pending() {
                     return Err(ReadFailure::Canceled);
@@ -2065,6 +2220,111 @@ mod tests {
                     .contains(&format!("RUST_PROMPT_SIGNAL_RECEIPT signal={signal_name}")),
                 "{signal_name} child produced no receipt: {output:?}"
             );
+        }
+    }
+
+    /// Go's `serve` and the clipboard timer both subscribe SIGINT/SIGTERM, so a
+    /// signal during an armed auto-clear clears the clipboard AND shuts the
+    /// stdio server down (real Go process: armed SIGTERM clears, then exit 0).
+    /// SIGHUP is subscribed by the timer only: clear, then keep serving. With
+    /// the stdio terminator installed, an armed signal outside a prompt must
+    /// therefore request the shutdown exactly once, except SIGHUP; during an
+    /// ordinary approval prompt the prompt is canceled with Go's
+    /// context-canceled error and the shutdown is requested once. The child owns
+    /// the process-wide router.
+    #[cfg(unix)]
+    #[test]
+    fn stdio_armed_clipboard_signal_clears_and_requests_shutdown() {
+        use signal_hook::consts::signal::{SIGHUP, SIGINT, SIGTERM};
+        use std::{
+            env,
+            process::Command,
+            sync::{atomic::AtomicI32, mpsc},
+        };
+
+        static TERMINATED: AtomicUsize = AtomicUsize::new(0);
+        static LAST_SIGNAL: AtomicI32 = AtomicI32::new(0);
+
+        if let Ok(spec) = env::var("SYMVAULT_PLATFORM_ARMED_SIGNAL_CHILD") {
+            let (signal_name, mode) = spec.split_once(':').expect("signal:mode");
+            let signal = match signal_name {
+                "SIGINT" => SIGINT,
+                "SIGTERM" => SIGTERM,
+                _ => SIGHUP,
+            };
+            let clipboard = Arc::new(SignalClipboard::default());
+            install_stdio_clipboard_signal_router(clipboard.clone()).unwrap();
+            assert!(set_stdio_signal_terminator(|signal| {
+                LAST_SIGNAL.store(signal, Ordering::SeqCst);
+                TERMINATED.fetch_add(1, Ordering::SeqCst);
+            }));
+            let (cancel, canceled) = mpsc::channel();
+            let clear_claimed = Arc::new(AtomicBool::new(false));
+            let registration =
+                register_stdio_clipboard_auto_clear(cancel, Arc::clone(&clear_claimed))
+                    .expect("installed process router registers active auto-clear");
+            if mode == "prompt" {
+                let approval = run_approval(&approved_request(), Some(SignalTerminal(signal)));
+                assert!(!approval.approved && !approval.remembered);
+                assert_eq!(
+                    approval.error.expect("signal cancels approval").to_string(),
+                    "failed to read from terminal: context canceled"
+                );
+            } else {
+                signal_hook::low_level::raise(signal).unwrap();
+            }
+            canceled
+                .recv_timeout(Duration::from_secs(30))
+                .expect("armed signal cancels the timer");
+            assert_eq!(clipboard.0.load(Ordering::SeqCst), 1);
+            assert!(clear_claimed.load(Ordering::SeqCst));
+            drop(registration);
+            let expected = usize::from(signal != SIGHUP);
+            let deadline = Instant::now() + Duration::from_secs(30);
+            while TERMINATED.load(Ordering::SeqCst) < expected && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            // Settle: a wrongly requested SIGHUP shutdown or a duplicate request
+            // would land in this window.
+            std::thread::sleep(Duration::from_millis(300));
+            println!(
+                "RUST_ARMED_SIGNAL_RECEIPT {spec} clear={} shutdown_requests={} last={}",
+                clipboard.0.load(Ordering::SeqCst),
+                TERMINATED.load(Ordering::SeqCst),
+                LAST_SIGNAL.load(Ordering::SeqCst)
+            );
+            return;
+        }
+
+        for (signal_name, signal) in [("SIGINT", SIGINT), ("SIGTERM", SIGTERM), ("SIGHUP", SIGHUP)]
+        {
+            for mode in ["idle", "prompt"] {
+                if signal == SIGHUP && mode == "prompt" {
+                    continue;
+                }
+                let output = Command::new(env::current_exe().unwrap())
+                    .arg("--exact")
+                    .arg("approval::tests::stdio_armed_clipboard_signal_clears_and_requests_shutdown")
+                    .arg("--nocapture")
+                    .env(
+                        "SYMVAULT_PLATFORM_ARMED_SIGNAL_CHILD",
+                        format!("{signal_name}:{mode}"),
+                    )
+                    .output()
+                    .expect("run armed clipboard signal child");
+                assert!(
+                    output.status.success(),
+                    "{signal_name}:{mode} child failed: {output:?}"
+                );
+                let requests = usize::from(signal != SIGHUP);
+                let last = if signal == SIGHUP { 0 } else { signal };
+                assert!(
+                    String::from_utf8_lossy(&output.stdout).contains(&format!(
+                        "RUST_ARMED_SIGNAL_RECEIPT {signal_name}:{mode} clear=1 shutdown_requests={requests} last={last}"
+                    )),
+                    "{signal_name}:{mode} child receipt mismatch: {output:?}"
+                );
+            }
         }
     }
 }

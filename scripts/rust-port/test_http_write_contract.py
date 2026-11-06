@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Synthetic socket-error controls, not native deadline acceptance evidence."""
+import base64
 import copy
 import io
+import platform
 import ssl
 import subprocess
 import unittest
@@ -562,10 +564,14 @@ class WindowsGoTcpOutputDeclaredDifference(unittest.TestCase):
         self.assertEqual(source.count("'expired write resumed after fast client drain'"), 1)
         self.assertIn("else:assert output['received_chunk_bytes']<output['declared_chunk_length'],", source)
 
+    VALIDATOR = 'python3 scripts/rust-port/gate_area_check.py receipt target/native-http-write.json --profile http-write'
+
     def validator(self):
+        """The hosted workflow validates the receipt with the local gate's http-write profile."""
         text = (contract.ROOT / '.github/workflows/rust-http-write.yml').read_text(encoding='utf-8')
-        block = text.split("python3 - <<'CHECK'\n", 1)[1].split('\n          CHECK\n', 1)[0]
-        return '\n'.join(line[10:] for line in block.split('\n'))
+        self.assertIn(self.VALIDATOR, text)
+        return [contract.sys.executable, '-B', str(contract.ROOT / 'scripts/rust-port/gate_area_check.py'),
+                'receipt', 'target/native-http-write.json', '--profile', 'http-write']
 
     def receipt(self, native_os, commit, declared, rust_complete=False):
         profiles = ['tcp-five', 'tcp-short', 'tls12-short', 'tls13-short', 'tcp-output', 'tls-output']
@@ -603,26 +609,151 @@ class WindowsGoTcpOutputDeclaredDifference(unittest.TestCase):
             (base / 'target').mkdir()
             (base / 'target/native-http-write.json').write_text(contract.json.dumps(
                 self.receipt(native_os, commit, declared, rust_complete)), encoding='utf-8')
-            script = base / 'check.py'
-            script.write_text(self.validator(), encoding='utf-8')
-            return subprocess.run([contract.sys.executable, '-B', str(script)], cwd=base,
-                                           capture_output=True, text=True).returncode
+            return subprocess.run(self.validator(), cwd=base, capture_output=True, text=True).returncode
 
     def test_workflow_validator_is_platform_correct_and_never_exempts_rust(self):
         entry = contract.declared_write_difference('go', 'tcp-output', 'Windows', self.OUTPUT)
         assert entry is not None
-        self.assertEqual(self.run_validator('Linux', []), 0)
-        self.assertEqual(self.run_validator('Darwin', []), 0)
-        self.assertEqual(self.run_validator('Windows', [entry]), 0)
+        # The receipt must come from the host that validates it (the http-write profile checks native_os).
+        host = platform.system()
+        other = 'Darwin' if host == 'Linux' else 'Linux'
+        self.assertEqual(self.run_validator(host, []), 0)
+        self.assertNotEqual(self.run_validator(other, []), 0)
+        # The Windows legs are dropped (ADR 0036): the hosted validator accepts Linux and Darwin only, so a Windows
+        # receipt fails with or without the recorded declared difference.
+        self.assertNotEqual(self.run_validator('Windows', [entry]), 0)
         self.assertNotEqual(self.run_validator('Windows', []), 0)
-        self.assertNotEqual(self.run_validator('Linux', [entry]), 0)
+        self.assertNotEqual(self.run_validator(host, [entry]), 0)
         self.assertNotEqual(self.run_validator('Windows', [entry, entry]), 0)
         self.assertNotEqual(self.run_validator('Windows', [{**entry, 'implementation': 'rust'}]), 0)
         self.assertNotEqual(self.run_validator('Windows', [{**entry, 'profile': 'tls-output'}]), 0)
         self.assertNotEqual(self.run_validator('Windows', [{**entry, 'reason': 'no reference'}]), 0)
         self.assertNotEqual(self.run_validator('Windows', [{**entry, 'received_chunk_bytes': 1}]), 0)
         self.assertNotEqual(self.run_validator('Windows', [entry], rust_complete=True), 0)
-        self.assertNotEqual(self.run_validator('Linux', [], rust_complete=True), 0)
+        self.assertNotEqual(self.run_validator(host, [], rust_complete=True), 0)
+
+
+class StarvedOutputPrecondition(unittest.TestCase):
+    """The slow-read probe needs bytes before the write budget ends; a starved host may not deliver any."""
+
+    def test_budgets_escalate_and_are_whole_seconds(self):
+        seconds = [contract.budget_seconds(budget) for budget in contract.OUTPUT_BUDGETS]
+        self.assertEqual(seconds[0], 30)
+        self.assertEqual(seconds, sorted(set(seconds)))
+        self.assertGreaterEqual(contract.EXCHANGE_TIMEOUT, 30)
+        # Only the two output profiles are retried; every other profile keeps its fixed budget.
+        self.assertEqual({name for name, _, _ in contract.PROFILES if name.endswith('-output')},
+                         {'tls-output', 'tcp-output'})
+
+    def test_progress_needs_four_reads_and_4096_bytes(self):
+        self.assertTrue(contract.output_progressing(dict(slow_read_calls=4, slow_received_bytes=4096)))
+        self.assertFalse(contract.output_progressing(dict(slow_read_calls=3, slow_received_bytes=4096)))
+        self.assertFalse(contract.output_progressing(dict(slow_read_calls=4, slow_received_bytes=4095)))
+        # The observed starved-host failures: no byte at all, or a late trickle (13 reads, 98 bytes).
+        self.assertFalse(contract.output_progressing(dict(slow_read_calls=0, slow_received_bytes=0)))
+        self.assertFalse(contract.output_progressing(dict(slow_read_calls=13, slow_received_bytes=98)))
+
+    def observe(self, progress):
+        calls = []
+        def starved_or_progressing(port, tokens, row, tls, budget):
+            calls.append(budget)
+            row.update(progress)
+        server = mock.Mock()
+        server.child.pid = 1
+        exchanged = mock.Mock(return_value={'status_line': 'HTTP/1.1 200 OK', 'raw_base64': ''})
+        result = dict(rows=[], processes=[], late_body={'received_base64': ''}, handshake_peer={}, slow_output={})
+        with mock.patch.object(contract, 'Server', return_value=server), \
+                mock.patch.object(contract, 'request', return_value=b'GET'), \
+                mock.patch.object(contract, 'tcp_exchange', exchanged), \
+                mock.patch.object(contract, 'late_body'), \
+                mock.patch.object(contract, 'slow_output', starved_or_progressing), \
+                mock.patch.object(contract, 'assert_response'):
+            try:
+                contract.observe('bin', 'home', 1, {}, None, 'tcp-output', None, result, 60)
+            except BaseException as error:
+                return error, calls, exchanged, server
+        return None, calls, exchanged, server
+
+    def test_starved_output_stops_before_the_next_exchange_and_closes_the_server(self):
+        error, calls, exchanged, server = self.observe(dict(slow_read_calls=0, slow_received_bytes=0))
+        self.assertIsInstance(error, contract.OutputPreconditionUnmet)
+        self.assertEqual(calls, [60], 'the attempt budget must reach the slow-read phase')
+        self.assertEqual(exchanged.call_count, 2, 'ping-after must not wait on a server still busy with the bulk response')
+        server.close.assert_called_once()
+
+    def test_progressing_output_reaches_the_expiry_verdict_unchanged(self):
+        error, calls, exchanged, _ = self.observe(dict(slow_read_calls=5, slow_received_bytes=8192, received_base64=''))
+        self.assertIsNone(error)
+        self.assertEqual(exchanged.call_count, 3)
+
+    def test_listener_wait_tolerates_a_starved_host(self):
+        import http_oauth_contract
+        self.assertGreaterEqual(http_oauth_contract.LISTEN_DEADLINE, 120)
+        self.assertGreaterEqual(http_tls_contract.LISTEN_DEADLINE, 120)
+
+    def test_exchanges_use_the_load_tolerant_timeout(self):
+        _, _, exchanged, _ = self.observe(dict(slow_read_calls=5, slow_received_bytes=8192, received_base64=''))
+        for call in exchanged.call_args_list:
+            self.assertEqual(call.kwargs['timeout'], contract.EXCHANGE_TIMEOUT)
+
+
+class StarvedExchange(unittest.TestCase):
+    """A live server closing a plain exchange before any response byte is a starved attempt, nothing else is."""
+
+    def server(self, alive=True):
+        server = mock.Mock()
+        server.child.pid = 1
+        server.child.poll.return_value = None if alive else 1
+        return server
+
+    def classify(self, error, row, alive=True):
+        def exchange():
+            raise error
+        try:
+            contract.starved_exchange(self.server(alive), '/x/bin/symvault', 'tls12-short', 'initialize', row, exchange)
+        except BaseException as caught:
+            return caught
+        self.fail('exchange error was swallowed')
+
+    def test_reset_before_any_byte_by_a_live_server_is_starved(self):
+        for error in [ConnectionResetError(104, 'reset'), ssl.SSLEOFError(8, 'eof'), http_tls_contract.EmptyTLSResponse('empty'),
+                      ValueError('not enough values to unpack')]:
+            caught = self.classify(error, dict(raw_base64=''))
+            self.assertIsInstance(caught, contract.ExchangeStarved, error)
+            self.assertEqual(caught.details['binary'], 'symvault')
+            self.assertEqual(caught.details['profile'], 'tls12-short')
+            self.assertEqual(caught.details['case'], 'initialize')
+            self.assertEqual(caught.details['error_type'], type(error).__name__)
+
+    def test_partial_response_dead_server_and_other_errors_still_fail(self):
+        partial = dict(raw_base64=base64.b64encode(b'HTTP/1.1 200 OK\r\n').decode())
+        reset = ConnectionResetError(104, 'reset')
+        self.assertIs(self.classify(reset, partial), reset)
+        self.assertIs(self.classify(reset, dict(raw_base64=''), alive=False), reset)
+        tls_partial = dict(received_base64=base64.b64encode(b'x').decode())
+        self.assertIs(self.classify(reset, tls_partial), reset)
+        other = AssertionError('status')
+        self.assertIs(self.classify(other, dict(raw_base64='')), other)
+
+    def test_successful_exchange_is_returned_unchanged(self):
+        response = {'status_line': 'HTTP/1.1 200 OK'}
+        self.assertIs(contract.starved_exchange(self.server(), 'b', 'p', 'c', {}, lambda: response), response)
+
+    def test_attempts_are_bounded_and_repeat_the_same_budget(self):
+        self.assertGreaterEqual(contract.EXCHANGE_ATTEMPTS, 2)
+        self.assertLessEqual(contract.EXCHANGE_ATTEMPTS, 3)
+
+    def test_observe_reports_a_starved_plain_exchange(self):
+        server = self.server()
+        reset = mock.Mock(side_effect=ConnectionResetError(104, 'reset'))
+        result = dict(rows=[], processes=[], late_body={'received_base64': ''}, handshake_peer={}, slow_output={})
+        with mock.patch.object(contract, 'Server', return_value=server), \
+                mock.patch.object(contract, 'request', return_value=b'GET'), \
+                mock.patch.object(contract, 'tcp_exchange', reset):
+            with self.assertRaises(contract.ExchangeStarved) as caught:
+                contract.observe('bin', 'home', 1, {}, None, 'tcp-short', None, result, 1)
+        self.assertEqual(caught.exception.details['case'], 'initialize')
+        server.close.assert_called_once()
 
 
 if __name__ == '__main__':

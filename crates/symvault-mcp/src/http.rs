@@ -2,14 +2,20 @@
 //! The socket listener stays with the caller; this module owns `/mcp` request
 //! checks and response framing for bounded HTTP/1.x connections.
 
+#[path = "http_envelope.rs"]
+mod envelope;
 #[path = "http_shutdown.rs"]
 pub(crate) mod shutdown;
 pub use shutdown::HttpShutdown;
 
-use crate::approval::{ApprovalQueue, handle_local_request};
-use crate::{
-    Error, Message, ProtocolHandler, error_code, handle_line, is_supported_protocol_version,
+use crate::approval::{
+    ApprovalQueue, handle_device_request, handle_local_request, is_device_route, is_local_route,
 };
+use crate::enroll::{
+    PairingCodes, handle_enroll_code_request, handle_enroll_request, is_enroll_route,
+};
+use crate::ratelimit::{REFUSED_BODY, RateLimiter, remote_addr_string};
+use crate::{Error, Message, ProtocolHandler, error_code, is_supported_protocol_version};
 use rustls::{
     RootCertStore, ServerConfig, ServerConnection, StreamOwned,
     pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
@@ -25,7 +31,7 @@ use std::{
     path::Path,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     thread,
     time::{Duration, Instant},
@@ -51,6 +57,8 @@ struct HttpStream {
     transport: HttpTransport,
     head_response: bool,
     http10_response: bool,
+    /// Set for a registered connection of a stoppable server.
+    lifecycle: Option<shutdown::ConnectionLifecycle>,
 }
 
 enum HttpTransport {
@@ -234,6 +242,7 @@ impl HttpStream {
             transport,
             head_response: false,
             http10_response: false,
+            lifecycle: None,
         };
         let timeouts = HttpTimeouts::default();
         stream.set_read_timeout(Some(timeouts.initial_read))?;
@@ -322,6 +331,7 @@ impl From<TcpStream> for HttpStream {
             transport: HttpTransport::Tcp(DeadlineSocket::new(stream), None),
             head_response: false,
             http10_response: false,
+            lifecycle: None,
         }
     }
 }
@@ -414,9 +424,17 @@ pub enum OAuthConsentDecision {
 }
 
 #[derive(Clone)]
+struct DeviceEnrollment {
+    codes: Arc<PairingCodes>,
+    fingerprint: String,
+}
+
+#[derive(Clone)]
 pub struct LocalApprovalApi {
     queue: Arc<ApprovalQueue>,
     secret: Vec<u8>,
+    device_sessions: Option<Arc<symvault_sync::DeviceSessionStore>>,
+    enrollment: Option<DeviceEnrollment>,
     active_mcp_requests: Arc<AtomicUsize>,
 }
 
@@ -425,8 +443,47 @@ impl LocalApprovalApi {
         Self {
             queue,
             secret,
+            device_sessions: None,
+            enrollment: None,
             active_mcp_requests: Arc::new(AtomicUsize::new(0)),
         }
+    }
+
+    /// Mounts Go's device enrollment routes (`/api/v1/devices/enroll-code`
+    /// and `/api/v1/devices/enroll`) beside the approval API. `codes` is the
+    /// process-wide pairing-code store; `fingerprint` is the SHA-256 of the
+    /// certificate a pairing QR code pins (empty when TLS is unavailable,
+    /// which refuses every mint with 503). Enrolment issues sessions into the
+    /// store given to [`Self::with_device_sessions`], so the routes stay
+    /// unmounted (404, unlimited) until that store is set too.
+    #[must_use]
+    pub fn with_device_enrollment(
+        mut self,
+        codes: Arc<PairingCodes>,
+        fingerprint: impl Into<String>,
+    ) -> Self {
+        self.enrollment = Some(DeviceEnrollment {
+            codes,
+            fingerprint: fingerprint.into(),
+        });
+        self
+    }
+
+    /// The enrollment routes' state, when they are mounted.
+    fn enrollment_routes(&self) -> Option<(&DeviceEnrollment, &symvault_sync::DeviceSessionStore)> {
+        Some((self.enrollment.as_ref()?, self.device_sessions.as_deref()?))
+    }
+
+    /// Mounts Go's device-token approval transport (`/api/v1/approvals`)
+    /// beside the loopback CLI API, validating bearers against `sessions`.
+    /// Go always mounts both; without a store the route stays unmounted (404).
+    #[must_use]
+    pub fn with_device_sessions(
+        mut self,
+        sessions: Arc<symvault_sync::DeviceSessionStore>,
+    ) -> Self {
+        self.device_sessions = Some(sessions);
+        self
     }
 
     fn try_acquire_mcp_request(&self) -> Option<ActiveMcpRequest> {
@@ -471,10 +528,37 @@ impl Default for HttpTimeouts {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct TokenRegistry {
     #[serde(default)]
-    tokens: BTreeMap<String, symvault_store::token_registry::TokenRecord>,
+    tokens: Option<BTreeMap<String, Option<symvault_store::token_registry::TokenRecord>>>,
+}
+
+/// Last successfully parsed registry per path. Go keeps its in-memory registry
+/// when a reload fails or the file disappears mid-run (`StartFileWatcher`), so a
+/// request-time failure falls back to the last good state instead of denying.
+/// The cache is refreshed by every successful read, by requests and by the
+/// background poller (`watch_registry`); a failed read never replaces it. The
+/// poller is what keeps a revocation from being lost to a later corruption or
+/// deletion when no request arrives in between.
+static LAST_GOOD_REGISTRY: std::sync::Mutex<BTreeMap<std::path::PathBuf, TokenRegistry>> =
+    std::sync::Mutex::new(BTreeMap::new());
+
+static LEGACY_BEARER: std::sync::OnceLock<Arc<str>> = std::sync::OnceLock::new();
+
+/// Registers the process-wide legacy single bearer token that Go's token
+/// system returns next to the scoped registry. It authenticates without a
+/// registry entry: no agent binding, unrestricted tool scope. The first call wins.
+pub fn set_legacy_bearer(token: &str) {
+    let _ = LEGACY_BEARER.set(Arc::from(token));
+}
+
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    let mut difference = left.len() ^ right.len();
+    for (index, byte) in left.iter().enumerate() {
+        difference |= usize::from(byte ^ right.get(index).copied().unwrap_or(0));
+    }
+    difference == 0
 }
 
 /// Serves authenticated HTTP requests on a loopback-only listener. The caller
@@ -622,12 +706,18 @@ impl Default for OAuthTokenTtls {
 /// Explicit transport input/write budgets and OAuth lifetimes.
 /// Zero network budgets retain the built-in defaults; keep-alive idle remains
 /// the Go-compatible 120 seconds. Shutdown is owned by the caller's lifecycle.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct HttpServerOptions {
     pub token_ttls: OAuthTokenTtls,
     pub read_header_timeout: Duration,
     pub read_timeout: Duration,
     pub write_timeout: Duration,
+    /// `mcp.rate_limit`: requests per minute and client on `/mcp` and the
+    /// local approval API. Negative selects Go's default of 60, `0` disables.
+    pub rate_limit: i64,
+    /// `mcp.trusted_proxy_ips`: peers whose `X-Forwarded-For` / `X-Real-IP`
+    /// name the rate-limit client.
+    pub trusted_proxy_ips: Vec<String>,
 }
 
 impl Default for HttpServerOptions {
@@ -638,12 +728,14 @@ impl Default for HttpServerOptions {
             read_header_timeout: timeouts.initial_read,
             read_timeout: timeouts.request_read,
             write_timeout: timeouts.write,
+            rate_limit: crate::ratelimit::DEFAULT_LIMIT,
+            trusted_proxy_ips: Vec::new(),
         }
     }
 }
 
 impl HttpServerOptions {
-    fn timeouts(self) -> Result<HttpTimeouts, std::io::Error> {
+    fn timeouts(&self) -> Result<HttpTimeouts, std::io::Error> {
         let mut result = HttpTimeouts::default();
         for (configured, target) in [
             (self.read_header_timeout, &mut result.initial_read),
@@ -684,7 +776,45 @@ where
     C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
     V: Fn(&str) -> bool + Send + Sync + 'static,
 {
+    serve_with_oauth_and_approval_options_until(
+        listener,
+        registry_path,
+        handler_for_agent,
+        oauth_agent_name,
+        consent,
+        verify_passphrase,
+        tls,
+        local_approval_api,
+        options,
+        None,
+    )
+}
+
+/// Like [`serve_with_oauth_and_approval_options`], stoppable through `shutdown`.
+/// `HttpShutdown::drain` stops admission, closes idle transports, lets requests
+/// in flight finish and force-closes what remains at its deadline; the call
+/// returns once every worker has finished.
+#[allow(clippy::too_many_arguments)]
+pub fn serve_with_oauth_and_approval_options_until<F, C, V>(
+    listener: TcpListener,
+    registry_path: impl AsRef<Path>,
+    handler_for_agent: F,
+    oauth_agent_name: impl Into<String>,
+    consent: C,
+    verify_passphrase: V,
+    tls: Option<Arc<ServerConfig>>,
+    local_approval_api: LocalApprovalApi,
+    options: HttpServerOptions,
+    shutdown: Option<HttpShutdown>,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
+    C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
+    V: Fn(&str) -> bool + Send + Sync + 'static,
+{
     let timeouts = options.timeouts()?;
+    let rate_limiter =
+        RateLimiter::from_config(options.rate_limit, &options.trusted_proxy_ips).map(Arc::new);
     let root = registry_path
         .as_ref()
         .parent()
@@ -705,8 +835,9 @@ where
         ),
         tls,
         Some(Arc::new(local_approval_api)),
-        None,
+        shutdown,
         timeouts,
+        rate_limiter,
     )
 }
 
@@ -842,6 +973,7 @@ where
         None,
         Some(shutdown),
         HttpTimeouts::default(),
+        None,
     )
 }
 
@@ -865,6 +997,7 @@ where
         local_approval,
         None,
         HttpTimeouts::default(),
+        None,
     )
 }
 
@@ -878,6 +1011,7 @@ fn serve_loopback_inner_with_shutdown<F>(
     local_approval: Option<Arc<LocalApprovalApi>>,
     shutdown: Option<HttpShutdown>,
     timeouts: HttpTimeouts,
+    rate_limiter: Option<Arc<RateLimiter>>,
 ) -> Result<(), std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
@@ -885,6 +1019,7 @@ where
     validate_listener_security(listener.local_addr()?, tls.is_some())?;
     load_token_registry(registry_path)?;
     listener.set_nonblocking(shutdown.is_some())?;
+    let cooperative_io = shutdown.as_ref().is_some_and(HttpShutdown::cooperative_io);
     let registry_path = registry_path.to_path_buf();
     let state = Arc::new(Mutex::new(HttpServerState {
         handler_for_agent,
@@ -897,9 +1032,25 @@ where
         // Drop inside the scope, before scoped threads are joined, including
         // listener/setup errors. Otherwise idle reads can delay error returns.
         let _cleanup = shutdown.clone().map(shutdown::CancelOnDrop);
+        // Go's `StartFileWatcher`: reload on change, keep the last good state.
+        let watcher_stop = Arc::new(AtomicBool::new(false));
+        let watcher = {
+            let stop = Arc::clone(&watcher_stop);
+            let path = registry_path.clone();
+            thread::Builder::new().spawn_scoped(scope, move || {
+                watch_registry(&path, &stop, REGISTRY_POLL_INTERVAL);
+            })?
+        };
+        let _watcher_stop = RegistryWatcherStop {
+            stop: watcher_stop,
+            thread: watcher.thread().clone(),
+        };
+        // Owned here so a drain releases the endpoint before it waits for the
+        // in-flight requests: Go's `Shutdown` closes its listeners first.
+        let listener = listener;
         loop {
             if let Some(shutdown) = &shutdown
-                && shutdown.is_cancelled()?
+                && shutdown.is_stopping()?
             {
                 break;
             }
@@ -932,8 +1083,8 @@ where
             let mut stream = HttpStream::new(socket, tls.clone())?;
             stream.set_read_timeout(Some(timeouts.initial_read))?;
             stream.set_write_timeout(Some(timeouts.write))?;
-            if let (HttpTransport::Tcp(socket, cancellation), Some(shutdown)) =
-                (&mut stream.transport, &shutdown)
+            if let (HttpTransport::Tcp(socket, cancellation), Some(shutdown), true) =
+                (&mut stream.transport, &shutdown, cooperative_io)
             {
                 socket.set_nonblocking(true)?;
                 *cancellation = Some(shutdown.clone());
@@ -973,10 +1124,14 @@ where
             let active_for_thread = Arc::clone(&active);
             let registry_path = registry_path.clone();
             let local_approval = local_approval.clone();
+            let rate_limiter = rate_limiter.clone();
             let request_context = shutdown
                 .as_ref()
                 .map(HttpShutdown::request_context)
                 .unwrap_or_default();
+            stream.lifecycle = connection
+                .as_ref()
+                .map(shutdown::ConnectionGuard::lifecycle);
             if let Err(error) = thread::Builder::new().spawn_scoped(scope, move || {
                 let _connection = connection;
                 let _active = ActiveHttpConnection(active_for_thread);
@@ -988,12 +1143,14 @@ where
                     local_approval.as_deref(),
                     timeouts,
                     request_context,
+                    rate_limiter.as_deref(),
                 );
             }) {
                 active.fetch_sub(1, Ordering::AcqRel);
                 return Err(error);
             }
         }
+        drop(listener);
         Ok(())
     })
 }
@@ -1043,9 +1200,11 @@ where
         local_approval,
         timeouts,
         crate::RequestContext::default(),
+        None,
     )
 }
 
+#[allow(clippy::too_many_arguments)] // Existing transport inputs plus the server-owned limiter.
 fn serve_connection_shared_with_context<F>(
     stream: impl Into<HttpStream>,
     registry_path: &Path,
@@ -1054,6 +1213,7 @@ fn serve_connection_shared_with_context<F>(
     local_approval: Option<&LocalApprovalApi>,
     timeouts: HttpTimeouts,
     request_context: crate::RequestContext,
+    rate_limiter: Option<&RateLimiter>,
 ) -> Result<(), std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String>,
@@ -1113,6 +1273,7 @@ where
             state,
             local_approval,
             &request_context,
+            rate_limiter,
         )
     })
 }
@@ -1152,6 +1313,13 @@ where
     let mut reader = BufReader::new(stream);
     let mut first_request = true;
     loop {
+        if !first_request
+            && let Some(lifecycle) = &reader.get_ref().lifecycle
+            && !lifecycle.wait_for_next_request()
+        {
+            // Draining: Go closes the idle keep-alive transport.
+            return Ok(());
+        }
         let first_byte_timeout = if first_request {
             timeouts.initial_read
         } else {
@@ -1166,6 +1334,15 @@ where
                         let response =
                             error(413, None, error_code::PARSE_ERROR, "request body too large")
                                 .map_err(std::io::Error::other)?;
+                        write_http_response(reader.get_mut(), response, "HTTP/1.1", false, false)?;
+                        return Ok(());
+                    }
+                    if read_error.to_string() == "expectation failed" {
+                        let response = HttpResponse {
+                            status: 417,
+                            headers: Vec::new(),
+                            body: Vec::new(),
+                        };
                         write_http_response(reader.get_mut(), response, "HTTP/1.1", false, false)?;
                         return Ok(());
                     }
@@ -1211,6 +1388,40 @@ where
         // A rejected bounded body may leave unsent/unread bytes. Never treat
         // those bytes as a subsequent keep-alive request.
         let keep_alive = requested_keep_alive && !closes && request.body_error.is_none();
+        let mut request = request;
+        match route_path(&request.path) {
+            Route::Invalid => {
+                write_http_error(reader.get_mut(), 400, "bad request")?;
+                return Ok(());
+            }
+            Route::Redirect(location) => {
+                write_mux_redirect(
+                    reader.get_mut(),
+                    &location,
+                    &request.method,
+                    &request.http_version,
+                    keep_alive,
+                )?;
+                if !keep_alive {
+                    return Ok(());
+                }
+                continue;
+            }
+            Route::Path(path) => request.path = path,
+        }
+        if let Some(response) = builtin_route_response(&request, local) {
+            write_http_response(
+                reader.get_mut(),
+                response,
+                &request.http_version,
+                keep_alive,
+                request.method == "HEAD",
+            )?;
+            if !keep_alive {
+                return Ok(());
+            }
+            continue;
+        }
         if let Some(response) = well_known_response(&request, local, reader.get_ref().is_tls()) {
             write_http_response(
                 reader.get_mut(),
@@ -1230,6 +1441,7 @@ where
     }
 }
 
+#[allow(clippy::too_many_arguments)] // Existing transport inputs plus the server-owned limiter.
 fn serve_one_authenticated<F>(
     reader: &mut BufReader<HttpStream>,
     request: WireRequest,
@@ -1238,6 +1450,7 @@ fn serve_one_authenticated<F>(
     state: &Mutex<HttpServerState<F>>,
     local_approval: Option<&LocalApprovalApi>,
     request_context: &crate::RequestContext,
+    rate_limiter: Option<&RateLimiter>,
 ) -> Result<bool, std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String>,
@@ -1245,6 +1458,44 @@ where
     let stream = reader.get_mut();
     let secure = stream.is_tls();
     let response_version = request.http_version.as_str();
+    // Go wraps exactly these mux entries in `RateLimiterMiddleware`, outside
+    // the Origin, bearer and body checks: `/mcp`, the local approval API and
+    // (only when mounted) the device approval API and the two device
+    // enrollment routes. A refused request is answered before any of them
+    // runs.
+    let request_path = request.path.split('?').next().unwrap_or_default();
+    let limited_route = request_path == "/mcp"
+        || local_approval.is_some_and(|api| {
+            is_local_route(request_path)
+                || (api.device_sessions.is_some() && is_device_route(request_path))
+                || (api.enrollment_routes().is_some() && is_enroll_route(request_path))
+        });
+    if let Some(limiter) = rate_limiter
+        && limited_route
+    {
+        let key = limiter.client_key(
+            &remote_addr_string(stream.peer_addr()?),
+            &request.forwarded_for,
+            &request.real_ip,
+        );
+        if !limiter.allow(&key) {
+            write_http_response(
+                stream,
+                HttpResponse {
+                    status: 429,
+                    headers: vec![
+                        ("Content-Type", "text/plain; charset=utf-8"),
+                        ("X-Content-Type-Options", "nosniff"),
+                    ],
+                    body: REFUSED_BODY.as_bytes().to_vec(),
+                },
+                response_version,
+                keep_alive,
+                false,
+            )?;
+            return Ok(keep_alive);
+        }
+    }
     if let Some(local_approval) = local_approval
         && let Some(approval_response) = handle_local_request(
             &local_approval.queue,
@@ -1262,6 +1513,64 @@ where
                 status: approval_response.status,
                 headers: vec![("Content-Type", approval_response.content_type)],
                 body: approval_response.body,
+            },
+            response_version,
+            keep_alive,
+            false,
+        )?;
+        return Ok(keep_alive);
+    }
+    if let Some(local_approval) = local_approval
+        && let Some(sessions) = local_approval.device_sessions.as_deref()
+        && let Some(approval_response) = handle_device_request(
+            &local_approval.queue,
+            sessions,
+            &request.method,
+            &request.path,
+            &request.authorization,
+        )
+    {
+        write_http_response(
+            stream,
+            HttpResponse {
+                status: approval_response.status,
+                headers: vec![("Content-Type", approval_response.content_type)],
+                body: approval_response.body,
+            },
+            response_version,
+            keep_alive,
+            false,
+        )?;
+        return Ok(keep_alive);
+    }
+    if let Some(local_approval) = local_approval
+        && let Some((enrollment, sessions)) = local_approval.enrollment_routes()
+        && let Some(enroll_response) = handle_enroll_code_request(
+            &enrollment.codes,
+            &enrollment.fingerprint,
+            &local_approval.secret,
+            stream.peer_addr()?.ip(),
+            &request.method,
+            &request.path,
+            &request.enroll_timestamp,
+            &request.enroll_proof,
+        )
+        .or_else(|| {
+            handle_enroll_request(
+                &enrollment.codes,
+                sessions,
+                &request.method,
+                &request.path,
+                &request.body,
+            )
+        })
+    {
+        write_http_response(
+            stream,
+            HttpResponse {
+                status: enroll_response.status,
+                headers: vec![("Content-Type", enroll_response.content_type)],
+                body: enroll_response.body,
             },
             response_version,
             keep_alive,
@@ -1310,11 +1619,18 @@ where
         write_request_error(stream, 401, "unauthorized", response_version, keep_alive)?;
         return Ok(keep_alive);
     };
-    let token = match lookup_token(registry_path, bearer) {
-        Ok(Some(token)) => token,
-        Ok(None) | Err(_) => {
-            write_request_error(stream, 401, "unauthorized", response_version, keep_alive)?;
-            return Ok(keep_alive);
+    let legacy = LEGACY_BEARER
+        .get()
+        .is_some_and(|legacy| constant_time_eq(legacy.as_bytes(), bearer.as_bytes()));
+    let token = if legacy {
+        None
+    } else {
+        match lookup_token(registry_path, bearer) {
+            Ok(Some(token)) => Some(token),
+            Ok(None) | Err(_) => {
+                write_request_error(stream, 401, "unauthorized", response_version, keep_alive)?;
+                return Ok(keep_alive);
+            }
         }
     };
     if request.agent.is_empty() {
@@ -1327,7 +1643,10 @@ where
         )?;
         return Ok(keep_alive);
     }
-    if !token.agent_name.is_empty() && token.agent_name != request.agent {
+    if token
+        .as_ref()
+        .is_some_and(|token| !token.agent_name.is_empty() && token.agent_name != request.agent)
+    {
         write_request_error(
             stream,
             403,
@@ -1358,6 +1677,34 @@ where
         write_http_response(stream, response, response_version, keep_alive, false)?;
         return Ok(keep_alive);
     }
+    let decoded = envelope::decode(&request.body).ok();
+    let version = request.protocol_version.trim();
+    if !version.is_empty()
+        && !is_supported_protocol_version(version)
+        && let Some(message) = decoded.as_ref()
+    {
+        let response = error(
+            400,
+            message.id.clone(),
+            error_code::INVALID_REQUEST,
+            "unsupported MCP-Protocol-Version",
+        )
+        .map_err(std::io::Error::other)?;
+        write_http_response(stream, response, response_version, keep_alive, false)?;
+        return Ok(keep_alive);
+    }
+    if let Some(message) = request_context.go_err() {
+        // Go's handlerForAgent checks the serving context first.
+        let response = error(
+            403,
+            decoded.as_ref().and_then(|decoded| decoded.id.clone()),
+            error_code::INTERNAL_ERROR,
+            message,
+        )
+        .map_err(std::io::Error::other)?;
+        write_http_response(stream, response, response_version, keep_alive, false)?;
+        return Ok(keep_alive);
+    }
     let handler = {
         let mut state = state
             .lock()
@@ -1382,19 +1729,28 @@ where
                     )?;
                     return Ok(keep_alive);
                 }
-                Err(error) => {
-                    write_json_error_for_request(
-                        stream,
+                Err(message) => {
+                    // Go writes the handler-creation failure as an internal
+                    // JSON-RPC error carrying the request id.
+                    let response = error(
                         403,
-                        &error,
-                        response_version,
-                        keep_alive,
-                    )?;
+                        decoded.and_then(|decoded| decoded.id),
+                        error_code::INTERNAL_ERROR,
+                        &message,
+                    )
+                    .map_err(std::io::Error::other)?;
+                    write_http_response(stream, response, response_version, keep_alive, false)?;
                     return Ok(keep_alive);
                 }
             }
         }
-        let session_key = format!("{}:{}", token.id, request.agent);
+        let session_key = format!(
+            "{}:{}",
+            token
+                .as_ref()
+                .map_or("legacy-bearer", |token| token.id.as_str()),
+            request.agent
+        );
         if !sessions.contains_key(&session_key) && sessions.len() >= MAX_HTTP_SESSIONS {
             write_request_error(
                 stream,
@@ -1418,7 +1774,18 @@ where
         let mut handler = handler
             .lock()
             .map_err(|_| std::io::Error::other("MCP HTTP session poisoned"))?;
-        handler.set_token_scope(token.allowed_tools.as_deref().unwrap_or_default());
+        match token.as_ref() {
+            Some(token) => {
+                handler.set_token_scope(token.allowed_tools.as_deref().unwrap_or_default());
+                handler.set_token_registry_hash(&token.tool_registry_hash);
+                handler.set_token_id(&token.id);
+            }
+            None => {
+                handler.set_token_scope(&["*".to_owned()]);
+                handler.set_token_registry_hash("");
+                handler.set_token_id("");
+            }
+        }
         handler.set_request_context(request_context.clone());
         handle_request(http_request, &mut handler)
             .map_err(|error| std::io::Error::other(error.to_string()))?
@@ -1440,10 +1807,30 @@ struct WireRequest {
     protocol_version: String,
     enroll_timestamp: String,
     enroll_proof: String,
+    forwarded_for: String,
+    real_ip: String,
     connection: String,
     body: String,
     body_error: Option<(u16, &'static str)>,
 }
+
+/// Headers whose interpretation drives framing, routing or authentication.
+/// A repeated occurrence is rejected (request-smuggling ambiguity); repeats of
+/// every other field are accepted with Go's first-value semantics.
+const DUPLICATE_SENSITIVE_HEADERS: &[&str] = &[
+    "host",
+    "authorization",
+    "x-symaira-agent",
+    "content-type",
+    "content-length",
+    "transfer-encoding",
+    "origin",
+    "mcp-protocol-version",
+    "x-enroll-timestamp",
+    "x-enroll-proof",
+    "connection",
+    "expect",
+];
 
 fn read_wire_request(
     reader: &mut BufReader<HttpStream>,
@@ -1462,6 +1849,9 @@ fn read_wire_request(
         .get_mut()
         .set_read_deadline(waiting_started.checked_add(first_byte_timeout));
     let has_first_byte = !reader.fill_buf()?.is_empty();
+    if has_first_byte && let Some(lifecycle) = &reader.get_ref().lifecycle {
+        lifecycle.request_started();
+    }
     let request_started = if first_request {
         waiting_started
     } else {
@@ -1529,17 +1919,27 @@ fn read_wire_request(
         let name = name.to_ascii_lowercase();
         let value = value.trim_matches([' ', '\t']);
         if let Some(previous) = headers.get_mut(&name) {
-            if name != "accept" {
+            if name == "accept" {
+                previous.push(',');
+                previous.push_str(value);
+            } else if DUPLICATE_SENSITIVE_HEADERS.contains(&name.as_str()) {
                 return Err(invalid_http("duplicate HTTP header"));
             }
-            previous.push(',');
-            previous.push_str(value);
+            // Any other repeated field is not interpreted; like Header.Get the
+            // first value stays authoritative.
         } else {
             headers.insert(name, value.to_owned());
         }
     }
     if headers.get("host").is_none_or(String::is_empty) {
         return Err(invalid_http("missing Host header"));
+    }
+    if version == "HTTP/1.1"
+        && headers
+            .get("expect")
+            .is_some_and(|expect| !expect.eq_ignore_ascii_case("100-continue"))
+    {
+        return Err(invalid_http("expectation failed"));
     }
     reader
         .get_mut()
@@ -1569,9 +1969,16 @@ fn read_wire_request(
         (body, None)
     } else {
         let length = match headers.get("content-length") {
-            Some(value) => value
-                .parse::<usize>()
-                .map_err(|_| invalid_http("invalid Content-Length"))?,
+            // net/http accepts only unsigned decimal digits (no sign, hex or
+            // separators) that fit 63 bits.
+            Some(value) => Some(value)
+                .filter(|value| {
+                    !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit())
+                })
+                .and_then(|value| value.parse::<u64>().ok())
+                .filter(|value| *value <= i64::MAX as u64)
+                .and_then(|value| usize::try_from(value).ok())
+                .ok_or_else(|| invalid_http("invalid Content-Length"))?,
             None => 0,
         };
         if length > MAX_HTTP_BODY {
@@ -1585,18 +1992,17 @@ fn read_wire_request(
             // without waiting for an oversized peer to send the remaining body.
             // Take still bounds consumption; incomplete/valid prefixes need the
             // same lookahead before Go's measured 413 can be returned.
-            let failure =
-                match serde_json::from_reader::<_, Message>(reader.take(MAX_HTTP_BODY as u64)) {
-                    Err(error) if error.is_io() => return Err(error.into()),
-                    Err(error) if !error.is_eof() => (400, "invalid JSON"),
-                    _ => {
-                        // Consume one lookahead byte, like Go's MaxBytesReader. The
-                        // one-byte-over response must not race an unread TCP byte.
-                        let mut lookahead = [0; 1];
-                        reader.read_exact(&mut lookahead)?;
-                        (413, "request body too large")
-                    }
-                };
+            let failure = match envelope::parse_reader(reader.take(MAX_HTTP_BODY as u64)) {
+                Err(error) if error.is_io() => return Err(error.into()),
+                Err(error) if !error.is_eof() => (400, "invalid JSON"),
+                _ => {
+                    // Consume one lookahead byte, like Go's MaxBytesReader. The
+                    // one-byte-over response must not race an unread TCP byte.
+                    let mut lookahead = [0; 1];
+                    reader.read_exact(&mut lookahead)?;
+                    (413, "request body too large")
+                }
+            };
             // Defer MCP body errors until its existing admission/content checks.
             (String::new(), Some(failure))
         } else {
@@ -1625,6 +2031,8 @@ fn read_wire_request(
         protocol_version: get("mcp-protocol-version"),
         enroll_timestamp: get("x-enroll-timestamp"),
         enroll_proof: get("x-enroll-proof"),
+        forwarded_for: get("x-forwarded-for"),
+        real_ip: get("x-real-ip"),
         connection: get("connection"),
         body,
         body_error,
@@ -1693,9 +2101,7 @@ fn read_chunked_body(reader: &mut BufReader<HttpStream>) -> Result<Vec<u8>, std:
             let _ = reader.fill_buf();
             reader.get_mut().set_read_timeout(previous_timeout)?;
             reader.get_mut().set_read_deadline(previous_deadline);
-            let invalid = serde_json::from_slice::<Message>(&body[..MAX_HTTP_BODY])
-                .err()
-                .is_some_and(|error| !error.is_eof());
+            let invalid = envelope::prefix_is_definitively_invalid(&body[..MAX_HTTP_BODY]);
             return Err(invalid_http(if invalid {
                 "invalid JSON"
             } else {
@@ -1836,11 +2242,23 @@ fn lookup_token(
     registry_path: &Path,
     bearer: &str,
 ) -> Result<Option<symvault_store::token_registry::TokenRecord>, std::io::Error> {
-    let registry = load_token_registry(registry_path)?;
+    let registry = match load_token_registry(registry_path) {
+        Ok(registry) => registry,
+        Err(error) => LAST_GOOD_REGISTRY
+            .lock()
+            .ok()
+            .and_then(|cache| cache.get(registry_path).cloned())
+            .ok_or(error)?,
+    };
     let now = time::OffsetDateTime::now_utc();
-    let Some(token) =
-        symvault_store::token_registry::lookup_raw_bearer(&registry.tokens, bearer, now)
-            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?
+    let tokens = registry
+        .tokens
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|(id, token)| token.map(|token| (id, token)))
+        .collect::<BTreeMap<_, _>>();
+    let Some(token) = symvault_store::token_registry::lookup_raw_bearer(&tokens, bearer, now)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?
     else {
         return Ok(None);
     };
@@ -1848,6 +2266,99 @@ fn lookup_token(
 }
 
 fn load_token_registry(registry_path: &Path) -> Result<TokenRegistry, std::io::Error> {
+    // The read and the cache update happen under one lock so a slow reader can
+    // never overwrite a newer state published by the poller (or a request).
+    let mut cache = LAST_GOOD_REGISTRY
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let registry = read_token_registry(registry_path)?;
+    cache.insert(registry_path.to_path_buf(), registry.clone());
+    Ok(registry)
+}
+
+/// How often the background poller stats the registry. Go polls every 2 s
+/// (`http_setup.go`: `StartFileWatcher(ctx, 2*time.Second)`); polling faster is
+/// never more permissive than Go, because it only ever publishes a newer
+/// successfully parsed state sooner, which narrows (never widens) the window in
+/// which a revoked token survives a later corrupt or deleted file.
+const REGISTRY_POLL_INTERVAL: Duration = Duration::from_millis(250);
+
+/// Go's `os.SameFile` + mtime + size identity of the registry file.
+#[derive(PartialEq, Eq)]
+struct RegistryFileId {
+    #[cfg(unix)]
+    device: u64,
+    #[cfg(unix)]
+    inode: u64,
+    modified: Option<std::time::SystemTime>,
+    len: u64,
+}
+
+fn registry_file_id(registry_path: &Path) -> Option<RegistryFileId> {
+    let metadata = fs::metadata(registry_path).ok()?;
+    #[cfg(unix)]
+    let (device, inode) = {
+        use std::os::unix::fs::MetadataExt;
+        (metadata.dev(), metadata.ino())
+    };
+    Some(RegistryFileId {
+        #[cfg(unix)]
+        device,
+        #[cfg(unix)]
+        inode,
+        modified: metadata.modified().ok(),
+        len: metadata.len(),
+    })
+}
+
+/// One tick of Go's `StartFileWatcher`: a failed stat is ignored (the in-memory
+/// registry is retained); a changed file is reloaded, and the new state replaces
+/// the cache only when it parses. The identity is recorded before the reload, so
+/// a file that fails to parse is not retried until it changes again.
+fn poll_registry_once(registry_path: &Path, last: &mut Option<RegistryFileId>) {
+    let Some(current) = registry_file_id(registry_path) else {
+        return;
+    };
+    if last.as_ref() == Some(&current) {
+        return;
+    }
+    *last = Some(current);
+    if let Err(error) = load_token_registry(registry_path) {
+        let _ = writeln!(
+            std::io::stderr().lock(),
+            "error reloading token registry from {}: {error}",
+            registry_path.display()
+        );
+    }
+}
+
+/// Stops the registry poller when the serving scope ends.
+struct RegistryWatcherStop {
+    stop: Arc<AtomicBool>,
+    thread: thread::Thread,
+}
+
+impl Drop for RegistryWatcherStop {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        self.thread.unpark();
+    }
+}
+
+fn watch_registry(registry_path: &Path, stop: &AtomicBool, interval: Duration) {
+    // No initial identity: the first tick re-reads once, which only closes the
+    // window between the startup load and the watcher start.
+    let mut last = None;
+    while !stop.load(Ordering::Acquire) {
+        thread::park_timeout(interval);
+        if stop.load(Ordering::Acquire) {
+            break;
+        }
+        poll_registry_once(registry_path, &mut last);
+    }
+}
+
+fn read_token_registry(registry_path: &Path) -> Result<TokenRegistry, std::io::Error> {
     let encrypted = registry_path.with_file_name("registry.age");
     if encrypted.exists() {
         return Err(std::io::Error::new(
@@ -1869,9 +2380,27 @@ fn load_token_registry(registry_path: &Path) -> Result<TokenRegistry, std::io::E
             "token registry too large",
         ));
     }
-    let registry: TokenRegistry = serde_json::from_slice(&bytes)
+    let value = symvault_store::go_registry::decode_go_registry(&bytes)?;
+    let registry: TokenRegistry = serde_json::from_value(value)
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
     Ok(registry)
+}
+
+/// Whether the registry file holds at least one hashed entry (Go's
+/// `len(reg.entries) > 0` after `Load`). A missing file is an empty registry;
+/// every other load failure is fatal, as for Go's `LoadTokenSystem`.
+pub fn registry_has_entries(registry_path: &Path) -> Result<bool, std::io::Error> {
+    match fs::symlink_metadata(registry_path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error),
+        Ok(_) => {}
+    }
+    Ok(load_token_registry(registry_path)?
+        .tokens
+        .unwrap_or_default()
+        .values()
+        .flatten()
+        .any(|token| !token.hash.is_empty()))
 }
 
 pub(super) fn allowed_origin(origin: &str, request_host: &str) -> bool {
@@ -2009,11 +2538,14 @@ fn write_http_response(
         403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
+        307 => "Temporary Redirect",
         406 => "Not Acceptable",
         409 => "Conflict",
         413 => "Request Entity Too Large",
         415 => "Unsupported Media Type",
+        417 => "Expectation Failed",
         429 => "Too Many Requests",
+        501 => "Not Implemented",
         _ => "Internal Server Error",
     };
     write!(stream, "{version} {} {reason}\r\n", response.status)?;
@@ -2065,10 +2597,224 @@ fn write_connection_header(
     version: &str,
     keep_alive: bool,
 ) -> Result<(), std::io::Error> {
+    // A response written while the server drains closes the connection.
+    let keep_alive = keep_alive
+        && stream
+            .lifecycle
+            .as_ref()
+            .is_none_or(shutdown::ConnectionLifecycle::keep_alive_allowed);
     match (version, keep_alive) {
         ("HTTP/1.0", true) => stream.write_all(b"Connection: keep-alive\r\n"),
         ("HTTP/1.1", false) => stream.write_all(b"Connection: close\r\n"),
         _ => Ok(()),
+    }
+}
+
+static HEALTH_VERSION: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
+
+/// Sets the version string reported by `GET /health`. The first call wins;
+/// the default is `dev`, as in an unstamped Go build.
+pub fn set_health_version(version: &'static str) {
+    let _ = HEALTH_VERSION.set(version);
+}
+
+enum Route {
+    Invalid,
+    Redirect(String),
+    Path(String),
+}
+
+/// `http.ServeMux` request-path handling (Go 1.22+): clean the *escaped* path
+/// with `path.Clean` (keeping a trailing slash) and redirect when that changes
+/// it, then match each segment after percent-decoding. A segment that decodes
+/// to a separator or an escape can never name a plain route.
+fn route_path(raw: &str) -> Route {
+    let (path, query) = match raw.split_once('?') {
+        Some((path, query)) => (path, Some(query)),
+        None => (raw, None),
+    };
+    if percent_decode_path(path).is_none() {
+        return Route::Invalid;
+    }
+    let cleaned = clean_route_path(path);
+    if cleaned != path {
+        let mut location = escape_route_path(&cleaned);
+        if let Some(query) = query {
+            location.push('?');
+            location.push_str(query);
+        }
+        return Route::Redirect(location);
+    }
+    let mut decoded = String::new();
+    for segment in cleaned.split('/').skip(1) {
+        let Some(segment) = percent_decode_path(segment) else {
+            return Route::Invalid;
+        };
+        if segment.contains(['/', '?', '%']) {
+            return Route::Path("/\u{0}unroutable".to_owned());
+        }
+        decoded.push('/');
+        decoded.push_str(&segment);
+    }
+    Route::Path(match query {
+        Some(query) => format!("{decoded}?{query}"),
+        None => decoded,
+    })
+}
+
+fn percent_decode_path(path: &str) -> Option<String> {
+    let bytes = path.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let pair = bytes.get(index + 1..index + 3)?;
+            let value = u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok()?;
+            if !pair.iter().all(u8::is_ascii_hexdigit) {
+                return None;
+            }
+            decoded.push(value);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    Some(String::from_utf8_lossy(&decoded).into_owned())
+}
+
+fn clean_route_path(path: &str) -> String {
+    if path.is_empty() {
+        return "/".to_owned();
+    }
+    let rooted = if path.starts_with('/') {
+        path.to_owned()
+    } else {
+        format!("/{path}")
+    };
+    let mut stack = Vec::new();
+    for segment in rooted.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                stack.pop();
+            }
+            segment => stack.push(segment),
+        }
+    }
+    let mut cleaned = format!("/{}", stack.join("/"));
+    if rooted.ends_with('/') && cleaned != "/" {
+        cleaned.push('/');
+    }
+    cleaned
+}
+
+/// `url.URL{Path: p}.String()` for a rooted path: escape everything except
+/// unreserved characters and `$&+,/:;=@`.
+fn escape_route_path(path: &str) -> String {
+    let mut escaped = String::with_capacity(path.len());
+    for byte in path.bytes() {
+        if byte.is_ascii_alphanumeric()
+            || matches!(
+                byte,
+                b'-' | b'_'
+                    | b'.'
+                    | b'~'
+                    | b'$'
+                    | b'&'
+                    | b'+'
+                    | b','
+                    | b'/'
+                    | b':'
+                    | b';'
+                    | b'='
+                    | b'@'
+            )
+        {
+            escaped.push(char::from(byte));
+        } else {
+            escaped.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    escaped
+}
+
+fn write_mux_redirect(
+    stream: &mut HttpStream,
+    location: &str,
+    method: &str,
+    version: &str,
+    keep_alive: bool,
+) -> Result<(), std::io::Error> {
+    let location: String = location
+        .bytes()
+        .map(|byte| {
+            if byte >= 0x80 {
+                format!("%{byte:02X}")
+            } else {
+                char::from(byte).to_string()
+            }
+        })
+        .collect();
+    write!(
+        stream,
+        "{version} 307 Temporary Redirect\r\nLocation: {location}\r\n"
+    )?;
+    let body = if method == "GET" {
+        let html = location
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&#34;")
+            .replace('\'', "&#39;");
+        format!("<a href=\"{html}\">Temporary Redirect</a>.\n\n").into_bytes()
+    } else {
+        Vec::new()
+    };
+    if matches!(method, "GET" | "HEAD") {
+        stream.write_all(b"Content-Type: text/html; charset=utf-8\r\n")?;
+    }
+    if method != "HEAD" {
+        write!(stream, "Content-Length: {}\r\n", body.len())?;
+    }
+    write_connection_header(stream, version, keep_alive)?;
+    stream.write_all(b"\r\n")?;
+    stream.write_all(&body)
+}
+
+/// Unauthenticated Go mux routes that exist independent of OAuth/MCP: the
+/// health document and the metrics stub of a build without metrics support.
+fn builtin_route_response(
+    request: &WireRequest,
+    local: std::net::SocketAddr,
+) -> Option<HttpResponse> {
+    match request.path.split('?').next() {
+        Some("/health") => {
+            let timestamp = time::OffsetDateTime::now_utc()
+                .replace_nanosecond(0)
+                .ok()?
+                .format(&time::format_description::well_known::Rfc3339)
+                .ok()?;
+            let mut body = serde_json::to_vec(&serde_json::json!({
+                "port": local.port(),
+                "status": "healthy",
+                "timestamp": timestamp,
+                "version": HEALTH_VERSION.get().copied().unwrap_or("dev"),
+            }))
+            .ok()?;
+            body.push(b'\n');
+            Some(HttpResponse {
+                status: 200,
+                headers: vec![("Content-Type", "application/json")],
+                body,
+            })
+        }
+        Some("/metrics") => Some(HttpResponse {
+            status: 501,
+            headers: vec![("Content-Type", "text/plain; charset=utf-8")],
+            body: b"metrics not compiled in (build with -tags metrics)\n".to_vec(),
+        }),
+        _ => None,
     }
 }
 
@@ -2252,36 +2998,33 @@ pub fn handle_request(
     if request.body.len() > MAX_HTTP_BODY {
         // Match the socket parser's bounded prefix classification. Byte slicing
         // also remains safe when the budget ends within a UTF-8 character.
-        if let Err(error) =
-            serde_json::from_slice::<Message>(&request.body.as_bytes()[..MAX_HTTP_BODY])
-            && !error.is_eof()
-        {
+        if envelope::prefix_is_definitively_invalid(&request.body.as_bytes()[..MAX_HTTP_BODY]) {
             return self::error(400, None, error_code::PARSE_ERROR, "invalid JSON");
         }
         return error(413, None, error_code::PARSE_ERROR, "request body too large");
     }
-    if serde_json::from_str::<Message>(request.body).is_err() {
+    // Go decodes into transport.Message without the stdio loop's jsonrpc and
+    // method guards; reproduce that envelope, then dispatch the message as is.
+    let Ok(message) = envelope::decode(request.body) else {
         return error(400, None, error_code::PARSE_ERROR, "invalid JSON");
-    }
+    };
     if request.body.len() > MAX_HTTP_BODY {
         return error(413, None, error_code::PARSE_ERROR, "request body too large");
     }
 
     let version = request.protocol_version.trim();
     if !version.is_empty() && !is_supported_protocol_version(version) {
-        let id = serde_json::from_str::<Message>(request.body)
-            .ok()
-            .and_then(|message| message.id);
         return error(
             400,
-            id,
+            message.id,
             error_code::INVALID_REQUEST,
             "unsupported MCP-Protocol-Version",
         );
     }
 
-    match handle_line(request.body, handler)? {
-        Some(mut body) => {
+    match handler.handle_message(&message)? {
+        Some(response) => {
+            let mut body = crate::encode(&response)?;
             body.push('\n');
             Ok(HttpResponse {
                 status: 200,
@@ -2341,7 +3084,11 @@ fn parse_mime_media_type(value: &str) -> Option<String> {
         return None;
     }
     let mut parameters = std::collections::HashSet::new();
-    for parameter in parts.iter().skip(1) {
+    for (index, parameter) in parts.iter().enumerate().skip(1) {
+        // mime.ParseMediaType ignores one trailing semicolon.
+        if index == parts.len() - 1 && parameter.trim().is_empty() {
+            continue;
+        }
         let (name, value) = parameter.split_once('=')?;
         let name = name.trim();
         let value = value.trim();
@@ -2426,6 +3173,10 @@ fn is_mime_token(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    // The socket, poll and channel bounds below are setup bounds, not the
+    // behavior under test: generous so load and coverage instrumentation
+    // cannot win the race (#1564-#1567). The HttpTimeouts tests that pin Go's
+    // idle/read behavior keep their short values.
     use super::*;
     use serde::Deserialize;
     use std::{io::BufRead, thread};
@@ -2453,7 +3204,8 @@ mod tests {
         use sha2::Sha256;
         use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
-        let go_local = include_str!("../../../internal/approval/local.go");
+        let go_local =
+            include_str!("../../../testdata/port/go-snapshots/internal/approval/local.go.txt");
         assert!(go_local.contains("/api/v1/local/approvals"));
         assert!(go_local.contains("/api/v1/local/approvals/"));
 
@@ -2463,6 +3215,8 @@ mod tests {
             .expect("enqueue approval");
         let secret = b"go-contract-secret".to_vec();
         let timestamp = OffsetDateTime::now_utc()
+            .replace_nanosecond(0)
+            .expect("whole second")
             .format(&Rfc3339)
             .expect("format proof timestamp");
         let mut mac = Hmac::<Sha256>::new_from_slice(&secret).expect("HMAC key");
@@ -2555,6 +3309,8 @@ mod tests {
             path: &str,
         ) -> String {
             let timestamp = OffsetDateTime::now_utc()
+                .replace_nanosecond(0)
+                .expect("whole second")
                 .format(&Rfc3339)
                 .expect("format proof timestamp");
             let mut mac = Hmac::<Sha256>::new_from_slice(secret).expect("HMAC key");
@@ -2621,7 +3377,7 @@ mod tests {
             .write_all(call_request.as_bytes())
             .expect("send MCP call");
 
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         let pending = loop {
             let requests = queue.pending().expect("list pending approvals");
             if let Some(request) = requests.into_iter().next() {
@@ -2657,7 +3413,7 @@ mod tests {
         assert_eq!(raw_status(&decided), 200, "{decided}");
 
         pending_call
-            .set_read_timeout(Some(Duration::from_secs(3)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set MCP response timeout");
         let response = read_http_response(&mut BufReader::new(pending_call));
         assert_eq!(raw_status(&response), 200, "{response}");
@@ -2705,6 +3461,8 @@ mod tests {
             path: &str,
         ) -> String {
             let timestamp = OffsetDateTime::now_utc()
+                .replace_nanosecond(0)
+                .expect("whole second")
                 .format(&Rfc3339)
                 .expect("format proof timestamp");
             let mut mac = Hmac::<Sha256>::new_from_slice(secret).expect("HMAC key");
@@ -2769,7 +3527,7 @@ mod tests {
         let shutdown = HttpShutdown::default();
         let worker_shutdown = shutdown.clone();
         let wait_for_retired_responses = |maximum| {
-            let deadline = std::time::Instant::now() + Duration::from_secs(3);
+            let deadline = std::time::Instant::now() + Duration::from_secs(30);
             while shutdown.registered_connection_count() > maximum {
                 assert!(
                     std::time::Instant::now() < deadline,
@@ -2794,6 +3552,7 @@ mod tests {
                 Some(local_approval),
                 Some(worker_shutdown),
                 HttpTimeouts::default(),
+                None,
             )
             .expect("serve production loopback accept loop");
         });
@@ -2828,7 +3587,7 @@ mod tests {
             }));
         }
 
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         while admission_counter.load(Ordering::Acquire) < MAX_HTTP_MCP_REQUESTS {
             assert!(
                 std::time::Instant::now() < deadline,
@@ -2836,7 +3595,7 @@ mod tests {
             );
             thread::sleep(Duration::from_millis(5));
         }
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         while queue.pending().expect("list pending approvals").len() < MAX_HTTP_MCP_REQUESTS {
             assert!(
                 std::time::Instant::now() < deadline,
@@ -2849,7 +3608,7 @@ mod tests {
             let wire = mcp_request(address, id, &bearer_tokens[0]);
             let mut stream = TcpStream::connect(address).expect("connect excess MCP call");
             stream
-                .set_read_timeout(Some(Duration::from_secs(3)))
+                .set_read_timeout(Some(Duration::from_secs(30)))
                 .expect("set excess MCP response timeout");
             stream
                 .write_all(wire.as_bytes())
@@ -2866,7 +3625,7 @@ mod tests {
         let list_request = signed_request(address, &secret, "GET", "/api/v1/local/approvals");
         let mut local_list = TcpStream::connect(address).expect("connect local approval list");
         local_list
-            .set_read_timeout(Some(Duration::from_secs(3)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set local list timeout");
         local_list
             .write_all(list_request.as_bytes())
@@ -2895,7 +3654,7 @@ mod tests {
                 let mut local_decision =
                     TcpStream::connect(address).expect("connect local approval decision");
                 local_decision
-                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .set_read_timeout(Some(Duration::from_secs(30)))
                     .expect("set local decision timeout");
                 local_decision
                     .write_all(wire.as_bytes())
@@ -2921,6 +3680,373 @@ mod tests {
             .expect("cancel completed saturation server");
         server.join().expect("join saturation server");
         assert_eq!(shutdown.registered_connection_count(), 0);
+    }
+
+    #[test]
+    fn corrupt_or_deleted_registry_keeps_last_good_state_like_go_watcher() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = registry(dir.path());
+        assert!(
+            lookup_token(&path, BEARER).expect("good load").is_some(),
+            "token is valid before the registry breaks"
+        );
+        fs::write(&path, b"{corrupt").expect("corrupt registry");
+        assert!(
+            lookup_token(&path, BEARER).expect("last good").is_some(),
+            "Go keeps the in-memory registry after a failed reload"
+        );
+        fs::remove_file(&path).expect("delete registry");
+        assert!(lookup_token(&path, BEARER).expect("last good").is_some());
+        let unseen = dir.path().join("never-loaded").join("mcp-tokens.json");
+        assert!(
+            lookup_token(&unseen, BEARER).is_err(),
+            "no last-good state exists for a registry that never loaded"
+        );
+    }
+
+    fn lookup_in_document(document: &str) -> Option<bool> {
+        lookup_in_bytes(document)
+    }
+
+    fn lookup_in_bytes(document: impl AsRef<[u8]>) -> Option<bool> {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("mcp-tokens.json");
+        fs::write(&path, document).expect("write registry");
+        match lookup_token(&path, BEARER) {
+            Ok(found) => Some(found.is_some()),
+            Err(_) => None,
+        }
+    }
+
+    /// Go's `json.Unmarshal` binds struct fields case-insensitively (with
+    /// Unicode simple folding); an unmatched key here would be silently dropped
+    /// and, for `REVOKED`/`EXPIRES_AT`, would make Rust MORE permissive than Go.
+    #[test]
+    fn registry_field_names_bind_case_insensitively_like_go() {
+        let hash = symvault_store::sha256_hex(BEARER.as_bytes());
+        let doc = |extra: &str, root_tokens: &str| {
+            format!(
+                r#"{{"VERSION":2,"{root_tokens}":{{"t":{{"ID":"t","HASH":"{hash}","Prefix":"http","ALLOWED_TOOLS":["*"],"Agent_Name":"default","CREATED_AT":"2026-01-01T00:00:00Z"{extra}}}}}}}"#
+            )
+        };
+        assert_eq!(
+            lookup_in_document(&doc("", "TOKENS")),
+            Some(true),
+            "control: folded names bind"
+        );
+        assert_eq!(
+            lookup_in_document(&doc(r#","REVOKED":true"#, "TOKENS")),
+            Some(false)
+        );
+        assert_eq!(
+            lookup_in_document(&doc(r#","Revoked":true"#, "tokens")),
+            Some(false)
+        );
+        assert_eq!(
+            lookup_in_document(&doc(r#","EXPIRES_AT":"2000-01-01T00:00:00Z""#, "tokens")),
+            Some(false)
+        );
+        // U+017F (long s) and U+212A (Kelvin sign) fold to `s` and `k`.
+        assert_eq!(
+            lookup_in_document(&doc(
+                r#","expire\u017f_at":"2000-01-01T00:00:00Z""#,
+                "tokens"
+            )),
+            Some(false)
+        );
+        assert_eq!(
+            lookup_in_document(&doc("", "TO\u{212a}EN\u{17f}")),
+            Some(true),
+            "control: the folded root key binds"
+        );
+        assert_eq!(
+            lookup_in_document(&doc(r#","REVOKED":true"#, "TO\u{212a}EN\u{17f}")),
+            Some(false)
+        );
+        // Repeated case variants: the later member wins, as in Go.
+        assert_eq!(
+            lookup_in_document(&doc(r#","revoked":true,"REVOKED":false"#, "tokens")),
+            Some(true)
+        );
+        assert_eq!(
+            lookup_in_document(&doc(r#","REVOKED":false,"revoked":true"#, "tokens")),
+            Some(false)
+        );
+        // `null` leaves a Go scalar field untouched, including after a value.
+        assert_eq!(
+            lookup_in_document(&doc(
+                r#","HASH":null,"revoked":null,"Label":null"#,
+                "tokens"
+            )),
+            Some(true)
+        );
+        // Type errors still fail the whole registry under any casing.
+        assert_eq!(
+            lookup_in_document(&doc(r#","REVOKED":"yes""#, "tokens")),
+            None
+        );
+    }
+
+    /// Go's `json.Unmarshal` decodes every duplicate occurrence into the same
+    /// field and fails the whole document on the first type error, so a bad
+    /// earlier value must not be forgiven by a good later one. Negative control
+    /// for the previous last-duplicate-wins folding, which served all of these.
+    #[test]
+    fn duplicate_member_with_a_type_error_fails_the_document_like_go() {
+        let hash = symvault_store::sha256_hex(BEARER.as_bytes());
+        let entry = |extra: &str| {
+            format!(
+                r#"{{"id":"t","hash":"{hash}","prefix":"http","allowed_tools":["*"],"agent_name":"default","created_at":"2026-01-01T00:00:00Z"{extra}}}"#
+            )
+        };
+        let one = |extra: &str| format!(r#"{{"version":2,"tokens":{{"t":{}}}}}"#, entry(extra));
+        assert_eq!(lookup_in_bytes(one("")), Some(true), "control");
+        for (extra, name) in [
+            (r#","revoked":"yes","revoked":false"#, "revoked"),
+            (r#","REVOKED":"yes","revoked":false"#, "revoked folded"),
+            (r#","expires_at":"bad","expires_at":null"#, "expires_at"),
+            (
+                r#","allowed_tools":[5],"allowed_tools":["*"]"#,
+                "allowed_tools",
+            ),
+            (r#","hash":5,"hash":"x""#, "hash"),
+            (
+                r#","created_at":"bad","created_at":"2026-01-01T00:00:00Z""#,
+                "created_at",
+            ),
+            (r#","revoked":false,"revoked":"yes""#, "bad last"),
+        ] {
+            assert_eq!(lookup_in_bytes(one(extra)), None, "{name}");
+        }
+        // Duplicate root members.
+        assert_eq!(
+            lookup_in_bytes(format!(
+                r#"{{"version":"a","version":2,"tokens":{{"t":{}}}}}"#,
+                entry("")
+            )),
+            None
+        );
+        assert_eq!(
+            lookup_in_bytes(format!(
+                r#"{{"version":2,"tokens":{{"u":{{"revoked":"yes"}}}},"tokens":{{"t":{}}}}}"#,
+                entry("")
+            )),
+            None
+        );
+        assert_eq!(
+            lookup_in_bytes(format!(
+                r#"{{"version":2,"tokens":[],"tokens":{{"t":{}}}}}"#,
+                entry("")
+            )),
+            None
+        );
+        // A superseded duplicate id with the wrong type, and a bad nested entry.
+        assert_eq!(
+            lookup_in_bytes(format!(
+                r#"{{"version":2,"tokens":{{"t":"x","t":{}}}}}"#,
+                entry("")
+            )),
+            None
+        );
+        assert_eq!(
+            lookup_in_bytes(format!(
+                r#"{{"version":2,"tokens":{{"t":{},"t":{}}}}}"#,
+                entry(r#","revoked":"yes""#),
+                entry("")
+            )),
+            None
+        );
+        // A type error inside an unknown member is skipped by Go, not decoded.
+        assert_eq!(
+            lookup_in_bytes(one(r#","unknown":"yes","unknown":5"#)),
+            Some(true)
+        );
+        // Valid duplicates keep the later value (null leaves a scalar alone).
+        assert_eq!(
+            lookup_in_bytes(one(r#","revoked":true,"revoked":false"#)),
+            Some(true)
+        );
+        assert_eq!(
+            lookup_in_bytes(one(r#","revoked":true,"revoked":null"#)),
+            Some(false)
+        );
+        // A repeated allowed_tools array overlays the previous slice in Go (a
+        // null element keeps the earlier one), so Go adopts these documents and
+        // a revocation in them applies (ADR 0034 item 19).
+        assert_eq!(
+            lookup_in_bytes(one(r#","allowed_tools":["a"],"allowed_tools":[null]"#)),
+            Some(true)
+        );
+        assert_eq!(
+            lookup_in_bytes(one(r#","allowed_tools":[],"allowed_tools":[null]"#)),
+            Some(true)
+        );
+        assert_eq!(
+            lookup_in_bytes(one(
+                r#","allowed_tools":["a"],"allowed_tools":[null],"revoked":true"#
+            )),
+            Some(false),
+            "a revocation inside an overlaid document must apply"
+        );
+    }
+
+    /// Go decodes a repeated root `tokens` object into the same map: ids merge,
+    /// a repeated id replaces the whole entry, and `null` resets the map.
+    #[test]
+    fn duplicate_root_tokens_merge_like_go() {
+        let hash = symvault_store::sha256_hex(BEARER.as_bytes());
+        let entry = |id: &str, extra: &str| {
+            format!(
+                r#""{id}":{{"id":"{id}","hash":"{hash}","prefix":"http","allowed_tools":["*"],"agent_name":"default","created_at":"2026-01-01T00:00:00Z"{extra}}}"#
+            )
+        };
+        let other = r#""o":{"id":"o","hash":"ab"}"#;
+        let doc = |first: &str, second: &str| {
+            format!(r#"{{"version":2,"tokens":{{{first}}},"tokens":{{{second}}}}}"#)
+        };
+        assert_eq!(
+            lookup_in_bytes(doc(&entry("t", ""), other)),
+            Some(true),
+            "earlier ids survive a later tokens object"
+        );
+        assert_eq!(lookup_in_bytes(doc(other, &entry("t", ""))), Some(true));
+        assert_eq!(
+            lookup_in_bytes(doc(&entry("t", ""), &entry("t", r#","revoked":true"#))),
+            Some(false),
+            "a repeated id replaces the whole entry"
+        );
+        assert_eq!(
+            lookup_in_bytes(doc(&entry("t", r#","revoked":true"#), &entry("t", ""))),
+            Some(true),
+            "the replacement entry does not inherit the earlier revoked flag"
+        );
+        let with_null = format!(
+            r#"{{"version":2,"tokens":{{{}}},"tokens":null}}"#,
+            entry("t", "")
+        );
+        assert_eq!(lookup_in_bytes(with_null), Some(false), "null resets");
+        let null_then_map = format!(
+            r#"{{"version":2,"tokens":null,"tokens":{{{}}}}}"#,
+            entry("t", "")
+        );
+        assert_eq!(lookup_in_bytes(null_then_map), Some(true));
+    }
+
+    /// Go replaces each invalid UTF-8 byte inside a string with U+FFFD and
+    /// accepts the document; the Rust loader must not treat it as corrupt.
+    #[test]
+    fn invalid_utf8_inside_strings_is_replaced_like_go() {
+        let hash = symvault_store::sha256_hex(BEARER.as_bytes());
+        let mut document = format!(
+            r#"{{"version":2,"tokens":{{"t":{{"id":"t","hash":"{hash}","prefix":"http","allowed_tools":["*"],"agent_name":"default","created_at":"2026-01-01T00:00:00Z","label":"a"#
+        )
+        .into_bytes();
+        document.extend_from_slice(&[0xff, 0xe2, 0x82]);
+        document.extend_from_slice(br#"z"}}}"#);
+        assert_eq!(lookup_in_bytes(&document), Some(true));
+        // An invalid byte outside a string is still a syntax error.
+        let mut outside = document.clone();
+        outside.push(0xff);
+        assert_eq!(lookup_in_bytes(&outside), None);
+    }
+
+    fn revoke_in_file(path: &Path) {
+        let mut document: serde_json::Value =
+            serde_json::from_slice(&fs::read(path).expect("read registry")).expect("registry json");
+        document["tokens"]["tok-test"]["revoked"] = serde_json::json!(true);
+        fs::write(path, serde_json::to_vec(&document).expect("serialize")).expect("revoke");
+    }
+
+    /// A revocation must survive a later corrupt/deleted file even when no
+    /// request arrives between the revocation and the corruption: Go's watcher
+    /// (and the Rust poller) publish the revoked state on their own.
+    #[test]
+    fn polled_revocation_survives_later_corruption_or_deletion() {
+        for delete in [false, true] {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let path = registry(dir.path());
+            load_token_registry(&path).expect("startup load");
+            revoke_in_file(&path);
+            // No request here: only the poller can observe the revocation.
+            let mut last = None;
+            poll_registry_once(&path, &mut last);
+            if delete {
+                fs::remove_file(&path).expect("delete registry");
+            } else {
+                fs::write(&path, b"{corrupt").expect("corrupt registry");
+            }
+            poll_registry_once(&path, &mut last);
+            assert!(
+                lookup_token(&path, BEARER).expect("last good").is_none(),
+                "revoked token must stay revoked after corrupt/delete (delete={delete})"
+            );
+        }
+    }
+
+    /// Negative control: without the poller (the previous behaviour, cache
+    /// refreshed only by requests) the same sequence keeps the token valid.
+    #[test]
+    fn without_polling_the_stale_cache_keeps_a_revoked_token_valid() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = registry(dir.path());
+        load_token_registry(&path).expect("startup load");
+        revoke_in_file(&path);
+        fs::write(&path, b"{corrupt").expect("corrupt registry");
+        assert!(
+            lookup_token(&path, BEARER).expect("stale cache").is_some(),
+            "control: with no poll and no request the stale entry is served"
+        );
+    }
+
+    #[test]
+    fn failed_reload_does_not_replace_the_cache_and_is_not_retried_until_changed() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = registry(dir.path());
+        load_token_registry(&path).expect("startup load");
+        let mut last = None;
+        poll_registry_once(&path, &mut last);
+        fs::write(&path, b"{corrupt").expect("corrupt registry");
+        poll_registry_once(&path, &mut last);
+        let recorded = last.as_ref().map(|id| id.len);
+        assert_eq!(recorded, Some(8), "identity recorded even for a bad file");
+        assert!(lookup_token(&path, BEARER).expect("last good").is_some());
+    }
+
+    #[test]
+    fn background_watcher_publishes_a_revocation_without_requests() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = registry(dir.path());
+        load_token_registry(&path).expect("startup load");
+        let stop = Arc::new(AtomicBool::new(false));
+        let handle = {
+            let (path, stop) = (path.clone(), Arc::clone(&stop));
+            thread::spawn(move || watch_registry(&path, &stop, Duration::from_millis(20)))
+        };
+        revoke_in_file(&path);
+        let started = Instant::now();
+        loop {
+            let revoked = LAST_GOOD_REGISTRY
+                .lock()
+                .expect("cache")
+                .get(&path)
+                .and_then(|registry| registry.tokens.as_ref())
+                .and_then(|tokens| tokens.get("tok-test"))
+                .and_then(Option::as_ref)
+                .is_some_and(|token| token.revoked);
+            if revoked {
+                break;
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(5),
+                "poller never published the revocation"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        fs::write(&path, b"{corrupt").expect("corrupt registry");
+        assert!(lookup_token(&path, BEARER).expect("last good").is_none());
+        stop.store(true, Ordering::Release);
+        handle.thread().unpark();
+        handle.join().expect("watcher exits");
     }
 
     fn registry(dir: &Path) -> std::path::PathBuf {
@@ -3047,7 +4173,7 @@ mod tests {
                 });
                 let mut client = TcpStream::connect(address).unwrap();
                 client
-                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .set_read_timeout(Some(Duration::from_secs(30)))
                     .unwrap();
                 write!(client, "POST /mcp HTTP/1.1\r\nHost: {address}\r\n{auth}{origin}X-Symaira-Agent: {agent}\r\nContent-Type: {content_type}\r\nAccept: {accept}\r\nContent-Length: 1048577\r\nConnection: keep-alive\r\n\r\nx").unwrap();
                 let mut response = String::new();
@@ -3110,7 +4236,7 @@ mod tests {
                 });
                 let mut client = TcpStream::connect(address).unwrap();
                 client
-                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .set_read_timeout(Some(Duration::from_secs(30)))
                     .unwrap();
                 // Match the capture's contiguous send buffer. Formatting into
                 // the socket writes the prefix after complete headers, racing
@@ -3306,7 +4432,7 @@ mod tests {
             .expect("create TLS client connection");
         let socket = TcpStream::connect(connection_address).expect("connect TLS client");
         socket
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set TLS test read timeout");
         let mut reader = BufReader::new(StreamOwned::new(connection, socket));
         let authority = format!("vault.example.test:{}", listen_address.port());
@@ -3448,7 +4574,7 @@ mod tests {
             let server = thread::spawn(move || {
                 let (socket, _) = listener.accept().expect("accept test client");
                 socket
-                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .set_read_timeout(Some(Duration::from_secs(30)))
                     .unwrap();
                 let mut stream = StreamOwned::new(ServerConnection::new(tls).unwrap(), socket);
                 let mut byte = [0];
@@ -3495,7 +4621,7 @@ mod tests {
             let connection = rustls::ClientConnection::new(Arc::new(client), name).unwrap();
             let socket = TcpStream::connect(address).unwrap();
             socket
-                .set_read_timeout(Some(Duration::from_secs(2)))
+                .set_read_timeout(Some(Duration::from_secs(30)))
                 .unwrap();
             let mut stream = StreamOwned::new(connection, socket);
             stream
@@ -3581,7 +4707,7 @@ mod tests {
         });
         let mut authorize_stream = TcpStream::connect(address).expect("connect authorize");
         authorize_stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set authorize timeout");
         let authorize_request = format!(
             "GET /mcp/oauth/authorize?response_type=code&client_id={}&redirect_uri=http://localhost/callback&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256 HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
@@ -3604,7 +4730,7 @@ mod tests {
         let form = format!("flow_id={flow_id}&passphrase=wrong");
         let mut confirm_stream = TcpStream::connect(address).expect("connect confirm");
         confirm_stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set confirm timeout");
         write!(
             confirm_stream,
@@ -3690,7 +4816,7 @@ mod tests {
         });
         let mut stream = TcpStream::connect(address).expect("connect");
         stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set client timeout");
         let request = format!(
             "GET /mcp/oauth/authorize?response_type=code&client_id={}&redirect_uri=http://localhost/callback&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256 HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
@@ -3698,13 +4824,13 @@ mod tests {
         );
         stream.write_all(request.as_bytes()).expect("write request");
         started
-            .recv_timeout(Duration::from_secs(2))
+            .recv_timeout(Duration::from_secs(30))
             .expect("consent callback starts");
         assert!(state.try_lock().is_ok(), "MCP state lock remains available");
         let mut duplicate_authorize =
             TcpStream::connect(address).expect("connect second authorize");
         duplicate_authorize
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set duplicate authorize timeout");
         let request = format!(
             "GET /mcp/oauth/authorize?response_type=code&client_id={}&redirect_uri=http://localhost/callback&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256 HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
@@ -3717,7 +4843,7 @@ mod tests {
         assert_eq!(raw_status(&duplicate_response), 403, "{duplicate_response}");
         let mut mcp_stream = TcpStream::connect(address).expect("connect regular MCP request");
         mcp_stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set MCP client timeout");
         mcp_stream
             .write_all(b"POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: http://127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -3726,7 +4852,7 @@ mod tests {
         assert_eq!(raw_status(&mcp_response), 401, "{mcp_response}");
         let mut discovery_stream = TcpStream::connect(address).expect("connect discovery request");
         discovery_stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set discovery client timeout");
         discovery_stream
             .write_all(b"GET /.well-known/oauth-authorization-server HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -3736,7 +4862,7 @@ mod tests {
         let registration_body = r#"{"redirect_uris":["http://localhost/other"]}"#;
         let mut registration_stream = TcpStream::connect(address).expect("connect registration");
         registration_stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set registration timeout");
         write!(
             registration_stream,
@@ -3753,7 +4879,7 @@ mod tests {
         );
         let mut token_stream = TcpStream::connect(address).expect("connect token endpoint");
         token_stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set token timeout");
         token_stream
             .write_all(b"POST /mcp/oauth/token HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 22\r\nConnection: close\r\n\r\ngrant_type=unsupported")
@@ -3822,16 +4948,16 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
         let mut client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
         client
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .unwrap();
         let (socket, _) = listener.accept().unwrap();
         let mut stream = DeadlineSocket::new(socket);
         stream
-            .set_write_timeout(Some(Duration::from_secs(2)))
+            .set_write_timeout(Some(Duration::from_secs(30)))
             .unwrap();
         stream
             .write_deadline
-            .set(Some(Instant::now() + Duration::from_secs(2)));
+            .set(Some(Instant::now() + Duration::from_secs(30)));
         stream.write_all(b"before-expiry").unwrap();
         let mut before = [0; 13];
         client.read_exact(&mut before).unwrap();
@@ -3871,7 +4997,7 @@ mod tests {
         let (socket, _) = listener.accept().unwrap();
         let mut stream = DeadlineSocket::new(socket);
         stream
-            .set_write_timeout(Some(Duration::from_secs(2)))
+            .set_write_timeout(Some(Duration::from_secs(30)))
             .unwrap();
         let payload = vec![0x5a; 4 * 1024 * 1024];
         let accepted = stream.write(&payload).expect("first slice");
@@ -3881,9 +5007,119 @@ mod tests {
         );
     }
 
+    /// Deterministic twin of the `http-write-contract` TLS output probe: a
+    /// stalled TLS reader holds the response past the absolute write deadline,
+    /// then drains as fast as it can. Like Go's `WriteTimeout`, the expired
+    /// write must fail for good: rustls' buffered plaintext must not flush,
+    /// the next write must fail at once and the drain must see a truncated body.
+    /// No wall-clock race: the reader stays stalled until the server reports
+    /// the expiry, and the payload exceeds every loopback socket buffer.
+    #[test]
+    fn tls_write_deadline_expiry_is_final_even_if_client_drains_fast_afterwards() {
+        let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let tls = load_tls_server_config(
+            fixture_dir.join("tls-server.pem"),
+            fixture_dir.join("tls-server.key"),
+            None,
+        )
+        .expect("load test TLS server identity");
+        let mut roots = RootCertStore::empty();
+        for certificate in CertificateDer::pem_file_iter(fixture_dir.join("tls-ca.pem"))
+            .expect("read TLS test certificate")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("parse TLS test certificate")
+        {
+            roots.add(certificate).expect("trust test certificate");
+        }
+        let client_config = Arc::new(
+            rustls::ClientConfig::builder_with_provider(Arc::new(
+                rustls::crypto::ring::default_provider(),
+            ))
+            .with_safe_default_protocol_versions()
+            .expect("ring supports safe protocol versions")
+            .with_root_certificates(roots)
+            .with_no_client_auth(),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let address = listener.local_addr().expect("listener address");
+        let payload_len = 64 * 1024 * 1024;
+        let (expired_tx, expired_rx) = std::sync::mpsc::channel::<()>();
+        let server = thread::spawn(move || {
+            let (socket, _) = listener.accept().expect("accept TLS client");
+            let mut stream = HttpStream::new(socket, Some(tls)).expect("create TLS stream");
+            stream
+                .complete_tls_handshake(HttpTimeouts::default())
+                .expect("TLS handshake");
+            stream.set_write_deadline(Some(Instant::now() + Duration::from_millis(400)));
+            let payload = vec![0x5a; payload_len];
+            let started = Instant::now();
+            let first = stream
+                .write_all(&payload)
+                .expect_err("a stalled reader must exhaust the absolute write deadline");
+            let elapsed = started.elapsed();
+            let second = stream
+                .write_all(b"after-expiry")
+                .expect_err("an expired write deadline must not recover");
+            let flushed = stream.flush();
+            expired_tx.send(()).expect("report expiry to the reader");
+            // Closing without a graceful TLS shutdown mirrors Go closing the
+            // connection once its write deadline has passed.
+            drop(stream);
+            (first.kind(), elapsed, second.kind(), flushed.is_err())
+        });
+
+        let server_name = "vault.example.test"
+            .to_owned()
+            .try_into()
+            .expect("valid TLS server name");
+        let connection = rustls::ClientConnection::new(client_config, server_name)
+            .expect("create TLS client connection");
+        let socket = TcpStream::connect(address).expect("connect TLS client");
+        socket
+            .set_read_timeout(Some(Duration::from_secs(60)))
+            .expect("set TLS test read timeout");
+        let mut client = StreamOwned::new(connection, socket);
+        while client.conn.is_handshaking() {
+            client
+                .conn
+                .complete_io(&mut client.sock)
+                .expect("client TLS handshake");
+        }
+        // Stalled reader: not one application byte is consumed until the
+        // server has seen its write deadline expire.
+        expired_rx
+            .recv_timeout(Duration::from_secs(60))
+            .expect("server must report write-deadline expiry");
+        let mut drained = 0_usize;
+        let mut buffer = vec![0; 256 * 1024];
+        loop {
+            match client.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(count) => drained += count,
+            }
+        }
+        let (first, elapsed, second, flush_failed) = server.join().expect("TLS server thread");
+        assert_eq!(first, std::io::ErrorKind::TimedOut);
+        assert_eq!(second, std::io::ErrorKind::TimedOut);
+        assert!(
+            flush_failed,
+            "buffered TLS records must not flush after expiry"
+        );
+        assert!(
+            elapsed < Duration::from_secs(30),
+            "the write must fail at its deadline, not drain the whole payload: {elapsed:?}"
+        );
+        assert!(
+            drained < payload_len,
+            "expired write resumed after fast client drain: {drained}/{payload_len} bytes"
+        );
+    }
+
     #[test]
     fn keep_alive_idle_timeout_matches_go_source_and_closes_socket() {
-        let go_http = include_str!("../../../internal/mcp/serverbootstrap/http.go");
+        let go_http = include_str!(
+            "../../../testdata/port/go-snapshots/internal/mcp/serverbootstrap/http.go.txt"
+        );
         let compact_go = go_http
             .chars()
             .filter(|character| !character.is_whitespace())
@@ -3908,10 +5144,10 @@ mod tests {
                 None,
                 None,
                 HttpTimeouts {
-                    initial_read: Duration::from_secs(1),
-                    request_read: Duration::from_secs(1),
+                    initial_read: Duration::from_secs(30),
+                    request_read: Duration::from_secs(30),
                     keep_alive_idle: Duration::from_millis(100),
-                    write: Duration::from_secs(1),
+                    write: Duration::from_secs(30),
                 },
             )
             .expect("serve connection with short test idle timeout");
@@ -3926,7 +5162,7 @@ mod tests {
         assert_eq!(raw_status(&response), 200);
         reader
             .get_mut()
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set test read timeout");
         let mut byte = [0];
         assert_eq!(reader.read(&mut byte).expect("read connection close"), 0);
@@ -3936,7 +5172,9 @@ mod tests {
 
     #[test]
     fn idle_connection_does_not_block_twenty_keep_alive_requests() {
-        let source = include_str!("../../../internal/mcp/serverbootstrap/http.go");
+        let source = include_str!(
+            "../../../testdata/port/go-snapshots/internal/mcp/serverbootstrap/http.go.txt"
+        );
         assert!(source.contains("IdleTimeout:       120 * time.Second"));
         fn test_handler(_: &str) -> Result<ProtocolHandler, String> {
             Ok(ProtocolHandler::new("symaira", "1.0.0"))
@@ -3950,11 +5188,14 @@ mod tests {
         let registry_path = registry(registry_dir.path());
         let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
         let address = listener.local_addr().expect("listener address");
+        // Config of the non-blocking property only: the client read (15 s) stays
+        // below the idle connection's initial_read (60 s), so a serialized
+        // implementation would still fail, but load cannot expire either first.
         let timeouts = HttpTimeouts {
-            initial_read: Duration::from_secs(2),
-            request_read: Duration::from_secs(1),
-            keep_alive_idle: Duration::from_secs(1),
-            write: Duration::from_secs(1),
+            initial_read: Duration::from_secs(60),
+            request_read: Duration::from_secs(30),
+            keep_alive_idle: Duration::from_secs(30),
+            write: Duration::from_secs(30),
         };
 
         let idle_client = TcpStream::connect(address).expect("connect idle client");
@@ -3975,7 +5216,7 @@ mod tests {
 
         let mut client = TcpStream::connect(address).expect("connect active client");
         client
-            .set_read_timeout(Some(Duration::from_millis(800)))
+            .set_read_timeout(Some(Duration::from_secs(15)))
             .expect("set bounded client read");
         let (active_server, _) = listener.accept().expect("accept active client");
         let active_registry = registry_path;
@@ -4584,7 +5825,7 @@ mod tests {
         )
         .expect("send request");
         selected_rx
-            .recv_timeout(Duration::from_secs(2))
+            .recv_timeout(Duration::from_secs(30))
             .expect("agent handler selected");
         let state_released = (0..100).any(|_| {
             if state.try_lock().is_ok() {

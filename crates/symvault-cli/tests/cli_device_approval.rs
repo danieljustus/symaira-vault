@@ -2,13 +2,14 @@
 //! device-session registry file they share.
 //!
 //! Expected values were captured from the pinned Go oracle
-//! (`target/port/symvault-go`, `GOTOOLCHAIN=go1.26.6`, commit `3232e31f`,
+//! (`target/port/symvault-go`, go1.26.6, commit `3232e31f`,
 //! release `unreleased`) with throwaway `HOME`/`XDG`/vault roots. Re-capture:
 //!
 //! ```sh
-//! GOTOOLCHAIN=go1.26.6 go build -ldflags \
-//!   "-s -w -X main.version=unreleased -X main.commit=none -X main.date=unknown" \
-//!   -o target/port/symvault-go .
+//! # in a worktree of tag legacy/go-oracle (the Go tree is not in this repository):
+//! # build the root package with the Go toolchain, ldflags
+//! #   -s -w -X main.version=unreleased -X main.commit=none -X main.date=unknown
+//! # into target/port/symvault-go
 //! ```
 //!
 //! Two divergences are **not** asserted here because they are pre-existing and
@@ -394,9 +395,10 @@ fn revoke_errors_match_the_oracle_message_and_exit_status() {
         &home,
     );
     assert_eq!(unknown.status.code(), Some(1), "{unknown:?}");
+    // cobra and the root executor each print the error (oracle `bf7f687b`).
     assert_eq!(
         String::from_utf8_lossy(&unknown.stderr),
-        "Error: approval device \"dev-nope\" not found\n"
+        "Error: approval device \"dev-nope\" not found\nError: approval device \"dev-nope\" not found\n"
     );
 
     let too_many = run(

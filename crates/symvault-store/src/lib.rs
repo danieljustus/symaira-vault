@@ -25,6 +25,9 @@ use zeroize::{Zeroize, Zeroizing};
 /// Keyed JSONL audit logging, verification, rotation, and export.
 pub mod audit;
 
+/// The Rust-cutover pre-mutation backup gate (D1, RUST-014).
+pub mod data_safety;
+
 /// Go-compatible grant signing key persistence.
 pub mod grant_key;
 
@@ -37,8 +40,14 @@ pub mod search_index_store;
 /// Go-compatible MCP share metadata and atomic lifecycle updates.
 pub mod sharing;
 
+/// Go-compatible decoding of the MCP token registry file.
+pub mod go_registry;
+
 /// Go-compatible agent-scoped MCP token registry mutations.
 pub mod token_registry;
+
+/// Go's legacy zero-key identity heal (`tryHealZeroKeyIdentity`).
+pub mod zero_key;
 
 mod entry_budget;
 mod entry_resources;
@@ -112,6 +121,8 @@ pub enum StoreError {
     Limit { path: PathBuf, limit: u64 },
     #[error("entry value exceeds the supported structure limits: {0}")]
     ValueLimit(String),
+    #[error("data-safety gate: {0}")]
+    DataSafety(String),
 }
 
 /// Which on-disk entry namespace was observed.
@@ -435,7 +446,19 @@ impl Store {
 
     /// Opens an existing vault and completes any pending re-encryption journal.
     pub fn open(root: impl AsRef<Path>, identity: &Identity) -> Result<Self, StoreError> {
-        let store = Self::open_with_root_acquisition(root, |_: &Path| {})?;
+        let store = Self::open_with_root_acquisition(root, |_: &Path| {}, false)?;
+        reencrypt_journal::recover_if_present(&store, identity)?;
+        Ok(store)
+    }
+
+    /// Opens a vault the way Go's package-level `List`, `WriteEntry` and
+    /// `VerifyManifestIntegrity` use it: they never read `identity.age`, and a
+    /// missing `config.yaml` means default settings (`loadVaultConfig` maps
+    /// `os.IsNotExist` to `Default()`). Every other failure, including a
+    /// config that exists but cannot be read or parsed, is reported as by
+    /// [`Store::open`].
+    pub fn open_lenient(root: impl AsRef<Path>, identity: &Identity) -> Result<Self, StoreError> {
+        let store = Self::open_with_root_acquisition(root, |_: &Path| {}, true)?;
         reencrypt_journal::recover_if_present(&store, identity)?;
         Ok(store)
     }
@@ -450,9 +473,21 @@ impl Store {
         Ok(store)
     }
 
+    /// [`Store::open_lenient`] followed by the legacy migration Go runs during
+    /// `Vault.Open`, which never examines `identity.age` either.
+    pub fn open_lenient_with_legacy_migration(
+        root: impl AsRef<Path>,
+        identity: &Identity,
+    ) -> Result<Self, StoreError> {
+        let store = Self::open_lenient(root, identity)?;
+        store.migrate_legacy()?;
+        Ok(store)
+    }
+
     fn open_with_root_acquisition(
         root: impl AsRef<Path>,
         acquire_hook: impl FnOnce(&Path),
+        lenient: bool,
     ) -> Result<Self, StoreError> {
         let requested_root = root.as_ref();
         #[cfg(unix)]
@@ -489,7 +524,7 @@ impl Store {
             rooted::regular_exists_at(&root_cap, Path::new(CONFIG_FILE), &config_path)?;
         #[cfg(not(unix))]
         let config_exists = ensure_regular_file(&config_path, false)?;
-        if !config_exists {
+        if !config_exists && !lenient {
             return Err(StoreError::MissingFile(config_path));
         }
 
@@ -498,15 +533,19 @@ impl Store {
             rooted::regular_exists_at(&root_cap, Path::new(IDENTITY_FILE), &identity_path)?;
         #[cfg(not(unix))]
         let identity_exists = ensure_regular_file(&identity_path, false)?;
-        if !identity_exists {
+        if !identity_exists && !lenient {
             return Err(StoreError::MissingFile(identity_path));
         }
 
-        #[cfg(unix)]
-        let config_bytes = rooted::read(&root_cap, Path::new(CONFIG_FILE), &config_path)?;
-        #[cfg(not(unix))]
-        let config_bytes = read_regular(&config_path)?;
-        let config = parse_config(&config_bytes)?;
+        let config = if config_exists {
+            #[cfg(unix)]
+            let config_bytes = rooted::read(&root_cap, Path::new(CONFIG_FILE), &config_path)?;
+            #[cfg(not(unix))]
+            let config_bytes = read_regular(&config_path)?;
+            parse_config(&config_bytes)?
+        } else {
+            VaultConfig::default()
+        };
 
         #[cfg(unix)]
         let recipients = rooted::regular_exists_at(
@@ -517,8 +556,8 @@ impl Store {
         #[cfg(not(unix))]
         let recipients = regular_exists(&root.join(RECIPIENTS_FILE))?;
         let presence = Presence {
-            config: true,
-            identity: true,
+            config: config_exists,
+            identity: identity_exists,
             recipients,
         };
         #[cfg(unix)]
@@ -607,6 +646,19 @@ impl Store {
         }
     }
 
+    /// The D1 gate for writers that publish files without holding the write
+    /// lock (entry writes and deletes, as in Go): called right before the first
+    /// filesystem mutation, after validation, so a rejected request leaves no
+    /// backup behind. A no-op once the vault carries the Rust marker.
+    fn data_safety_gate(&self) -> Result<(), StoreError> {
+        // Looked up through the retained root capability (see
+        // `marker_via_capability`) before any path-based work.
+        if data_safety::marker_via_capability(&self.root_cap, &self.root)? {
+            return Ok(());
+        }
+        data_safety::ensure_marker(&self.root)
+    }
+
     fn acquire_write_lock(&self) -> Result<fs::File, StoreError> {
         open_root_write_lock(&self.root_cap, &self.root)
     }
@@ -642,7 +694,7 @@ impl Store {
         #[cfg(unix)]
         {
             let mut result = Vec::new();
-            for item in rooted::walk_with_limits(
+            for item in rooted::walk_vault_root_with_limits(
                 &self.root_cap,
                 &self.root,
                 Some(MAX_VAULT_ENTRY_PATH_DEPTH + 1),
@@ -873,6 +925,7 @@ impl Store {
             });
         }
 
+        self.data_safety_gate()?;
         #[cfg(unix)]
         let _entries_cap =
             rooted::directory(&self.root_cap, Path::new(ENTRIES_DIR), &entries_root, false)?;
@@ -1081,20 +1134,7 @@ impl Store {
             Err(error) => return Err(StoreError::Decryption(error.to_string())),
         };
         let result = entry_budget::validate_with_batch(&plaintext, &candidate.logical, batch)
-            .and_then(|()| {
-                serde_json::from_slice::<serde_json::Value>(&plaintext)
-                    .map_err(|error| StoreError::Entry {
-                        path: candidate.logical.clone(),
-                        detail: error.to_string(),
-                    })
-                    .and_then(|mut value| {
-                        normalize_entry_data_key(&mut value);
-                        serde_json::from_value(value).map_err(|error| StoreError::Entry {
-                            path: candidate.logical.clone(),
-                            detail: error.to_string(),
-                        })
-                    })
-            });
+            .and_then(|()| decode_entry_plaintext(&plaintext, &candidate.logical));
         plaintext.zeroize();
         if result
             .as_ref()
@@ -1170,6 +1210,76 @@ fn normalize_entry_data_key(value: &mut serde_json::Value) {
     {
         fields.insert("data".into(), data);
     }
+}
+
+/// Decodes decrypted entry JSON like the store does for every read: negative
+/// zero survives (Go decodes every number into a `float64`) and a differently
+/// cased `data` key is normalized. `logical` names the entry in error text.
+///
+/// # Errors
+///
+/// Returns [`StoreError::Entry`] when the bytes are not a valid entry.
+pub fn decode_entry_plaintext(plaintext: &[u8], logical: &str) -> Result<Entry, StoreError> {
+    serde_json::from_slice::<serde_json::Value>(
+        keep_negative_zero(plaintext)
+            .as_deref()
+            .map_or(plaintext, |rewritten| &rewritten[..]),
+    )
+    .map_err(|error| StoreError::Entry {
+        path: logical.to_owned(),
+        detail: error.to_string(),
+    })
+    .and_then(|mut value| {
+        normalize_entry_data_key(&mut value);
+        serde_json::from_value(value).map_err(|error| StoreError::Entry {
+            path: logical.to_owned(),
+            detail: error.to_string(),
+        })
+    })
+}
+
+/// `serde_json` with `arbitrary_precision` reads the integer literal `-0` as
+/// `0`, but Go decodes every number of an entry into a `float64` and so keeps
+/// negative zero (and writes it back as `-0`). Rewrites each such literal
+/// outside strings to `-0.0`, which `serde_json` keeps. Only a `-` that starts
+/// a number counts: in `1e-0` it belongs to the exponent. Returns `None` when
+/// nothing changes; the rewritten copy holds plaintext and is zeroized.
+fn keep_negative_zero(bytes: &[u8]) -> Option<Zeroizing<Vec<u8>>> {
+    let mut rewritten: Option<Zeroizing<Vec<u8>>> = None;
+    let mut copied = 0;
+    let mut index = 0;
+    let mut in_string = false;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if in_string {
+            match byte {
+                b'\\' => index += 1,
+                b'"' => in_string = false,
+                _ => {}
+            }
+        } else if byte == b'"' {
+            in_string = true;
+        } else if byte == b'-'
+            && !matches!(
+                index.checked_sub(1).map(|before| bytes[before]),
+                Some(b'e' | b'E')
+            )
+            && bytes.get(index + 1) == Some(&b'0')
+            && !matches!(bytes.get(index + 2), Some(b'.' | b'e' | b'E' | b'0'..=b'9'))
+        {
+            let out = rewritten
+                .get_or_insert_with(|| Zeroizing::new(Vec::with_capacity(bytes.len() + 8)));
+            out.extend_from_slice(&bytes[copied..index + 2]);
+            out.extend_from_slice(b".0");
+            copied = index + 2;
+            index += 1;
+        }
+        index += 1;
+    }
+    if let Some(out) = rewritten.as_mut() {
+        out.extend_from_slice(&bytes[copied..]);
+    }
+    rewritten
 }
 
 fn validate_entry_values(entry: &Entry) -> Result<(), StoreError> {
@@ -1287,7 +1397,7 @@ fn detect_layout_rooted(root_cap: &fs::File, root: &Path) -> Result<Layout, Stor
         }
         Err(error) => return Err(error),
     };
-    let legacy_entries = rooted::walk_with_limits(
+    let legacy_entries = rooted::walk_vault_root_with_limits(
         root_cap,
         root,
         Some(MAX_VAULT_ENTRY_PATH_DEPTH + 1),
@@ -1410,7 +1520,8 @@ fn entry_candidates(root: &Path) -> Result<Vec<Candidate>, StoreError> {
 fn validate_entry_path(path: &str) -> Result<(), StoreError> {
     if path.trim().is_empty()
         || path.contains('\0')
-        || path.chars().any(char::is_control)
+        // Go rejects only runes below 0x20; DEL and C1 controls are accepted.
+        || path.chars().any(|character| u32::from(character) < 0x20)
         || Path::new(path).is_absolute()
     {
         return Err(StoreError::InvalidEntryPath(path.to_owned()));
@@ -1988,6 +2099,53 @@ impl SecretType {
             Self::Custom => "custom",
         }
     }
+
+    /// Parses a stored type name (the inverse of [`SecretType::as_str`]).
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "api_key" => Self::ApiKey,
+            "bearer_token" => Self::BearerToken,
+            "basic_auth" => Self::BasicAuth,
+            "ssh_key" => Self::SshKey,
+            "password" => Self::Password,
+            "certificate" => Self::Certificate,
+            "database_url" => Self::DatabaseUrl,
+            "totp_seed" => Self::TotpSeed,
+            "payment" => Self::Payment,
+            "custom" => Self::Custom,
+            _ => return None,
+        })
+    }
+
+    /// Go's `UsageHintForType`: the agent-facing hint stored with the type.
+    #[must_use]
+    pub const fn usage_hint(self) -> &'static str {
+        match self {
+            Self::ApiKey => {
+                "Set as header or query parameter depending on API documentation. Common: X-API-Key: <key> or ?api_key=<key>"
+            }
+            Self::BearerToken => "Set Header Authorization: Bearer <token>",
+            Self::BasicAuth => {
+                "Encode as base64(user:pass) and set Header Authorization: Basic <encoded>"
+            }
+            Self::SshKey => {
+                "Write to temporary file with chmod 600 before use. Use with ssh -i <keyfile>"
+            }
+            Self::Password => {
+                "Use for authentication. Consider using a password manager or secret injection."
+            }
+            Self::Certificate => "Use with TLS/SSL configuration. May require private key pairing.",
+            Self::DatabaseUrl => "Use as connection string. Ensure credentials are not logged.",
+            Self::TotpSeed => {
+                "Use with TOTP generator. Never share the seed - only share generated codes."
+            }
+            Self::Payment => {
+                "Payment card or bank account details. Sensitive fields (card_number, cvc, iban) are redacted by default."
+            }
+            Self::Custom => "Follow the specific integration instructions for this secret.",
+        }
+    }
 }
 
 fn ascii_alnum(value: &str) -> bool {
@@ -2242,6 +2400,13 @@ impl Store {
         }
 
         let entries = self.entry_candidates()?;
+        // Moving legacy entry files into `entries/` rewrites the vault layout
+        // even when it is triggered by a read command, so it is a mutation for
+        // the D1 gate: a vault without a Rust marker is backed up first.
+        // Creating the empty migration marker alone is not.
+        if entries.iter().any(|candidate| !candidate.fresh) {
+            self.data_safety_gate()?;
+        }
         let fresh_root = self.root.join(ENTRIES_DIR);
         #[cfg(unix)]
         rooted::directory(&self.root_cap, Path::new(ENTRIES_DIR), &fresh_root, true)?;
@@ -2378,6 +2543,7 @@ impl Store {
             return Err(StoreError::ResourceLimit);
         }
         let target = self.configured_entry_path(path, identity)?;
+        self.data_safety_gate()?;
         let parent_cap = self.entry_parent_cap(&target)?;
         publication::replace_entry(&target, &encrypted, &parent_cap)?;
         // Go publishes the primary entry first and intentionally discards
@@ -2508,6 +2674,7 @@ impl Store {
 
     fn delete_entry_at(&self, path: &str, identity: Option<&Identity>) -> Result<(), StoreError> {
         validate_entry_path(path)?;
+        self.data_safety_gate()?;
         let configured = identity.map(|identity| self.configured_entry_path(path, identity));
         #[cfg(unix)]
         {
@@ -2695,6 +2862,51 @@ impl Store {
     /// Rebuilds the manifest from regular fresh-layout entry files.
     pub fn rebuild_manifest(&self, identity: &Identity) -> Result<Manifest, StoreError> {
         self.with_write_lock(|store| store.rebuild_manifest_locked(identity))
+    }
+
+    /// The manifest consistency block of Go's `Vault.Open`: a missing
+    /// `manifest.age`, one older than the configured generation counter, or one
+    /// that does not list every `.age` file under `entries/` (typically after
+    /// a git pull or rsync) is rebuilt from the entries on disk. Every failure
+    /// is ignored, as in Go (`_ = RebuildManifest(...)`).
+    pub fn reconcile_manifest_on_open(&self, identity: &Identity) {
+        let missing = matches!(
+            fs::metadata(self.root.join(MANIFEST_FILE)),
+            Err(error) if error.kind() == io::ErrorKind::NotFound
+        );
+        if missing {
+            let _ = self.rebuild_manifest(identity);
+            return;
+        }
+        let generation = self.config.manifest_generation;
+        let Ok(manifest) = self.load_manifest(identity) else {
+            // `DetectOutOfBandEntries` needs the manifest too; with a
+            // configured generation a failed load is not examined further.
+            return;
+        };
+        if generation > 0 && manifest.generation < i64::try_from(generation).unwrap_or(i64::MAX) {
+            let _ = self.rebuild_manifest(identity);
+            return;
+        }
+        if self.has_out_of_band_entries(&manifest, identity) == Some(true) {
+            let _ = self.rebuild_manifest(identity);
+        }
+    }
+
+    /// `DetectOutOfBandEntries`: whether an entry file is absent from `manifest`
+    /// (`None` when the listing fails).
+    fn has_out_of_band_entries(&self, manifest: &Manifest, identity: &Identity) -> Option<bool> {
+        let mut expected = BTreeSet::new();
+        for logical in manifest.entries.keys() {
+            let target = self.configured_entry_path(logical, identity).ok()?;
+            expected.insert(self.relative_path(&target).ok()?);
+        }
+        let candidates = self.entry_candidates().ok()?;
+        Some(
+            candidates
+                .iter()
+                .any(|candidate| candidate.fresh && !expected.contains(&candidate.relative)),
+        )
     }
 
     /// Rebuilds the manifest while the caller already holds `with_write_lock`.
@@ -3310,7 +3522,13 @@ fn open_root_write_lock(root_cap: &fs::File, root: &Path) -> Result<fs::File, St
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     loop {
         match file.try_lock() {
-            Ok(()) => return Ok(file),
+            Ok(()) => {
+                // The lock is held from here to the caller's unlock: the
+                // pre-migration backup and the marker happen inside it. On
+                // refusal the file drops, which releases the lock.
+                data_safety::ensure_locked(root_cap, root)?;
+                return Ok(file);
+            }
             Err(std::fs::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }

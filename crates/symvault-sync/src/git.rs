@@ -30,6 +30,26 @@ pub enum GitError {
     },
     #[error("git I/O failed: {0}")]
     Io(#[from] io::Error),
+    /// The `git` executable could not be started because it is not on `PATH`.
+    /// git is a hard runtime dependency of the Rust CLI (ADR 0033).
+    #[error("git is required but was not found in PATH; install git and retry")]
+    GitNotFound,
+    /// The pre-migration backup of a vault without a Rust marker failed; the
+    /// operation would have rewritten `.git` or the working tree.
+    #[error("{0}")]
+    DataSafety(String),
+}
+
+/// Map a failed `git` spawn to [`GitError`]. `NotFound` means the executable is
+/// missing unless the requested working directory is the missing path.
+#[cfg_attr(windows, allow(dead_code))]
+fn spawn_error(program: &str, cwd: Option<&Path>, error: io::Error) -> GitError {
+    let cwd_missing = cwd.is_some_and(|dir| !dir.exists());
+    if program == "git" && error.kind() == io::ErrorKind::NotFound && !cwd_missing {
+        GitError::GitNotFound
+    } else {
+        GitError::Io(error)
+    }
 }
 
 const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
@@ -130,6 +150,7 @@ impl GitRepository {
                 )?;
             }
         }
+        symvault_store::data_safety::exclude_marker_from_git(&repo.root);
         Ok(repo)
     }
     pub fn open(root: impl AsRef<Path>) -> Result<Self, GitError> {
@@ -141,6 +162,15 @@ impl GitRepository {
     }
     pub fn root(&self) -> &Path {
         &self.root
+    }
+    /// D1 gate for everything that rewrites the repository or the working tree
+    /// of a vault (`.git/config` through `remote add` and `push --set-upstream`,
+    /// the index and commits, `.gitignore`, a forced reset): a vault without a
+    /// Rust marker is backed up (the backup includes `.git`) before the first
+    /// such change. Read-only commands and `fetch` do not call it.
+    fn gate(&self) -> Result<(), GitError> {
+        symvault_store::data_safety::ensure_marker(&self.root)
+            .map_err(|error| GitError::DataSafety(error.to_string()))
     }
     pub fn create_gitignore(&self) -> Result<(), GitError> {
         let path = self.root.join(".gitignore");
@@ -182,6 +212,7 @@ impl GitRepository {
             .collect()
     }
     pub fn commit(&self, mut opts: CommitOptions) -> Result<Option<Commit>, GitError> {
+        self.gate()?;
         self.create_gitignore()?;
         if opts.message.is_empty() {
             opts.message = "Update from Symaira Vault".to_owned();
@@ -282,6 +313,7 @@ impl GitRepository {
     }
     pub fn add_remote(&self, name: &str, url: &str) -> Result<(), GitError> {
         validate_name(name)?;
+        self.gate()?;
         self.command(&["remote", "add", name, url]).map(|_| ())
     }
     pub fn remote_url(&self, name: &str) -> Result<Option<String>, GitError> {
@@ -301,6 +333,14 @@ impl GitRepository {
         if remote_url.is_none() {
             return PullResult {
                 skipped: true,
+                ..Default::default()
+            };
+        }
+        // A pull rewrites the working tree: D1 backup first for an unmarked vault.
+        if let Err(error) = self.gate() {
+            return PullResult {
+                remote_url,
+                error: Some(error.to_string()),
                 ..Default::default()
             };
         }
@@ -453,6 +493,14 @@ impl GitRepository {
         if remote_url.is_none() {
             return PullResult {
                 skipped: true,
+                ..Default::default()
+            };
+        }
+        // A forced pull resets the working tree: D1 backup first.
+        if let Err(error) = self.gate() {
+            return PullResult {
+                remote_url,
+                error: Some(error.to_string()),
                 ..Default::default()
             };
         }
@@ -753,6 +801,13 @@ impl GitRepository {
                 ..Default::default()
             };
         }
+        if push && let Err(error) = self.gate() {
+            return PushResult {
+                remote_url,
+                error: Some(error.to_string()),
+                ..Default::default()
+            };
+        }
         let args = if push {
             vec!["push", "--set-upstream", name, "HEAD"]
         } else {
@@ -987,6 +1042,20 @@ fn is_offline_transport_error(message: &str) -> bool {
     lowered.contains("couldn't connect") || lowered.contains("unable to access")
 }
 
+/// Pins a spawned `git` to the C locale (#1555).
+///
+/// Git and libcurl localize their errors (`Schwerwiegend: konnte nicht auf ...
+/// zugreifen`), and `classify_pull_error`/`classify_push_error` match English
+/// text, so a German or French session would stop recognising an unreachable
+/// remote as offline. `LC_ALL=C` overrides every `LC_*`/`LANG` value, and
+/// `LANGUAGE` is cleared because GNU gettext consults it ahead of the locale
+/// name for any non-C locale. Every git call goes through this runner: commit
+/// messages, porcelain output and object data do not depend on the locale, so
+/// the only visible effect is that diagnostic text is English.
+fn pin_stable_locale(command: &mut Command) {
+    command.env("LC_ALL", "C").env_remove("LANGUAGE");
+}
+
 fn run_process_with_timeout(
     program: &str,
     args: &[&str],
@@ -1003,6 +1072,7 @@ fn run_process_with_timeout(
     };
 
     let mut command = Command::new(program);
+    pin_stable_locale(&mut command);
     command
         .args(args)
         .env_remove("SYMVAULT_PASSPHRASE")
@@ -1041,7 +1111,7 @@ fn run_process_with_timeout(
             Err(error) => {
                 let _ = fs::remove_file(&stdout_path);
                 let _ = fs::remove_file(&stderr_path);
-                return Err(GitError::Io(error));
+                return Err(spawn_error(program, cwd, error));
             }
         };
         let deadline = Instant::now() + timeout;
@@ -1412,6 +1482,39 @@ mod tests {
     use super::*;
 
     #[test]
+    fn git_runner_pins_a_stable_c_locale() {
+        let mut command = Command::new("git");
+        command
+            .env("LC_ALL", "de_DE.UTF-8")
+            .env("LANGUAGE", "de")
+            .env("LANG", "de_DE.UTF-8");
+        pin_stable_locale(&mut command);
+        let envs: std::collections::BTreeMap<_, _> = command
+            .get_envs()
+            .map(|(key, value)| (key.to_owned(), value.map(|v| v.to_owned())))
+            .collect();
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("LC_ALL")),
+            Some(&Some("C".into()))
+        );
+        // `None` is an explicit removal; the key must not be inherited.
+        assert_eq!(envs.get(std::ffi::OsStr::new("LANGUAGE")), Some(&None));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_runner_hands_children_the_c_locale() {
+        let output = run_process_with_timeout(
+            "sh",
+            &["-c", "printf '%s|%s' \"$LC_ALL\" \"${LANGUAGE-unset}\""],
+            None,
+            Duration::from_secs(10),
+        )
+        .expect("run sh through the git runner");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "C|unset");
+    }
+
+    #[test]
     fn init_retry_finishes_configuration_after_git_directory_exists() {
         let root = tempfile::tempdir().expect("isolated repository");
         let repo = GitRepository::init(root.path()).expect("initialize real Git repository");
@@ -1549,6 +1652,43 @@ mod tests {
         assert!(!path.exists());
     }
 
+    /// git is a hard runtime dependency: a missing executable must surface a
+    /// clear, actionable message instead of a bare `NotFound` I/O error.
+    #[test]
+    fn missing_git_executable_reports_clear_error() {
+        let empty = tempfile::tempdir().unwrap();
+        let cwd = tempfile::tempdir().unwrap();
+        // A genuine spawn failure: `git` is not resolvable on an empty PATH.
+        let spawn_failure = Command::new("git")
+            .env("PATH", empty.path())
+            .current_dir(cwd.path())
+            .spawn()
+            .unwrap_err();
+        assert_eq!(spawn_failure.kind(), io::ErrorKind::NotFound);
+        let mapped = spawn_error("git", Some(cwd.path()), spawn_failure);
+        assert!(matches!(mapped, GitError::GitNotFound), "{mapped:?}");
+        assert_eq!(
+            mapped.to_string(),
+            "git is required but was not found in PATH; install git and retry"
+        );
+    }
+
+    #[test]
+    fn missing_working_directory_is_not_reported_as_missing_git() {
+        let parent = tempfile::tempdir().unwrap();
+        let missing = parent.path().join("absent");
+        let error = io::Error::from(io::ErrorKind::NotFound);
+        assert!(matches!(
+            spawn_error("git", Some(&missing), error),
+            GitError::Io(_)
+        ));
+        let error = io::Error::from(io::ErrorKind::PermissionDenied);
+        assert!(matches!(
+            spawn_error("git", Some(parent.path()), error),
+            GitError::Io(_)
+        ));
+    }
+
     fn command_error(stderr: &str) -> GitError {
         GitError::Command {
             status: "exit status: 1".to_owned(),
@@ -1566,6 +1706,7 @@ mod tests {
     fn commit_supplies_go_identity_when_the_repository_has_none() {
         let root = tempfile::tempdir().unwrap();
         let repo = GitRepository::init(root.path()).unwrap();
+        symvault_store::data_safety::test_support_pre_marked(root.path());
         // An explicitly empty identity stands in for a host without one; the
         // repository-local value wins over any ambient developer identity.
         repo.command(&["config", "user.name", ""]).unwrap();
@@ -1590,6 +1731,7 @@ mod tests {
     fn commit_prefers_the_repository_identity_over_go_defaults() {
         let root = tempfile::tempdir().unwrap();
         let repo = GitRepository::init(root.path()).unwrap();
+        symvault_store::data_safety::test_support_pre_marked(root.path());
         repo.command(&["config", "user.name", "Vault Owner"])
             .unwrap();
         repo.command(&["config", "user.email", "owner@example.invalid"])
@@ -1832,16 +1974,16 @@ mod tests {
                 .expect("make timeout helper executable");
         }
 
+        // The helper must record its descendant's pid before the deadline; a
+        // 1 s deadline lost that race on a loaded host (no marker file). The
+        // bound still proves the timeout fired long before `sleep 30` ended.
+        let deadline = Duration::from_secs(5);
         let started = Instant::now();
-        let error = run_process_with_timeout(
-            script.to_str().expect("script path"),
-            &[],
-            None,
-            Duration::from_secs(1),
-        )
-        .expect_err("helper must exceed the deadline");
+        let error =
+            run_process_with_timeout(script.to_str().expect("script path"), &[], None, deadline)
+                .expect_err("helper must exceed the deadline");
         assert!(matches!(error, GitError::Timeout { .. }));
-        assert!(started.elapsed() < Duration::from_secs(2));
+        assert!(started.elapsed() < deadline + Duration::from_secs(5));
 
         let pid = fs::read_to_string(&marker)
             .expect("helper recorded descendant pid")
@@ -1959,7 +2101,9 @@ mod tests {
                 "cmd.exe",
                 &["/D", "/C", "exit", "0"],
                 None,
-                Duration::from_secs(1),
+                // Setup bound, not the behavior under test: generous so load and coverage
+                // instrumentation cannot win the race (#1564-#1567).
+                Duration::from_secs(30),
             )
             .expect("already-gone process should complete");
             assert!(output.status.success());
@@ -2002,7 +2146,7 @@ mod tests {
         }
 
         fn read_pid(path: std::path::PathBuf) -> u32 {
-            let deadline = Instant::now() + Duration::from_secs(5);
+            let deadline = Instant::now() + Duration::from_secs(30);
             loop {
                 if let Ok(value) = fs::read_to_string(&path) {
                     return value.trim().parse().expect("valid helper pid");
@@ -2017,7 +2161,7 @@ mod tests {
         }
 
         fn wait_process_gone(pid: u32) -> bool {
-            let deadline = Instant::now() + Duration::from_secs(5);
+            let deadline = Instant::now() + Duration::from_secs(30);
             loop {
                 let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, pid) };
                 if handle.is_null() {

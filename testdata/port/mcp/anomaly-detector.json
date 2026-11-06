@@ -1,0 +1,2283 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "24acdb08fcc7021262717aa803d72eb8d151c66a",
+    "commit_sha": "24acdb08fcc7021262717aa803d72eb8d151c66a",
+    "contract": "mcp-anomaly-ordered-v1",
+    "source_files": [
+      "internal/anomaly/detector.go",
+      "internal/anomaly/rules.go",
+      "internal/mcp/server/server_dispatch.go"
+    ],
+    "source_digest": "3ee1e697fef110fec0790fd7e9db71bbe11e0d641d5882f3fe54c86be98cc295",
+    "generator_files": [
+      "scripts/rust-port/cmd/anomalygen/main.go"
+    ],
+    "generator_digest": "cdfe16fc91b76aeb8b14110e3546500feeab5766e09706b54854b560de3aa9a1"
+  },
+  "dispatch": {
+    "audit_action_prefix": "anomaly_",
+    "audit_path": "alert.Path",
+    "audit_ok": false,
+    "audit_context_background": true,
+    "cache_invalidated_after_audit": true,
+    "cache_invalidated_for_any_alert": true,
+    "notify_min_severity": "SeverityHigh",
+    "skips_empty_agent": true,
+    "observes_failed_calls": true,
+    "field_length_tools": [
+      "get_entry",
+      "get_entry_value"
+    ],
+    "warn_message": "anomaly detected",
+    "warn_attributes": [
+      "type",
+      "severity",
+      "agent",
+      "path",
+      "request_id",
+      "description"
+    ]
+  },
+  "scenarios": [
+    {
+      "name": "off_hours_default_wraps_midnight",
+      "config": {},
+      "events": [
+        {
+          "event": {
+            "unix_nanos": 1793660400000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "h00"
+          },
+          "hooks": [
+            {
+              "type": "off_hours",
+              "severity": "low",
+              "description": "Entry access during off-hours by agent a",
+              "agent": "a",
+              "path": "p",
+              "tool": "get_entry",
+              "request_id": "h00",
+              "unix_nanos": 1793660400000000000
+            }
+          ],
+          "returned": {
+            "type": "off_hours",
+            "severity": "low",
+            "description": "Entry access during off-hours by agent a",
+            "agent": "a",
+            "path": "p",
+            "tool": "get_entry",
+            "request_id": "h00",
+            "unix_nanos": 1793660400000000000
+          },
+          "window_len": 1
+        },
+        {
+          "event": {
+            "unix_nanos": 1793678400000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "h05"
+          },
+          "hooks": [
+            {
+              "type": "off_hours",
+              "severity": "low",
+              "description": "Entry access during off-hours by agent a",
+              "agent": "a",
+              "path": "p",
+              "tool": "get_entry",
+              "request_id": "h05",
+              "unix_nanos": 1793678400000000000
+            }
+          ],
+          "returned": {
+            "type": "off_hours",
+            "severity": "low",
+            "description": "Entry access during off-hours by agent a",
+            "agent": "a",
+            "path": "p",
+            "tool": "get_entry",
+            "request_id": "h05",
+            "unix_nanos": 1793678400000000000
+          },
+          "window_len": 2
+        },
+        {
+          "event": {
+            "unix_nanos": 1793682000000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "h06"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 3
+        },
+        {
+          "event": {
+            "unix_nanos": 1793703600000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "h12"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 4
+        },
+        {
+          "event": {
+            "unix_nanos": 1793736000000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "h21"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 5
+        },
+        {
+          "event": {
+            "unix_nanos": 1793739600000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "h22"
+          },
+          "hooks": [
+            {
+              "type": "off_hours",
+              "severity": "low",
+              "description": "Entry access during off-hours by agent a",
+              "agent": "a",
+              "path": "p",
+              "tool": "get_entry",
+              "request_id": "h22",
+              "unix_nanos": 1793739600000000000
+            }
+          ],
+          "returned": {
+            "type": "off_hours",
+            "severity": "low",
+            "description": "Entry access during off-hours by agent a",
+            "agent": "a",
+            "path": "p",
+            "tool": "get_entry",
+            "request_id": "h22",
+            "unix_nanos": 1793739600000000000
+          },
+          "window_len": 6
+        },
+        {
+          "event": {
+            "unix_nanos": 1793743200000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "h23"
+          },
+          "hooks": [
+            {
+              "type": "off_hours",
+              "severity": "low",
+              "description": "Entry access during off-hours by agent a",
+              "agent": "a",
+              "path": "p",
+              "tool": "get_entry",
+              "request_id": "h23",
+              "unix_nanos": 1793743200000000000
+            }
+          ],
+          "returned": {
+            "type": "off_hours",
+            "severity": "low",
+            "description": "Entry access during off-hours by agent a",
+            "agent": "a",
+            "path": "p",
+            "tool": "get_entry",
+            "request_id": "h23",
+            "unix_nanos": 1793743200000000000
+          },
+          "window_len": 7
+        },
+        {
+          "event": {
+            "unix_nanos": 1793671200000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "h03"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 8
+        }
+      ]
+    },
+    {
+      "name": "off_hours_plain_window_1_to_5",
+      "config": {
+        "off_hours_start": 1,
+        "off_hours_end": 5
+      },
+      "events": [
+        {
+          "event": {
+            "unix_nanos": 1793660400000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "h00"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 1
+        },
+        {
+          "event": {
+            "unix_nanos": 1793664000000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "h01"
+          },
+          "hooks": [
+            {
+              "type": "off_hours",
+              "severity": "low",
+              "description": "Entry access during off-hours by agent a",
+              "agent": "a",
+              "path": "p",
+              "tool": "get_entry",
+              "request_id": "h01",
+              "unix_nanos": 1793664000000000000
+            }
+          ],
+          "returned": {
+            "type": "off_hours",
+            "severity": "low",
+            "description": "Entry access during off-hours by agent a",
+            "agent": "a",
+            "path": "p",
+            "tool": "get_entry",
+            "request_id": "h01",
+            "unix_nanos": 1793664000000000000
+          },
+          "window_len": 2
+        },
+        {
+          "event": {
+            "unix_nanos": 1793674800000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "h04"
+          },
+          "hooks": [
+            {
+              "type": "off_hours",
+              "severity": "low",
+              "description": "Entry access during off-hours by agent a",
+              "agent": "a",
+              "path": "p",
+              "tool": "get_entry",
+              "request_id": "h04",
+              "unix_nanos": 1793674800000000000
+            }
+          ],
+          "returned": {
+            "type": "off_hours",
+            "severity": "low",
+            "description": "Entry access during off-hours by agent a",
+            "agent": "a",
+            "path": "p",
+            "tool": "get_entry",
+            "request_id": "h04",
+            "unix_nanos": 1793674800000000000
+          },
+          "window_len": 3
+        },
+        {
+          "event": {
+            "unix_nanos": 1793678400000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "h05"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 4
+        },
+        {
+          "event": {
+            "unix_nanos": 1793682000000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "h06"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 5
+        }
+      ]
+    },
+    {
+      "name": "off_hours_empty_window_0_to_0",
+      "config": {
+        "off_hours_start": 0,
+        "off_hours_end": 0
+      },
+      "events": [
+        {
+          "event": {
+            "unix_nanos": 1793660400000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "h00"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 1
+        },
+        {
+          "event": {
+            "unix_nanos": 1793703600000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "h12"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 2
+        }
+      ]
+    },
+    {
+      "name": "off_hours_all_day_0_to_24",
+      "config": {
+        "off_hours_start": 0,
+        "off_hours_end": 24
+      },
+      "events": [
+        {
+          "event": {
+            "unix_nanos": 1793660400000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "h00"
+          },
+          "hooks": [
+            {
+              "type": "off_hours",
+              "severity": "low",
+              "description": "Entry access during off-hours by agent a",
+              "agent": "a",
+              "path": "p",
+              "tool": "get_entry",
+              "request_id": "h00",
+              "unix_nanos": 1793660400000000000
+            }
+          ],
+          "returned": {
+            "type": "off_hours",
+            "severity": "low",
+            "description": "Entry access during off-hours by agent a",
+            "agent": "a",
+            "path": "p",
+            "tool": "get_entry",
+            "request_id": "h00",
+            "unix_nanos": 1793660400000000000
+          },
+          "window_len": 1
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707200000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "h13"
+          },
+          "hooks": [
+            {
+              "type": "off_hours",
+              "severity": "low",
+              "description": "Entry access during off-hours by agent a",
+              "agent": "a",
+              "path": "p",
+              "tool": "get_entry",
+              "request_id": "h13",
+              "unix_nanos": 1793707200000000000
+            }
+          ],
+          "returned": {
+            "type": "off_hours",
+            "severity": "low",
+            "description": "Entry access during off-hours by agent a",
+            "agent": "a",
+            "path": "p",
+            "tool": "get_entry",
+            "request_id": "h13",
+            "unix_nanos": 1793707200000000000
+          },
+          "window_len": 2
+        },
+        {
+          "event": {
+            "unix_nanos": 1793743200000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "h23"
+          },
+          "hooks": [
+            {
+              "type": "off_hours",
+              "severity": "low",
+              "description": "Entry access during off-hours by agent a",
+              "agent": "a",
+              "path": "p",
+              "tool": "get_entry",
+              "request_id": "h23",
+              "unix_nanos": 1793743200000000000
+            }
+          ],
+          "returned": {
+            "type": "off_hours",
+            "severity": "low",
+            "description": "Entry access during off-hours by agent a",
+            "agent": "a",
+            "path": "p",
+            "tool": "get_entry",
+            "request_id": "h23",
+            "unix_nanos": 1793743200000000000
+          },
+          "window_len": 3
+        }
+      ]
+    },
+    {
+      "name": "rate_default_31st_call_alerts",
+      "config": {
+        "off_hours_start": 0,
+        "off_hours_end": 0
+      },
+      "events": [
+        {
+          "event": {
+            "unix_nanos": 1793707200000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1000"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 1
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707201000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1001"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 2
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707202000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1002"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 3
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707203000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1003"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 4
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707204000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1004"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 5
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707205000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1005"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 6
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707206000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1006"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 7
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707207000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1007"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 8
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707208000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1008"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 9
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707209000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1009"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 10
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707210000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1010"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 11
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707211000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1011"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 12
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707212000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1012"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 13
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707213000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1013"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 14
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707214000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1014"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 15
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707215000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1015"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 16
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707216000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1016"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 17
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707217000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1017"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 18
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707218000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1018"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 19
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707219000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1019"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 20
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707220000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1020"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 21
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707221000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1021"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 22
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707222000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1022"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 23
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707223000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1023"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 24
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707224000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1024"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 25
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707225000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1025"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 26
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707226000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1026"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 27
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707227000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1027"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 28
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707228000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1028"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 29
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707229000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1029"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 30
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707230000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1030"
+          },
+          "hooks": [
+            {
+              "type": "rate_anomaly",
+              "severity": "medium",
+              "description": "Rate anomaly: a made 31 requests",
+              "agent": "a",
+              "path": "",
+              "tool": "list_entries",
+              "request_id": "r1030",
+              "unix_nanos": 1793707230000000000
+            }
+          ],
+          "returned": {
+            "type": "rate_anomaly",
+            "severity": "medium",
+            "description": "Rate anomaly: a made 31 requests",
+            "agent": "a",
+            "path": "",
+            "tool": "list_entries",
+            "request_id": "r1030",
+            "unix_nanos": 1793707230000000000
+          },
+          "window_len": 31
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707231000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1031"
+          },
+          "hooks": [
+            {
+              "type": "rate_anomaly",
+              "severity": "medium",
+              "description": "Rate anomaly: a made 32 requests",
+              "agent": "a",
+              "path": "",
+              "tool": "list_entries",
+              "request_id": "r1031",
+              "unix_nanos": 1793707231000000000
+            }
+          ],
+          "returned": {
+            "type": "rate_anomaly",
+            "severity": "medium",
+            "description": "Rate anomaly: a made 32 requests",
+            "agent": "a",
+            "path": "",
+            "tool": "list_entries",
+            "request_id": "r1031",
+            "unix_nanos": 1793707231000000000
+          },
+          "window_len": 32
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707232000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "b",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1032"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 33
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707500000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1300"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 34
+        }
+      ]
+    },
+    {
+      "name": "rate_custom_limit_and_window_boundary",
+      "config": {
+        "rate_limit": 2,
+        "rate_window_seconds": 10,
+        "off_hours_start": 0,
+        "off_hours_end": 0
+      },
+      "events": [
+        {
+          "event": {
+            "unix_nanos": 1793707200000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "x",
+            "path": "",
+            "ok": true,
+            "request_id": "r1000"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 1
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707201000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "x",
+            "path": "",
+            "ok": true,
+            "request_id": "r1001"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 2
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707210000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "x",
+            "path": "",
+            "ok": true,
+            "request_id": "r1010"
+          },
+          "hooks": [
+            {
+              "type": "rate_anomaly",
+              "severity": "medium",
+              "description": "Rate anomaly: a made 3 requests",
+              "agent": "a",
+              "path": "",
+              "tool": "x",
+              "request_id": "r1010",
+              "unix_nanos": 1793707210000000000
+            }
+          ],
+          "returned": {
+            "type": "rate_anomaly",
+            "severity": "medium",
+            "description": "Rate anomaly: a made 3 requests",
+            "agent": "a",
+            "path": "",
+            "tool": "x",
+            "request_id": "r1010",
+            "unix_nanos": 1793707210000000000
+          },
+          "window_len": 3
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707211000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "x",
+            "path": "",
+            "ok": true,
+            "request_id": "r1011"
+          },
+          "hooks": [
+            {
+              "type": "rate_anomaly",
+              "severity": "medium",
+              "description": "Rate anomaly: a made 3 requests",
+              "agent": "a",
+              "path": "",
+              "tool": "x",
+              "request_id": "r1011",
+              "unix_nanos": 1793707211000000000
+            }
+          ],
+          "returned": {
+            "type": "rate_anomaly",
+            "severity": "medium",
+            "description": "Rate anomaly: a made 3 requests",
+            "agent": "a",
+            "path": "",
+            "tool": "x",
+            "request_id": "r1011",
+            "unix_nanos": 1793707211000000000
+          },
+          "window_len": 4
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707221000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "x",
+            "path": "",
+            "ok": true,
+            "request_id": "r1021"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 5
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707222000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "b",
+            "tool": "x",
+            "path": "",
+            "ok": true,
+            "request_id": "r1022"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 6
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707223000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "b",
+            "tool": "x",
+            "path": "",
+            "ok": true,
+            "request_id": "r1023"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 7
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707224000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "b",
+            "tool": "x",
+            "path": "",
+            "ok": true,
+            "request_id": "r1024"
+          },
+          "hooks": [
+            {
+              "type": "rate_anomaly",
+              "severity": "medium",
+              "description": "Rate anomaly: b made 3 requests",
+              "agent": "b",
+              "path": "",
+              "tool": "x",
+              "request_id": "r1024",
+              "unix_nanos": 1793707224000000000
+            }
+          ],
+          "returned": {
+            "type": "rate_anomaly",
+            "severity": "medium",
+            "description": "Rate anomaly: b made 3 requests",
+            "agent": "b",
+            "path": "",
+            "tool": "x",
+            "request_id": "r1024",
+            "unix_nanos": 1793707224000000000
+          },
+          "window_len": 8
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707225000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "x",
+            "path": "",
+            "ok": true,
+            "request_id": "r1025"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 9
+        }
+      ]
+    },
+    {
+      "name": "sweep_default_ten_unique_paths",
+      "config": {
+        "off_hours_start": 0,
+        "off_hours_end": 0
+      },
+      "events": [
+        {
+          "event": {
+            "unix_nanos": 1793707200000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p/0",
+            "ok": true,
+            "request_id": "r1000"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 1
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707201000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "b",
+            "tool": "get_entry",
+            "path": "p/1",
+            "ok": true,
+            "request_id": "r1001"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 2
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707202000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p/2",
+            "ok": true,
+            "request_id": "r1002"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 3
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707203000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "b",
+            "tool": "get_entry",
+            "path": "p/3",
+            "ok": true,
+            "request_id": "r1003"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 4
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707204000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p/4",
+            "ok": true,
+            "request_id": "r1004"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 5
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707205000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "b",
+            "tool": "get_entry",
+            "path": "p/5",
+            "ok": true,
+            "request_id": "r1005"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 6
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707206000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p/6",
+            "ok": true,
+            "request_id": "r1006"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 7
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707207000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "b",
+            "tool": "get_entry",
+            "path": "p/7",
+            "ok": true,
+            "request_id": "r1007"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 8
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707208000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p/8",
+            "ok": true,
+            "request_id": "r1008"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 9
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707209000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p/0",
+            "ok": true,
+            "request_id": "r1009"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 10
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707210000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p/9",
+            "ok": true,
+            "request_id": "r1010"
+          },
+          "hooks": [
+            {
+              "type": "sweep",
+              "severity": "medium",
+              "description": "Sweep access detected: a accessed 10 unique paths",
+              "agent": "a",
+              "path": "p/9",
+              "tool": "get_entry",
+              "request_id": "r1010",
+              "unix_nanos": 1793707210000000000
+            }
+          ],
+          "returned": {
+            "type": "sweep",
+            "severity": "medium",
+            "description": "Sweep access detected: a accessed 10 unique paths",
+            "agent": "a",
+            "path": "p/9",
+            "tool": "get_entry",
+            "request_id": "r1010",
+            "unix_nanos": 1793707210000000000
+          },
+          "window_len": 11
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707211000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "request_id": "r1011"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 12
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707300000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p/10",
+            "ok": true,
+            "request_id": "r1100"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 13
+        }
+      ]
+    },
+    {
+      "name": "sweep_custom_threshold_and_window_boundary",
+      "config": {
+        "sweep_threshold": 3,
+        "sweep_window_seconds": 5,
+        "off_hours_start": 0,
+        "off_hours_end": 0
+      },
+      "events": [
+        {
+          "event": {
+            "unix_nanos": 1793707200000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "a/0",
+            "ok": true,
+            "request_id": "r1000"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 1
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707201000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "a/1",
+            "ok": true,
+            "request_id": "r1001"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 2
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707202000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "a/2",
+            "ok": true,
+            "request_id": "r1002"
+          },
+          "hooks": [
+            {
+              "type": "sweep",
+              "severity": "medium",
+              "description": "Sweep access detected: a accessed 3 unique paths",
+              "agent": "a",
+              "path": "a/2",
+              "tool": "get_entry",
+              "request_id": "r1002",
+              "unix_nanos": 1793707202000000000
+            }
+          ],
+          "returned": {
+            "type": "sweep",
+            "severity": "medium",
+            "description": "Sweep access detected: a accessed 3 unique paths",
+            "agent": "a",
+            "path": "a/2",
+            "tool": "get_entry",
+            "request_id": "r1002",
+            "unix_nanos": 1793707202000000000
+          },
+          "window_len": 3
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707205000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "a/3",
+            "ok": true,
+            "request_id": "r1005"
+          },
+          "hooks": [
+            {
+              "type": "sweep",
+              "severity": "medium",
+              "description": "Sweep access detected: a accessed 4 unique paths",
+              "agent": "a",
+              "path": "a/3",
+              "tool": "get_entry",
+              "request_id": "r1005",
+              "unix_nanos": 1793707205000000000
+            }
+          ],
+          "returned": {
+            "type": "sweep",
+            "severity": "medium",
+            "description": "Sweep access detected: a accessed 4 unique paths",
+            "agent": "a",
+            "path": "a/3",
+            "tool": "get_entry",
+            "request_id": "r1005",
+            "unix_nanos": 1793707205000000000
+          },
+          "window_len": 4
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707207000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "a/4",
+            "ok": true,
+            "request_id": "r1007"
+          },
+          "hooks": [
+            {
+              "type": "sweep",
+              "severity": "medium",
+              "description": "Sweep access detected: a accessed 3 unique paths",
+              "agent": "a",
+              "path": "a/4",
+              "tool": "get_entry",
+              "request_id": "r1007",
+              "unix_nanos": 1793707207000000000
+            }
+          ],
+          "returned": {
+            "type": "sweep",
+            "severity": "medium",
+            "description": "Sweep access detected: a accessed 3 unique paths",
+            "agent": "a",
+            "path": "a/4",
+            "tool": "get_entry",
+            "request_id": "r1007",
+            "unix_nanos": 1793707207000000000
+          },
+          "window_len": 5
+        }
+      ]
+    },
+    {
+      "name": "canary_access",
+      "config": {
+        "off_hours_start": 0,
+        "off_hours_end": 0
+      },
+      "events": [
+        {
+          "event": {
+            "unix_nanos": 1793707200000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "honey/pot",
+            "ok": true,
+            "is_canary": true,
+            "request_id": "r1000"
+          },
+          "hooks": [
+            {
+              "type": "canary_access",
+              "severity": "critical",
+              "description": "Honeytoken/canary entry accessed by agent a",
+              "agent": "a",
+              "path": "honey/pot",
+              "tool": "get_entry",
+              "request_id": "r1000",
+              "unix_nanos": 1793707200000000000
+            }
+          ],
+          "returned": {
+            "type": "canary_access",
+            "severity": "critical",
+            "description": "Honeytoken/canary entry accessed by agent a",
+            "agent": "a",
+            "path": "honey/pot",
+            "tool": "get_entry",
+            "request_id": "r1000",
+            "unix_nanos": 1793707200000000000
+          },
+          "window_len": 1
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707201000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "list_entries",
+            "path": "",
+            "ok": true,
+            "is_canary": true,
+            "request_id": "r1001"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 2
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707202000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "honey/pot",
+            "ok": true,
+            "request_id": "r1002"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 3
+        }
+      ]
+    },
+    {
+      "name": "every_rule_on_one_event_orders_the_hooks",
+      "config": {
+        "sweep_threshold": 1,
+        "rate_limit": 0,
+        "off_hours_start": 0,
+        "off_hours_end": 24,
+        "tool_chain_field_threshold": 1
+      },
+      "events": [
+        {
+          "event": {
+            "unix_nanos": 1793707200000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry_value",
+            "path": "p/1",
+            "ok": true,
+            "request_id": "r1000",
+            "field_length": 5
+          },
+          "hooks": [
+            {
+              "type": "off_hours",
+              "severity": "low",
+              "description": "Entry access during off-hours by agent a",
+              "agent": "a",
+              "path": "p/1",
+              "tool": "get_entry_value",
+              "request_id": "r1000",
+              "unix_nanos": 1793707200000000000
+            },
+            {
+              "type": "sweep",
+              "severity": "medium",
+              "description": "Sweep access detected: a accessed 1 unique paths",
+              "agent": "a",
+              "path": "p/1",
+              "tool": "get_entry_value",
+              "request_id": "r1000",
+              "unix_nanos": 1793707200000000000
+            },
+            {
+              "type": "rate_anomaly",
+              "severity": "medium",
+              "description": "Rate anomaly: a made 1 requests",
+              "agent": "a",
+              "path": "",
+              "tool": "get_entry_value",
+              "request_id": "r1000",
+              "unix_nanos": 1793707200000000000
+            }
+          ],
+          "returned": {
+            "type": "off_hours",
+            "severity": "low",
+            "description": "Entry access during off-hours by agent a",
+            "agent": "a",
+            "path": "p/1",
+            "tool": "get_entry_value",
+            "request_id": "r1000",
+            "unix_nanos": 1793707200000000000
+          },
+          "window_len": 1
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707201000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "run_command",
+            "path": "p/2",
+            "ok": true,
+            "is_canary": true,
+            "request_id": "r1001"
+          },
+          "hooks": [
+            {
+              "type": "canary_access",
+              "severity": "critical",
+              "description": "Honeytoken/canary entry accessed by agent a",
+              "agent": "a",
+              "path": "p/2",
+              "tool": "run_command",
+              "request_id": "r1001",
+              "unix_nanos": 1793707201000000000
+            },
+            {
+              "type": "off_hours",
+              "severity": "low",
+              "description": "Entry access during off-hours by agent a",
+              "agent": "a",
+              "path": "p/2",
+              "tool": "run_command",
+              "request_id": "r1001",
+              "unix_nanos": 1793707201000000000
+            },
+            {
+              "type": "sweep",
+              "severity": "medium",
+              "description": "Sweep access detected: a accessed 2 unique paths",
+              "agent": "a",
+              "path": "p/2",
+              "tool": "run_command",
+              "request_id": "r1001",
+              "unix_nanos": 1793707201000000000
+            },
+            {
+              "type": "rate_anomaly",
+              "severity": "medium",
+              "description": "Rate anomaly: a made 2 requests",
+              "agent": "a",
+              "path": "",
+              "tool": "run_command",
+              "request_id": "r1001",
+              "unix_nanos": 1793707201000000000
+            },
+            {
+              "type": "tool_chain",
+              "severity": "high",
+              "description": "Tool-chain: agent a read a large field (5 bytes) then invoked run_command",
+              "agent": "a",
+              "path": "p/2",
+              "tool": "run_command",
+              "request_id": "r1001",
+              "unix_nanos": 1793707201000000000
+            }
+          ],
+          "returned": {
+            "type": "canary_access",
+            "severity": "critical",
+            "description": "Honeytoken/canary entry accessed by agent a",
+            "agent": "a",
+            "path": "p/2",
+            "tool": "run_command",
+            "request_id": "r1001",
+            "unix_nanos": 1793707201000000000
+          },
+          "window_len": 2
+        }
+      ]
+    },
+    {
+      "name": "tool_chain_default",
+      "config": {
+        "off_hours_start": 0,
+        "off_hours_end": 0
+      },
+      "events": [
+        {
+          "event": {
+            "unix_nanos": 1793707200000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry_value",
+            "path": "p",
+            "ok": true,
+            "request_id": "r1000",
+            "field_length": 500
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 1
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707201000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "b",
+            "tool": "run_command",
+            "path": "",
+            "ok": true,
+            "request_id": "r1001"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 2
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707202000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "run_command",
+            "path": "",
+            "ok": true,
+            "request_id": "r1002"
+          },
+          "hooks": [
+            {
+              "type": "tool_chain",
+              "severity": "high",
+              "description": "Tool-chain: agent a read a large field (500 bytes) then invoked run_command",
+              "agent": "a",
+              "path": "",
+              "tool": "run_command",
+              "request_id": "r1002",
+              "unix_nanos": 1793707202000000000
+            }
+          ],
+          "returned": {
+            "type": "tool_chain",
+            "severity": "high",
+            "description": "Tool-chain: agent a read a large field (500 bytes) then invoked run_command",
+            "agent": "a",
+            "path": "",
+            "tool": "run_command",
+            "request_id": "r1002",
+            "unix_nanos": 1793707202000000000
+          },
+          "window_len": 3
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707203000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "execute_with_secret",
+            "path": "",
+            "ok": true,
+            "request_id": "r1003"
+          },
+          "hooks": [
+            {
+              "type": "tool_chain",
+              "severity": "high",
+              "description": "Tool-chain: agent a read a large field (500 bytes) then invoked execute_with_secret",
+              "agent": "a",
+              "path": "",
+              "tool": "execute_with_secret",
+              "request_id": "r1003",
+              "unix_nanos": 1793707203000000000
+            }
+          ],
+          "returned": {
+            "type": "tool_chain",
+            "severity": "high",
+            "description": "Tool-chain: agent a read a large field (500 bytes) then invoked execute_with_secret",
+            "agent": "a",
+            "path": "",
+            "tool": "execute_with_secret",
+            "request_id": "r1003",
+            "unix_nanos": 1793707203000000000
+          },
+          "window_len": 4
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707231000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "run_command",
+            "path": "",
+            "ok": true,
+            "request_id": "r1031"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 5
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707240000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "q",
+            "ok": true,
+            "request_id": "r1040",
+            "field_length": 499
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 6
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707241000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "run_command",
+            "path": "",
+            "ok": true,
+            "request_id": "r1041"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 7
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707250000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "r",
+            "ok": true,
+            "request_id": "r1050",
+            "field_length": 554
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 8
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707280000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "run_command",
+            "path": "",
+            "ok": true,
+            "request_id": "r1080"
+          },
+          "hooks": [
+            {
+              "type": "tool_chain",
+              "severity": "high",
+              "description": "Tool-chain: agent a read a large field (554 bytes) then invoked run_command",
+              "agent": "a",
+              "path": "",
+              "tool": "run_command",
+              "request_id": "r1080",
+              "unix_nanos": 1793707280000000000
+            }
+          ],
+          "returned": {
+            "type": "tool_chain",
+            "severity": "high",
+            "description": "Tool-chain: agent a read a large field (554 bytes) then invoked run_command",
+            "agent": "a",
+            "path": "",
+            "tool": "run_command",
+            "request_id": "r1080",
+            "unix_nanos": 1793707280000000000
+          },
+          "window_len": 9
+        }
+      ]
+    },
+    {
+      "name": "tool_chain_command_before_read_is_not_a_chain",
+      "config": {
+        "off_hours_start": 0,
+        "off_hours_end": 0
+      },
+      "events": [
+        {
+          "event": {
+            "unix_nanos": 1793707200000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "run_command",
+            "path": "",
+            "ok": true,
+            "request_id": "r1000"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 1
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707201000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry_value",
+            "path": "p",
+            "ok": true,
+            "request_id": "r1001",
+            "field_length": 554
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 2
+        }
+      ]
+    },
+    {
+      "name": "tool_chain_custom_window_and_threshold",
+      "config": {
+        "off_hours_start": 0,
+        "off_hours_end": 0,
+        "tool_chain_window_seconds": 5,
+        "tool_chain_field_threshold": 10
+      },
+      "events": [
+        {
+          "event": {
+            "unix_nanos": 1793707200000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "get_entry",
+            "path": "p",
+            "ok": true,
+            "request_id": "r1000",
+            "field_length": 10
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 1
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707205000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "run_command",
+            "path": "",
+            "ok": true,
+            "request_id": "r1005"
+          },
+          "hooks": [
+            {
+              "type": "tool_chain",
+              "severity": "high",
+              "description": "Tool-chain: agent a read a large field (10 bytes) then invoked run_command",
+              "agent": "a",
+              "path": "",
+              "tool": "run_command",
+              "request_id": "r1005",
+              "unix_nanos": 1793707205000000000
+            }
+          ],
+          "returned": {
+            "type": "tool_chain",
+            "severity": "high",
+            "description": "Tool-chain: agent a read a large field (10 bytes) then invoked run_command",
+            "agent": "a",
+            "path": "",
+            "tool": "run_command",
+            "request_id": "r1005",
+            "unix_nanos": 1793707205000000000
+          },
+          "window_len": 2
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707206000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "run_command",
+            "path": "",
+            "ok": true,
+            "request_id": "r1006"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 3
+        }
+      ]
+    },
+    {
+      "name": "window_is_bounded",
+      "config": {
+        "window_size": 3,
+        "rate_limit": 2,
+        "off_hours_start": 0,
+        "off_hours_end": 0
+      },
+      "events": [
+        {
+          "event": {
+            "unix_nanos": 1793707200000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "x",
+            "path": "",
+            "ok": true,
+            "request_id": "r1000"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 1
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707201000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "x",
+            "path": "",
+            "ok": true,
+            "request_id": "r1001"
+          },
+          "hooks": [],
+          "returned": null,
+          "window_len": 2
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707202000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "x",
+            "path": "",
+            "ok": true,
+            "request_id": "r1002"
+          },
+          "hooks": [
+            {
+              "type": "rate_anomaly",
+              "severity": "medium",
+              "description": "Rate anomaly: a made 3 requests",
+              "agent": "a",
+              "path": "",
+              "tool": "x",
+              "request_id": "r1002",
+              "unix_nanos": 1793707202000000000
+            }
+          ],
+          "returned": {
+            "type": "rate_anomaly",
+            "severity": "medium",
+            "description": "Rate anomaly: a made 3 requests",
+            "agent": "a",
+            "path": "",
+            "tool": "x",
+            "request_id": "r1002",
+            "unix_nanos": 1793707202000000000
+          },
+          "window_len": 3
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707203000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "x",
+            "path": "",
+            "ok": true,
+            "request_id": "r1003"
+          },
+          "hooks": [
+            {
+              "type": "rate_anomaly",
+              "severity": "medium",
+              "description": "Rate anomaly: a made 3 requests",
+              "agent": "a",
+              "path": "",
+              "tool": "x",
+              "request_id": "r1003",
+              "unix_nanos": 1793707203000000000
+            }
+          ],
+          "returned": {
+            "type": "rate_anomaly",
+            "severity": "medium",
+            "description": "Rate anomaly: a made 3 requests",
+            "agent": "a",
+            "path": "",
+            "tool": "x",
+            "request_id": "r1003",
+            "unix_nanos": 1793707203000000000
+          },
+          "window_len": 3
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707204000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "x",
+            "path": "",
+            "ok": true,
+            "request_id": "r1004"
+          },
+          "hooks": [
+            {
+              "type": "rate_anomaly",
+              "severity": "medium",
+              "description": "Rate anomaly: a made 3 requests",
+              "agent": "a",
+              "path": "",
+              "tool": "x",
+              "request_id": "r1004",
+              "unix_nanos": 1793707204000000000
+            }
+          ],
+          "returned": {
+            "type": "rate_anomaly",
+            "severity": "medium",
+            "description": "Rate anomaly: a made 3 requests",
+            "agent": "a",
+            "path": "",
+            "tool": "x",
+            "request_id": "r1004",
+            "unix_nanos": 1793707204000000000
+          },
+          "window_len": 3
+        },
+        {
+          "event": {
+            "unix_nanos": 1793707205000000000,
+            "utc_offset_seconds": 3600,
+            "agent": "a",
+            "tool": "x",
+            "path": "",
+            "ok": true,
+            "request_id": "r1005"
+          },
+          "hooks": [
+            {
+              "type": "rate_anomaly",
+              "severity": "medium",
+              "description": "Rate anomaly: a made 3 requests",
+              "agent": "a",
+              "path": "",
+              "tool": "x",
+              "request_id": "r1005",
+              "unix_nanos": 1793707205000000000
+            }
+          ],
+          "returned": {
+            "type": "rate_anomaly",
+            "severity": "medium",
+            "description": "Rate anomaly: a made 3 requests",
+            "agent": "a",
+            "path": "",
+            "tool": "x",
+            "request_id": "r1005",
+            "unix_nanos": 1793707205000000000
+          },
+          "window_len": 3
+        }
+      ]
+    }
+  ]
+}

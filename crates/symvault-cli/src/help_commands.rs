@@ -22,6 +22,11 @@ pub fn write<W: Write>(_root: clap::Command, path: &[String], output: &mut W) ->
     let mut selected = artifact::root();
     let mut matched = false;
     for part in path {
+        // cobra's topic walk skips a lone `-` like any flag-looking token (`help - list` is
+        // the help of `list`, `help -` the root help); an unknown topic still names it.
+        if part == "-" {
+            continue;
+        }
         let Some(next) = artifact::child(selected, part) else {
             if !matched {
                 return write_unknown_topic(path, &mut io::stderr().lock());
@@ -43,7 +48,10 @@ fn write_unknown_topic<W: Write>(path: &[String], output: &mut W) -> io::Result<
     let (_, usage) = root
         .split_once("Usage:\n")
         .ok_or_else(|| io::Error::other("root help lacks Usage"))?;
-    writeln!(output, "Unknown help topic [`{}`]", path.join(" "))?;
+    // Go prints the argument slice with `%#q`: every word is backquoted when it
+    // can be, otherwise double-quoted like strconv.Quote.
+    let words: Vec<String> = path.iter().map(|word| go_alt_quote(word)).collect();
+    writeln!(output, "Unknown help topic [{}]", words.join(" "))?;
     writeln!(output, "Usage:")?;
     for line in usage
         .split_inclusive('\n')
@@ -52,4 +60,32 @@ fn write_unknown_topic<W: Write>(path: &[String], output: &mut W) -> io::Result<
         output.write_all(line.as_bytes())?;
     }
     Ok(())
+}
+
+/// `fmt`'s `%#q` for a string: a raw string when `strconv.CanBackquote` allows
+/// it, a `strconv.Quote` literal otherwise.
+fn go_alt_quote(word: &str) -> String {
+    let can_backquote = word
+        .chars()
+        .all(|ch| (ch == '\t' || !ch.is_control()) && ch != '`' && ch != '\u{feff}');
+    if can_backquote {
+        format!("`{word}`")
+    } else {
+        artifact::quote_go_string(word)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::go_alt_quote;
+
+    #[test]
+    fn unknown_topic_words_are_quoted_like_go_percent_hash_q() {
+        assert_eq!(go_alt_quote("x"), "`x`");
+        assert_eq!(go_alt_quote(""), "``");
+        // A backquote cannot sit in a raw string, so Go falls back to strconv.Quote.
+        assert_eq!(go_alt_quote("a`b"), "\"a`b\"");
+        assert_eq!(go_alt_quote("a\nb"), "\"a\\nb\"");
+        assert_eq!(go_alt_quote("tab\there"), "`tab\there`");
+    }
 }

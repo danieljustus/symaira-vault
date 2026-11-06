@@ -1,0 +1,317 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
+  "tests": {
+    "policy_validate_and_list_match_go": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "97ee2ecdc58b90d0e599ca6120959947a136a8ce11eb1165603f3f62bbe7c914",
+          "request": {
+            "args": [
+              "policy",
+              "validate",
+              "<ROOT:0>/root/valid.yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "✅ Policy \"v1\" is valid\n   Description: Local policy\n   Rules: 1\n   - allow-read (priority: 10, action: allow)\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f7da9736e4c0e44d09251830b0f845874558549cf5a9b0bac69785285c4ec5fd",
+          "request": {
+            "args": [
+              "policy",
+              "validate",
+              "<ROOT:0>/root/invalid.yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "❌ Policy validation failed for <ROOT:0>/root/invalid.yaml\nError: validate policy: policy version is required\nError: validate policy: policy version is required\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "048455ae92a00ed09eb19d9107bf7ff8431f290fd5c5cf4f33d07c162607e709",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root/list-root",
+              "policy",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "No policies directory found.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0b51d74bfa914edab9fad1131fae5f69f00f893a8c8100ebd29a5701120bbc1c",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root/only-directory-root",
+              "policy",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "048455ae92a00ed09eb19d9107bf7ff8431f290fd5c5cf4f33d07c162607e709",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root/list-root",
+              "policy",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "  - a.txt\n  - b.yaml\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "07ea4fed96cf9242de9c9c406ab84b7149c0c5cd89a864824b573b9240ecaa60",
+          "request": {
+            "args": [
+              "policy",
+              "validate",
+              "~/tilde-policy.yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "✅ Policy \"v1\" is valid\n   Description: Home policy\n   Rules: 1\n   - allow-read (priority: 10, action: allow)\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f4386b7e4079373a4dd115beba7aa463e94a3cebe7c04350cbd193e11103704f",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root/apply-root",
+              "policy",
+              "apply",
+              "<ROOT:0>/root/dev.yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "✅ Policy \"v1\" applied (1 rules)\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/apply-root/policies",
+              "op": "dir",
+              "mode": 488,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/apply-root/policies/dev.yaml",
+              "op": "file",
+              "mode": 416,
+              "content": {
+                "text": "version: v1\ndescription: Applied policy\nrules:\n  - name: allow-read\n    priority: 10\n    action: allow\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "aa2f33e43264232125a13c3db0b03520155548ffe29358815b0f6688b4d22e30",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root/go-remove-root",
+              "policy",
+              "remove",
+              "dev.yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "✅ Policy \"dev.yaml\" removed\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/go-remove-root/policies/dev.yaml",
+              "op": "remove",
+              "mode": null,
+              "content": null
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

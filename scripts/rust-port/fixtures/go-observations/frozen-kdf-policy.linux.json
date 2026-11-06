@@ -1,0 +1,46 @@
+{
+  "args": [
+    "frozen_generator_replay.py",
+    "capture",
+    "kdf-policy"
+  ],
+  "contract": "frozen-kdf-policy",
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "linux",
+  "observations": {
+    "cases": [
+      {
+        "memory_kib": 32,
+        "name": "historical_time",
+        "threads": 1,
+        "time": 5
+      },
+      {
+        "memory_kib": 132096,
+        "name": "historical_memory",
+        "threads": 1,
+        "time": 1
+      },
+      {
+        "memory_kib": 64,
+        "name": "historical_threads",
+        "threads": 5,
+        "time": 1
+      },
+      {
+        "memory_kib": 4,
+        "name": "minimum_read",
+        "threads": 1,
+        "time": 1
+      }
+    ],
+    "fixtures": {
+      "testdata/port/crypto/kdf-policy-v1.json": "48c94188c3973f97438cf305d47264244bd8eb9cc7c7d3b39c1da29c8a34d56f"
+    },
+    "go_version": "go1.26.6",
+    "oracle_commit": "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44"
+  },
+  "oracle_commit": "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44",
+  "schema": 1
+}
