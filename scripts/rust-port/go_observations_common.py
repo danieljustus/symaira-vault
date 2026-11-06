@@ -338,12 +338,23 @@ def check_attestation(name):
     if not ok:
         raise MissingObservation(bad)
     # The attested Rust build is part of this history; an unknown commit (shallow clone, foreign file) fails.
-    ancestor = subprocess.run(["git", "merge-base", "--is-ancestor", document["rust_commit"], "HEAD"], cwd=ROOT,
-                              capture_output=True)
-    if ancestor.returncode != 0:
+    # The port was squash-merged, so its commits are held by the archive tags under refs/tags/legacy/
+    # (legacy/rust-port-history) instead of being ancestors of HEAD.
+    if not in_history(document["rust_commit"]):
         raise MissingObservation(f"{rel(source)}: rust_commit {document['rust_commit'][:8]} is not an ancestor of HEAD "
-                                 "(foreign attestation, or a shallow clone: fetch the full history)")
+                                 "nor held by a refs/tags/legacy/ archive tag "
+                                 "(foreign attestation, or a shallow clone: fetch the full history and tags)")
     return document
+
+
+def in_history(commit):
+    """True when `commit` is an ancestor of HEAD or contained in an archive tag under refs/tags/legacy/."""
+    ancestor = subprocess.run(["git", "merge-base", "--is-ancestor", commit, "HEAD"], cwd=ROOT, capture_output=True)
+    if ancestor.returncode == 0:
+        return True
+    held = subprocess.run(["git", "for-each-ref", "--contains", commit, "--format=%(refname)", "refs/tags/legacy/"],
+                          cwd=ROOT, capture_output=True, text=True)
+    return held.returncode == 0 and bool(held.stdout.strip())
 
 
 def _fail(message):
