@@ -146,6 +146,18 @@ class AttestationTests(unittest.TestCase):
         with self.assertRaisesRegex(obs.MissingObservation, "not an ancestor"):
             obs.check_attestation("audit-differential")
 
+    def test_rust_commit_held_only_by_the_archive_tag_is_accepted(self):
+        # The squash-merged port keeps its commits under refs/tags/legacy/rust-port-history, not in HEAD's history.
+        tagged = subprocess.run(["git", "rev-parse", "--verify", "--quiet", "refs/tags/legacy/rust-port-history^{commit}"],
+                                cwd=obs.ROOT, capture_output=True, text=True)
+        if tagged.returncode != 0:
+            self.skipTest("archive tag legacy/rust-port-history not fetched")
+        commit = tagged.stdout.strip()
+        self.assertTrue(obs.in_history(commit))
+        self.write(rust_commit=commit)
+        self.assertEqual(obs.check_attestation("audit-differential")["rust_commit"], commit)
+        self.assertFalse(obs.in_history("1" * 40))
+
     def test_oracle_must_be_the_pin_and_verdict_accepting(self):
         self.write(oracle_commit="2" * 40)
         with self.assertRaises(obs.MissingObservation):
