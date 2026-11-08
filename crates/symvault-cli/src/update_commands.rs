@@ -1375,6 +1375,52 @@ mod http_tests {
         }
     }
 
+    /// CLI-005: a newer published release makes `update check` exit 10 in every
+    /// output mode, and an up-to-date or older one exits 0. Hermetic: the release
+    /// comes from a loopback fake server and nothing is cached.
+    #[test]
+    fn update_available_exits_10_and_up_to_date_exits_0() {
+        let release = |tag: &str| {
+            format!(
+                r#"{{"tag_name":"{tag}","html_url":"https://example.com/releases/{tag}","draft":false,"prerelease":false,"body":"","assets":[]}}"#
+            )
+        };
+        let check = |current: &str, tag: &str| {
+            let (url, server) = serve_once(
+                "200 OK",
+                "Content-Type: application/json\r\n",
+                release(tag).as_bytes(),
+            );
+            let latest = fetch_latest_release_at(&url, current).expect("fetch fake release");
+            server.join().expect("fake release server");
+            let current = parse_stable_version(current).expect("stable current version");
+            result_from_latest_release(current, latest)
+                .expect("interpret fake release")
+                .0
+        };
+
+        let newer = check("1.0.0", "v1.2.0");
+        assert!(newer.update_available);
+        for (want_json, quiet) in [(false, false), (true, false), (false, true)] {
+            let output = render_check(&newer, want_json, quiet);
+            assert_eq!(
+                output.exit_code,
+                ExitCode::from(10),
+                "json={want_json} quiet={quiet}"
+            );
+            assert!(output.stderr.contains("Error: update available"));
+        }
+
+        for (current, tag) in [("1.2.0", "v1.2.0"), ("1.3.0", "v1.2.0")] {
+            let result = check(current, tag);
+            assert!(!result.update_available, "{current} vs {tag}");
+            let output = render_check(&result, false, false);
+            assert_eq!(output.exit_code, ExitCode::SUCCESS, "{current} vs {tag}");
+        }
+        assert_eq!(update_available_exit(true), ExitCode::from(10));
+        assert_eq!(update_available_exit(false), ExitCode::SUCCESS);
+    }
+
     #[test]
     fn release_http_rejects_non_github_redirects() {
         let (url, server) = serve_once(
