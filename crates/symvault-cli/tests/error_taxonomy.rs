@@ -10,7 +10,10 @@
 //! re-verifies it against the pinned oracle; nothing here needs a Go toolchain.
 //! Only runs whose Go outcome is a rejection before the command body are
 //! replayed against the binary, so no replay can touch a real vault or network;
-//! the accepting rows are covered by the in-crate `cobra_usage` unit tests.
+//! the accepting rows are covered by the in-crate `cobra_usage` unit tests and, as a
+//! usage-shape check only (not byte parity), by
+//! `native_cli_accepts_go_accepting_arity_probes` below, which runs them through the
+//! built binary in an isolated, uninitialized sandbox.
 //! `argv_shapes` adds the shapes an arity sweep cannot reach (flag *types*, such as
 //! `device join --pairing-file <path> <token>`) and the group help pages; each row
 //! may bring disposable files that are written into the working directory first.
@@ -179,6 +182,9 @@ const USAGE_CASES: usize = 159;
 const ARGV_SHAPES: usize = 24;
 const ARITY_ROWS: usize = 116;
 const REJECTED_ARITY_PROBES: usize = 236;
+const ACCEPTING_ARITY_PROBES: usize = 344;
+/// Accepting probes of the `ACCEPTING_SWEEP_SKIPPED` commands.
+const SKIPPED_ACCEPTING_PROBES: usize = 39;
 const GATE_REFUSALS: usize = 223;
 const NOT_INITIALIZED_CASES: usize = 29;
 const NIL_ARGS_COMMANDS: usize = 64;
@@ -482,6 +488,54 @@ fn run_scenario(
     (run.code, run.stdout, run.stderr)
 }
 
+/// No sandboxed scenario takes more than a few seconds; a hung one is killed.
+const SCENARIO_DEADLINE: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// `Command::output` with a deadline: on expiry the child is killed and reaped
+/// before the panic, so a hung `symvault` does not outlive the test.
+fn output_within(
+    command: &mut Command,
+    limit: std::time::Duration,
+    args: &[String],
+) -> std::process::Output {
+    use std::io::Read;
+    let mut child = command
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("run symvault");
+    let mut stdout = child.stdout.take().expect("stdout pipe");
+    let mut stderr = child.stderr.take().expect("stderr pipe");
+    let stdout_reader = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = stdout.read_to_end(&mut bytes);
+        bytes
+    });
+    let stderr_reader = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = stderr.read_to_end(&mut bytes);
+        bytes
+    });
+    let deadline = std::time::Instant::now() + limit;
+    let status = loop {
+        if let Some(status) = child.try_wait().expect("poll symvault") {
+            break status;
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("{args:?} did not finish within {limit:?}; the child was killed");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    };
+    std::process::Output {
+        status,
+        stdout: stdout_reader.join().expect("stdout reader"),
+        stderr: stderr_reader.join().expect("stderr reader"),
+    }
+}
+
 fn run_scenario_full(
     args: &[String],
     files: &BTreeMap<String, String>,
@@ -525,7 +579,7 @@ fn run_scenario_full(
             .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
             .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1");
     }
-    let output = command
+    command
         .current_dir(&*root)
         .env("HOME", &home)
         .env("USERPROFILE", &home)
@@ -534,9 +588,8 @@ fn run_scenario_full(
         .env("XDG_CACHE_HOME", root.join("xdg-cache"))
         .env("CI", "1")
         .env("NO_COLOR", "1")
-        .args(args)
-        .output()
-        .expect("run symvault");
+        .args(args);
+    let output = output_within(&mut command, SCENARIO_DEADLINE, args);
     let normalize = |raw: &[u8]| normalize_root(&root, &String::from_utf8_lossy(raw));
     let calls = read_host_calls(&root);
     let refused = refused_calls(&calls, host_tools());
@@ -1205,6 +1258,107 @@ fn native_cli_matches_go_argument_validators() {
         }
     }
     assert_eq!(replayed, REJECTED_ARITY_PROBES);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// Commands the accepting-probe sweep does not run, because their body starts a
+/// long-running server or TUI, probes the host, or can reach the network (git remotes,
+/// update checks, doctor's network checks). Their rejecting probes are still replayed.
+const ACCEPTING_SWEEP_SKIPPED: &[&str] = &[
+    "symvault broker",
+    "symvault mcp",
+    "symvault serve",
+    "symvault ui",
+    "symvault doctor",
+    "symvault startup-profile",
+    "symvault sync",
+    "symvault git",
+    "symvault remote init",
+    "symvault remote status",
+    "symvault update",
+    "symvault update apply",
+    "symvault update check",
+    "symvault update info",
+];
+
+/// Whether the text has the shape of cobra's argument-validator or unknown-command
+/// errors (the messages the rejecting rows of the corpus freeze). Messages a command
+/// body prints for its own reasons (`requires exactly 1 argument`, `Unknown help
+/// topic`, the exit-2 deprecation notices of the retired aliases) are not matched.
+fn is_usage_shape(text: &str) -> bool {
+    text.lines().any(|line| {
+        line.starts_with("Error: accepts ")
+            || line.starts_with("Error: requires at least ")
+            || line.starts_with("Error: unknown command ")
+            || line.starts_with("Error: unknown flag")
+            || line.contains("arg(s), received")
+            || line.contains("arg(s), only received")
+    })
+}
+
+/// The accepting rows of the arity sweep (Go ran the command body for them) go through
+/// the built binary in an isolated, uninitialized sandbox: whatever the body then
+/// prints, the argument count must not be rejected as a usage error. The probes are
+/// `<command path> x...`, exactly as the generator ran them.
+#[test]
+fn native_cli_accepts_go_accepting_arity_probes() {
+    let fixture = fixture();
+    let mut failures = Vec::new();
+    let (mut ran, mut skipped) = (0usize, 0usize);
+    for row in &fixture.arity {
+        let words: Vec<String> = row
+            .path
+            .strip_prefix("symvault")
+            .expect("path starts with the binary name")
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect();
+        for probe in row.probes.iter().filter(|probe| !probe.rejected) {
+            assert!(
+                probe.observation.is_none(),
+                "{} x{}: accepting probes carry no bytes",
+                row.path,
+                probe.count
+            );
+            if ACCEPTING_SWEEP_SKIPPED.contains(&row.path.as_str()) {
+                skipped += 1;
+                continue;
+            }
+            let mut args = words.clone();
+            args.extend(std::iter::repeat_n("x".to_owned(), probe.count));
+            let label = format!("{} x{}", row.path, probe.count);
+            // run_scenario kills and reaps a child that exceeds SCENARIO_DEADLINE.
+            let (code, stdout, stderr) = run_scenario(&args, &BTreeMap::new(), &[], false);
+            ran += 1;
+            if is_usage_shape(&stderr) || is_usage_shape(&stdout) {
+                failures.push(format!(
+                    "{label} {args:?} was treated as a usage error\n  rust: {code} {stdout:?} {stderr:?}"
+                ));
+            }
+        }
+    }
+    let accepting: usize = fixture
+        .arity
+        .iter()
+        .map(|row| row.probes.iter().filter(|probe| !probe.rejected).count())
+        .sum();
+    // Negative control: the detector flags every rejection the corpus froze, so a
+    // clean sweep above cannot come from a detector that matches nothing.
+    for row in &fixture.arity {
+        for probe in row.probes.iter().filter(|probe| probe.rejected) {
+            let observation = probe.observation.as_ref().expect("rejected probe bytes");
+            assert!(
+                is_usage_shape(&observation.stderr),
+                "{} x{}: {:?} is not recognised as a usage error",
+                row.path,
+                probe.count,
+                observation.stderr
+            );
+        }
+    }
+    assert_eq!(ran + skipped, accepting);
+    assert_eq!(accepting, ACCEPTING_ARITY_PROBES);
+    assert_eq!(skipped, SKIPPED_ACCEPTING_PROBES);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 

@@ -739,7 +739,7 @@ LOCAL_AREA_DIFFERENTIAL_TARGETS := mcp-init-differential mcp-stdio-differential 
 	config-profile-differential config-session-differential cfg-overrides-fixtures-check \
 	device-list-differential device-session-differential pairing-differential \
 	git-offline-differential git-winner-differential rust-007-differential \
-	update-fixtures-check
+	update-fixtures-check data-safety-differential
 
 # Process contracts of the area workflows (.github/workflows/rust-http-*.yml,
 # rust-mcp-*.yml, rust-broker-*.yml, rust-api-transport.yml,
@@ -768,7 +768,7 @@ LOCAL_AREA_PROCESS_TARGETS := area-check-selftest worktree-prune-check http-fram
 	read-resource-policy-contract mcp-http-shutdown-contract \
 	signal-process-contract store-live-contract \
 	pairing-oracle-contract tui-named-tests \
-	mcp-http-replay-contract mcp-http-token-contract
+	mcp-http-replay-contract mcp-http-token-contract toolhash-process-contract
 LOCAL_AREA_LANE ?= $(if $(filter Darwin,$(shell uname -s)),macos,linux)
 LOCAL_AREA_LANE_TARGETS_macos := tui-harness-check
 LOCAL_AREA_LANE_TARGETS_linux := tui-contract
@@ -1403,7 +1403,7 @@ help:
 	@echo "  pass-gpg-differential - Verify the pass importer against real gpg"
 	@echo "  crypto-differential - Verify the frozen age and KDF vectors against Rust"
 	@echo "  store-differential - Verify the frozen storage reopen and read-only fixtures"
-	@echo "  data-safety-differential - Verify the pre-Rust-mutation backup gate over Go-created vaults (needs the recorded Go binary)"
+	@echo "  data-safety-differential - Verify the pre-Rust-mutation backup gate over Go-created vaults (Go-free replay of the recorded Go seed calls; needs only the Rust CLI and the data_safety_probe example)"
 	@echo "  audit-fixtures-check - Verify audit fixture provenance and drift"
 	@echo "  audit-differential - Verify the frozen audit chain, rotation, and export"
 	@echo "  rust-fuzz-smoke   - Run the deterministic bounded Rust age/KDF fuzz smoke"

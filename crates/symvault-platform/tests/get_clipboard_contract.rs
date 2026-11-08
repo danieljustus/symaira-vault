@@ -16,8 +16,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use symvault_platform::get_clipboard::{
     CancelToken, Clock, CopyError, GetDestination, InterruptSource, NOT_CLEARED_MESSAGE, RealClock,
-    TextClipboard, VerifyError, Wake, copy_and_auto_clear, countdown, route_get_output,
-    verify_cleared,
+    TextClipboard, VerifyError, Wake, copy_and_auto_clear, copy_and_auto_clear_shared, countdown,
+    route_get_output, verify_cleared,
 };
 
 const FIXTURE: &str = include_str!("../../../testdata/port/platform/get_clipboard.json");
@@ -469,6 +469,187 @@ fn scenario_clipboard(secret: &str) -> FakeClipboard {
         read_error: String::new(),
         state: Mutex::new((String::new(), Vec::new())),
     }
+}
+
+type PanicHook = Box<dyn Fn(&std::panic::PanicHookInfo<'_>) + Send + Sync + 'static>;
+
+/// The panic hook is process-global: tests that replace it must not overlap.
+static PANIC_HOOK_TESTS: Mutex<()> = Mutex::new(());
+
+/// A clock whose wait panics: stands for any panic between the copy and the end
+/// of the auto-clear wait.
+struct PanickingClock;
+
+impl Clock for PanickingClock {
+    fn elapsed(&self) -> Duration {
+        Duration::ZERO
+    }
+
+    fn wait_until(&self, _at: Duration, _cancel: &CancelToken, _watch_signals: bool) -> Wake {
+        panic!("injected panic after the copy");
+    }
+}
+
+#[test]
+fn a_panic_after_the_copy_still_clears_the_clipboard() {
+    // A panic anywhere fires a registered clear hook, so it must not overlap the
+    // tests that register one.
+    let _serial = PANIC_HOOK_TESTS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let clipboard = scenario_clipboard("unwind-secret");
+    let mut stderr = Vec::new();
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = copy_and_auto_clear(
+            &clipboard,
+            "unwind-secret",
+            10,
+            &PanickingClock,
+            &mut stderr,
+        );
+    }));
+    assert!(outcome.is_err(), "the injected panic must propagate");
+    let state = clipboard.state.lock().unwrap();
+    assert_eq!(state.1, ["copy:unwind-secret", "copy:"]);
+    assert_eq!(
+        state.0, "",
+        "the unwind guard must leave the clipboard empty"
+    );
+}
+
+/// Replaces the panic hook with one that counts (and records the clipboard at
+/// that moment for) panics on the calling thread only, so unrelated panicking
+/// tests in this binary cannot disturb the counts. Returns the restore guard.
+struct SentinelHook {
+    calls: Arc<AtomicUsize>,
+    clipboard_at_call: Arc<Mutex<Option<Vec<String>>>>,
+    original: Option<Arc<PanicHook>>,
+}
+
+impl SentinelHook {
+    fn install(watched: Option<Arc<FakeClipboard>>) -> Self {
+        let original = Arc::new(std::panic::take_hook());
+        let forward = Arc::clone(&original);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let clipboard_at_call = Arc::new(Mutex::new(None));
+        let thread = std::thread::current().id();
+        let (counter, snapshot) = (Arc::clone(&calls), Arc::clone(&clipboard_at_call));
+        std::panic::set_hook(Box::new(move |info| {
+            // Only the injected panics of this test are swallowed and counted;
+            // anything else (a failed assertion, another thread) stays visible.
+            let injected = info.payload_as_str().is_some_and(|message| {
+                message.contains("after the copy") || message.contains("after the flow")
+            });
+            if !injected || std::thread::current().id() != thread {
+                forward(info);
+                return;
+            }
+            {
+                counter.fetch_add(1, Ordering::SeqCst);
+                if let Some(clipboard) = &watched {
+                    *snapshot.lock().unwrap() = Some(clipboard.state.lock().unwrap().1.clone());
+                }
+            }
+        }));
+        Self {
+            calls,
+            clipboard_at_call,
+            original: Some(original),
+        }
+    }
+}
+
+impl Drop for SentinelHook {
+    fn drop(&mut self) {
+        // Changing the hook while a failed assertion unwinds would abort.
+        if std::thread::panicking() {
+            return;
+        }
+        let _ = std::panic::take_hook();
+        if let Some(original) = self.original.take() {
+            // The closure that shared the Arc was dropped by `take_hook` above.
+            if let Ok(hook) = Arc::try_unwrap(original) {
+                std::panic::set_hook(hook);
+            }
+        }
+    }
+}
+
+/// `panic = "abort"` (the release profile) never unwinds, so the clear has to
+/// happen inside the panic hook. Under unwind the hook runs first too, which is
+/// observable: when the chained previous hook is called the clipboard has been
+/// cleared already (nothing has been dropped yet), and the `Drop` guard then
+/// does not clear a second time.
+#[test]
+fn the_panic_hook_clears_the_clipboard_before_the_previous_hook_runs() {
+    let _serial = PANIC_HOOK_TESTS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let fake = Arc::new(scenario_clipboard("hook-secret"));
+    let shared: Arc<dyn TextClipboard> = fake.clone();
+    let sentinel = SentinelHook::install(Some(Arc::clone(&fake)));
+    let mut stderr = Vec::new();
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ =
+            copy_and_auto_clear_shared(&shared, "hook-secret", 10, &PanickingClock, &mut stderr);
+    }));
+    assert!(outcome.is_err(), "the injected panic must propagate");
+    assert_eq!(
+        sentinel.calls.load(Ordering::SeqCst),
+        1,
+        "the previous hook is chained exactly once"
+    );
+    assert_eq!(
+        sentinel.clipboard_at_call.lock().unwrap().as_deref(),
+        Some(&["copy:hook-secret".to_owned(), "copy:".to_owned()][..]),
+        "the hook clears before it hands over to the previous hook"
+    );
+    let state = fake.state.lock().unwrap();
+    assert_eq!(
+        state.1,
+        ["copy:hook-secret", "copy:"],
+        "hook and Drop guard must not clear twice"
+    );
+    assert_eq!(state.0, "");
+}
+
+#[test]
+fn the_previous_panic_hook_is_restored_after_the_auto_clear_flow() {
+    let _serial = PANIC_HOOK_TESTS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let fake = Arc::new(scenario_clipboard("restore-secret"));
+    let shared: Arc<dyn TextClipboard> = fake.clone();
+    let sentinel = SentinelHook::install(None);
+    let mut stderr = Vec::new();
+    copy_and_auto_clear_shared(
+        &shared,
+        "restore-secret",
+        2,
+        &VirtualClock::new(),
+        &mut stderr,
+    )
+    .unwrap();
+    let completed = fake.state.lock().unwrap().1.clone();
+    assert_eq!(completed, ["copy:restore-secret", "copy:", "read"]);
+    assert_eq!(sentinel.calls.load(Ordering::SeqCst), 0);
+
+    // A later, unrelated panic reaches the restored previous hook directly and
+    // must not touch the clipboard again.
+    let outcome = std::panic::catch_unwind(|| panic!("unrelated panic after the flow"));
+    assert!(outcome.is_err());
+    assert_eq!(sentinel.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(fake.state.lock().unwrap().1, completed);
+}
+
+#[test]
+fn without_an_auto_clear_a_panic_free_copy_stays_on_the_clipboard() {
+    let clipboard = scenario_clipboard("kept-secret");
+    let mut stderr = Vec::new();
+    copy_and_auto_clear(&clipboard, "kept-secret", 0, &PanickingClock, &mut stderr).unwrap();
+    let state = clipboard.state.lock().unwrap();
+    assert_eq!(state.1, ["copy:kept-secret"]);
+    assert_eq!(state.0, "kept-secret");
 }
 
 #[test]

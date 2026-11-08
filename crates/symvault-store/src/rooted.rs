@@ -92,19 +92,52 @@ pub(super) fn directory(
     Ok(dir)
 }
 
+/// Opens (creating if absent) the vault `.lock` file relative to the root handle.
+///
+/// This deliberately never issues a bare `openat(O_CREAT)` without `O_EXCL`.
+/// On macOS (APFS, observed on Darwin 27.2) two concurrent `openat(dirfd, name,
+/// O_CREAT)` calls on the same absent name make the losing call fail with
+/// `ENOENT` instead of opening the file the winner just created (a probe with
+/// two threads sharing one directory fd failed ~95 % of rounds; the path-based
+/// `open` and `O_CREAT|O_EXCL` never did). The parent directory exists and
+/// nothing in this crate unlinks the lock, so the `ENOENT` is an OS quirk, not a
+/// product race. Creating with `O_EXCL` first (the loser gets a clean `EEXIST`)
+/// and then opening the existing file without `O_CREAT` is race-free: it was
+/// exercised with four concurrent openers for 3000 rounds without a failure.
+/// The loop is bounded and only repeats if the lock vanishes between the two
+/// steps.
 pub(super) fn open_lock(root: &fs::File, display: &Path) -> Result<fs::File, StoreError> {
     use rustix::fs::{Mode, OFlags, openat};
-    let file = openat(
-        root,
-        ".lock",
-        OFlags::RDWR | OFlags::CREATE | OFlags::NOFOLLOW,
-        Mode::from_raw_mode(0o600),
-    )
-    .map_err(|source| StoreError::Write {
+    use rustix::io::Errno;
+    let fail = |source: Errno| StoreError::Write {
         path: display.to_path_buf(),
         source: source.into(),
-    })?;
-    Ok(fs::File::from(file))
+    };
+    let mut last = Errno::NOENT;
+    for _ in 0..8 {
+        match openat(
+            root,
+            ".lock",
+            OFlags::RDWR | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW,
+            Mode::from_raw_mode(0o600),
+        ) {
+            Ok(file) => return Ok(fs::File::from(file)),
+            Err(Errno::EXIST) => {}
+            Err(source) => return Err(fail(source)),
+        }
+        match openat(
+            root,
+            ".lock",
+            OFlags::RDWR | OFlags::NOFOLLOW,
+            Mode::empty(),
+        ) {
+            Ok(file) => return Ok(fs::File::from(file)),
+            // Removed between the two calls: create it again.
+            Err(Errno::NOENT) => last = Errno::NOENT,
+            Err(source) => return Err(fail(source)),
+        }
+    }
+    Err(fail(last))
 }
 
 pub(super) fn walk_from_with_limits(
@@ -504,4 +537,47 @@ pub(super) fn open_regular(
         source: source.into(),
     })?;
     Ok(fs::File::from(file))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// First-time concurrent creation of `.lock` through one directory handle
+    /// must never surface the macOS `ENOENT` of a bare `openat(O_CREAT)` race.
+    #[test]
+    fn concurrent_first_time_lock_creation_never_fails() {
+        for _ in 0..300 {
+            let dir = tempfile::tempdir().expect("temp dir");
+            let root = fs::File::open(dir.path()).expect("root handle");
+            let barrier = std::sync::Barrier::new(4);
+            std::thread::scope(|scope| {
+                for _ in 0..4 {
+                    scope.spawn(|| {
+                        barrier.wait();
+                        open_lock(&root, dir.path()).expect("concurrent open_lock");
+                    });
+                }
+            });
+            let lock = dir.path().join(".lock");
+            assert!(lock.is_file());
+            // The lock is never group/world accessible, whatever the umask.
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(&lock)
+                .expect("lock metadata")
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o077, 0, "lock mode {mode:o}");
+        }
+    }
+
+    #[test]
+    fn open_lock_refuses_a_symlinked_lock() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let root = fs::File::open(dir.path()).expect("root handle");
+        std::os::unix::fs::symlink(dir.path().join("elsewhere"), dir.path().join(".lock"))
+            .expect("symlink");
+        assert!(open_lock(&root, dir.path()).is_err());
+        assert!(!dir.path().join("elsewhere").exists());
+    }
 }

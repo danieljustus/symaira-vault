@@ -166,6 +166,42 @@ fn differential_doctor_missing_vault_text_and_strict() {
     assert_eq!(strict_rust.status.code(), Some(8));
 }
 
+/// CLI-005: `doctor --strict` exits 7 when the selected checks only warn (and 0
+/// without `--strict`). Hermetic: no oracle, an empty vault directory without a
+/// `.gitignore`, one local file check, no network.
+#[test]
+fn doctor_strict_exits_7_when_a_check_warns() {
+    let home = temporary_root("strict-warn-home");
+    let vault = temporary_root("strict-warn-vault");
+    let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
+    let rust = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
+
+    let run_doctor = |strict: bool| {
+        let mut command = Command::new(&rust);
+        command
+            .env_clear()
+            .env("PATH", HERMETIC_PATH)
+            .env("HOME", &home)
+            .env("NO_COLOR", "1")
+            .env("CI", "1")
+            .arg("--vault")
+            .arg(&vault)
+            .args(["doctor", "--only", "git.gitignore.protects", "--no-network"])
+            .current_dir(&home);
+        if strict {
+            command.arg("--strict");
+        }
+        command.output().expect("run symvault doctor")
+    };
+
+    let lenient = run_doctor(false);
+    assert_eq!(lenient.status.code(), Some(0), "{lenient:?}");
+    let strict = run_doctor(true);
+    let stderr = String::from_utf8_lossy(&strict.stderr);
+    assert_eq!(strict.status.code(), Some(7), "{stderr}");
+    assert!(stderr.contains("Error: 1 warning(s)"), "{stderr}");
+}
+
 #[test]
 #[cfg_attr(
     not(target_os = "macos"),

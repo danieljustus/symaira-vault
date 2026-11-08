@@ -35,6 +35,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+use zeroize::Zeroizing;
+
 /// Go `clipboard.ErrClipboardNotCleared`.
 pub const NOT_CLEARED_MESSAGE: &str = "clipboard still contains the copied secret after clear; a clipboard-history manager may have restored it";
 
@@ -79,8 +81,9 @@ pub fn verify_cleared(
     if expected_absent.is_empty() {
         return Ok(());
     }
-    let current = read().map_err(VerifyError::Read)?;
-    if current == expected_absent {
+    // The read-back is a copy of the secret when the clear failed: wipe it.
+    let current = Zeroizing::new(read().map_err(VerifyError::Read)?);
+    if *current == expected_absent {
         Err(VerifyError::NotCleared)
     } else {
         Ok(())
@@ -364,6 +367,190 @@ pub fn countdown(
     }
 }
 
+type PanicHook = Box<dyn Fn(&std::panic::PanicHookInfo<'_>) + Send + Sync + 'static>;
+
+/// Process-wide state of the clipboard panic hook. Release builds use
+/// `panic = "abort"`, where no destructor ever runs, so the clear on panic has
+/// to happen inside the panic hook (which runs before the abort). One hook
+/// serves every armed [`ClearOnPanic`]; the previous hook is chained and
+/// restored once the last guard is gone.
+struct PanicRegistry {
+    next_id: u64,
+    /// One entry per live guard. The handle is taken (set to `None`) by whoever
+    /// clears first, so the hook and the `Drop` guard never both clear.
+    guards: Vec<(u64, Option<Arc<dyn TextClipboard>>)>,
+    previous: Option<Arc<PanicHook>>,
+    installed: bool,
+}
+
+static PANIC_REGISTRY: Mutex<PanicRegistry> = Mutex::new(PanicRegistry {
+    next_id: 0,
+    guards: Vec::new(),
+    previous: None,
+    installed: false,
+});
+
+/// Serialises installing and restoring the hook. `std::panic::set_hook` waits
+/// for running hooks, and the hook takes `PANIC_REGISTRY`; installing while
+/// holding the registry lock could therefore deadlock, so transitions hold this
+/// lock instead and the registry lock only ever covers short, panic-free
+/// sections.
+static PANIC_HOOK_TRANSITION: Mutex<()> = Mutex::new(());
+
+fn registry() -> std::sync::MutexGuard<'static, PanicRegistry> {
+    PANIC_REGISTRY
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn transition() -> std::sync::MutexGuard<'static, ()> {
+    PANIC_HOOK_TRANSITION
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// The installed hook: clear every armed clipboard first (the secret must leave
+/// the clipboard before anything else can go wrong), then run the previous
+/// hook so the panic message and backtrace are unchanged.
+fn clear_on_panic_hook(info: &std::panic::PanicHookInfo<'_>) {
+    let (handles, previous) = {
+        let mut state = registry();
+        let handles: Vec<_> = state
+            .guards
+            .iter_mut()
+            .filter_map(|(_, handle)| handle.take())
+            .collect();
+        (handles, state.previous.clone())
+    };
+    for handle in handles {
+        // A panic here would be a panic inside a panic hook, which aborts.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handle.copy("")));
+    }
+    if let Some(previous) = previous {
+        previous(info);
+    }
+}
+
+/// Clears the clipboard if the process panics between the copy of a secret and
+/// the end of its auto-clear wait. Best effort and with the same semantics as
+/// the timer clear (an empty copy; the result is ignored because nobody can act
+/// on it while panicking). Disarmed once the normal flow has cleared and
+/// verified.
+///
+/// Two mechanisms, because the profile decides which one can run:
+///
+/// * `panic = "abort"` (the shipped release profile): no unwinding, so only the
+///   panic hook runs. It needs a `'static` handle, which is why the hook is
+///   only registered when the caller passes a shared [`Arc`] clipboard
+///   ([`copy_and_auto_clear_shared`]). The hook fires for a panic on *any*
+///   thread while armed, which is the right call: the process is about to abort.
+/// * `panic = "unwind"` (tests, the FFI profile): the hook has already cleared
+///   by the time `Drop` runs, so `Drop` finds the handle taken and does not
+///   clear twice; for a plain `&dyn` clipboard (no hook) `Drop` is the only
+///   protection.
+struct ClearOnPanic<'a> {
+    clipboard: &'a dyn TextClipboard,
+    /// Present when registered with the panic hook.
+    id: Option<u64>,
+    armed: bool,
+}
+
+impl<'a> ClearOnPanic<'a> {
+    fn arm(clipboard: &'a dyn TextClipboard, shared: Option<&Arc<dyn TextClipboard>>) -> Self {
+        let id = shared.map(|shared| Self::register(Arc::clone(shared)));
+        Self {
+            clipboard,
+            id,
+            armed: true,
+        }
+    }
+
+    fn register(handle: Arc<dyn TextClipboard>) -> u64 {
+        let _transition = transition();
+        let (id, install) = {
+            let mut state = registry();
+            let id = state.next_id;
+            state.next_id += 1;
+            state.guards.push((id, Some(handle)));
+            (id, !state.installed)
+        };
+        // Changing the hook from a panicking thread panics itself.
+        if install && !std::thread::panicking() {
+            let previous = std::panic::take_hook();
+            {
+                let mut state = registry();
+                state.previous = Some(Arc::new(previous));
+                state.installed = true;
+            }
+            std::panic::set_hook(Box::new(clear_on_panic_hook));
+        }
+        id
+    }
+
+    /// Removes the registration; returns whether the clipboard still has to be
+    /// cleared by the caller (the hook did not already do it).
+    fn deregister(id: u64) -> bool {
+        let _transition = transition();
+        let (pending, restore) = {
+            let mut state = registry();
+            let position = state.guards.iter().position(|(guard, _)| *guard == id);
+            let pending = position.is_some_and(|index| state.guards.remove(index).1.is_some());
+            (pending, state.guards.is_empty() && state.installed)
+        };
+        if restore {
+            if std::thread::panicking() {
+                // `set_hook` panics on a panicking thread (this is a `Drop`
+                // during unwinding), so a fresh thread does the restore. Were it
+                // skipped, the stale hook would stay installed and a later
+                // owner of the hook would be overwritten by the next restore.
+                let _ = std::thread::spawn(Self::restore_hook).join();
+            } else {
+                Self::restore_hook();
+            }
+        }
+        pending
+    }
+
+    /// Puts the hook that was current at the first registration back. Callers
+    /// hold `PANIC_HOOK_TRANSITION`.
+    fn restore_hook() {
+        let previous = {
+            let mut state = registry();
+            state.installed = false;
+            state.previous.take()
+        };
+        drop(std::panic::take_hook());
+        if let Some(previous) = previous {
+            // Normally the sole owner, which restores the exact previous hook; a
+            // hook still running on another thread keeps a clone and gets a
+            // forwarding wrapper instead.
+            match Arc::try_unwrap(previous) {
+                Ok(hook) => std::panic::set_hook(hook),
+                Err(shared) => std::panic::set_hook(Box::new(move |info| shared(info))),
+            }
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+        if let Some(id) = self.id.take() {
+            Self::deregister(id);
+        }
+    }
+}
+
+impl Drop for ClearOnPanic<'_> {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let pending = self.id.take().is_none_or(Self::deregister);
+        if pending {
+            let _ = self.clipboard.copy("");
+        }
+    }
+}
+
 /// Failure of the copy itself: Go wraps it as `copy to clipboard: <cause>` with
 /// exit code 1 (`ExitGeneralError`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -443,6 +630,42 @@ pub fn copy_and_auto_clear(
     clock: &dyn Clock,
     stderr: &mut (dyn Write + Send),
 ) -> Result<(), CopyError> {
+    copy_and_auto_clear_inner(clipboard, None, secret, auto_clear_seconds, clock, stderr)
+}
+
+/// [`copy_and_auto_clear`] for a shared clipboard, which also clears from a
+/// panic hook. Use this in binaries: with `panic = "abort"` (the release
+/// profile) the unwind-only `Drop` guard of [`copy_and_auto_clear`] never runs,
+/// but the hook does. The previous panic hook is chained and restored once the
+/// auto-clear flow ends.
+///
+/// # Errors
+/// Same as [`copy_and_auto_clear`].
+pub fn copy_and_auto_clear_shared(
+    clipboard: &Arc<dyn TextClipboard>,
+    secret: &str,
+    auto_clear_seconds: i64,
+    clock: &dyn Clock,
+    stderr: &mut (dyn Write + Send),
+) -> Result<(), CopyError> {
+    copy_and_auto_clear_inner(
+        clipboard.as_ref(),
+        Some(clipboard),
+        secret,
+        auto_clear_seconds,
+        clock,
+        stderr,
+    )
+}
+
+fn copy_and_auto_clear_inner(
+    clipboard: &dyn TextClipboard,
+    shared: Option<&Arc<dyn TextClipboard>>,
+    secret: &str,
+    auto_clear_seconds: i64,
+    clock: &dyn Clock,
+    stderr: &mut (dyn Write + Send),
+) -> Result<(), CopyError> {
     // Observe interrupts before the secret is on the clipboard, so none can
     // slip between the copy and the first wait. Without an auto-clear Go
     // subscribes to nothing, and neither does this.
@@ -483,7 +706,11 @@ pub fn copy_and_auto_clear(
         if auto_clear_seconds <= 0 {
             return Ok(());
         }
+        // Armed only while an auto-clear is promised: without one the secret
+        // stays on the clipboard on purpose, as in Go.
+        let mut panic_clear = ClearOnPanic::arm(clipboard, shared);
         wait_and_clear(clipboard, secret, auto_clear_seconds, clock, &say);
+        panic_clear.disarm();
         Ok(())
     })
 }
@@ -577,7 +804,7 @@ impl TextClipboard for PasteboardTextClipboard {
     fn read(&self) -> Result<String, String> {
         self.0
             .read()
-            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+            .map(|bytes| String::from_utf8_lossy(&Zeroizing::new(bytes)).into_owned())
             .map_err(|error| error.message)
     }
 }
@@ -606,7 +833,7 @@ impl TextClipboard for CommandTextClipboard {
     fn read(&self) -> Result<String, String> {
         self.0
             .read()
-            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+            .map(|bytes| String::from_utf8_lossy(&Zeroizing::new(bytes)).into_owned())
             .map_err(|error| error.message)
     }
 }

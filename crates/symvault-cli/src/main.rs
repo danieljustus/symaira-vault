@@ -3914,7 +3914,7 @@ fn run_get(
         let clock = symvault_platform::get_clipboard::RealClock::with_termination_signals();
         let environment = GetEnvironment {
             stdout_is_terminal: io::IsTerminal::is_terminal(&io::stdout()),
-            clipboard: clipboard.as_ref(),
+            clipboard: &clipboard,
             clock: &clock,
         };
         emit_get_result(
@@ -4017,7 +4017,7 @@ fn emit_exposure_audit(vault: &Path, path: &str, field: &str) {
 /// without a terminal, a desktop clipboard or sleeping.
 struct GetEnvironment<'a> {
     stdout_is_terminal: bool,
-    clipboard: &'a dyn symvault_platform::get_clipboard::TextClipboard,
+    clipboard: &'a std::sync::Arc<dyn symvault_platform::get_clipboard::TextClipboard>,
     clock: &'a dyn symvault_platform::get_clipboard::Clock,
 }
 
@@ -4092,9 +4092,11 @@ fn copy_get_field_to_clipboard(
     if destination == clip::GetDestination::Stdout {
         return Ok(false);
     }
-    let text = run_commands::format_go_value(value);
+    // The formatted text and `format_go_value`'s intermediates are wiped once the
+    // flow ends; the decoded `serde_json::Value` the caller passed in is not.
+    let text = Zeroizing::new(run_commands::format_go_value(value));
     let seconds = clip::auto_clear_seconds(section.map(|section| section.auto_clear_duration));
-    clip::copy_and_auto_clear(
+    clip::copy_and_auto_clear_shared(
         environment.clipboard,
         &text,
         seconds,
@@ -6502,7 +6504,7 @@ mod get_clipboard_wiring_tests {
         result: Result<(), String>,
         stdout: String,
         stderr: String,
-        clipboard: FakeClipboard,
+        clipboard: std::sync::Arc<FakeClipboard>,
         clock: VirtualClock,
     }
 
@@ -6530,15 +6532,16 @@ mod get_clipboard_wiring_tests {
         terminal: bool,
         fail_copy: bool,
     ) -> Outcome {
-        let clipboard = FakeClipboard {
+        let clipboard = std::sync::Arc::new(FakeClipboard {
             fail_copy,
             ..FakeClipboard::default()
-        };
+        });
+        let shared: std::sync::Arc<dyn TextClipboard> = clipboard.clone();
         let clock = VirtualClock::default();
         let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
         let environment = GetEnvironment {
             stdout_is_terminal: terminal,
-            clipboard: &clipboard,
+            clipboard: &shared,
             clock: &clock,
         };
         let result = emit_get_result(
