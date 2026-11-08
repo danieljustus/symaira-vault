@@ -488,6 +488,54 @@ fn run_scenario(
     (run.code, run.stdout, run.stderr)
 }
 
+/// No sandboxed scenario takes more than a few seconds; a hung one is killed.
+const SCENARIO_DEADLINE: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// `Command::output` with a deadline: on expiry the child is killed and reaped
+/// before the panic, so a hung `symvault` does not outlive the test.
+fn output_within(
+    command: &mut Command,
+    limit: std::time::Duration,
+    args: &[String],
+) -> std::process::Output {
+    use std::io::Read;
+    let mut child = command
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("run symvault");
+    let mut stdout = child.stdout.take().expect("stdout pipe");
+    let mut stderr = child.stderr.take().expect("stderr pipe");
+    let stdout_reader = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = stdout.read_to_end(&mut bytes);
+        bytes
+    });
+    let stderr_reader = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = stderr.read_to_end(&mut bytes);
+        bytes
+    });
+    let deadline = std::time::Instant::now() + limit;
+    let status = loop {
+        if let Some(status) = child.try_wait().expect("poll symvault") {
+            break status;
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("{args:?} did not finish within {limit:?}; the child was killed");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    };
+    std::process::Output {
+        status,
+        stdout: stdout_reader.join().expect("stdout reader"),
+        stderr: stderr_reader.join().expect("stderr reader"),
+    }
+}
+
 fn run_scenario_full(
     args: &[String],
     files: &BTreeMap<String, String>,
@@ -531,7 +579,7 @@ fn run_scenario_full(
             .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
             .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1");
     }
-    let output = command
+    command
         .current_dir(&*root)
         .env("HOME", &home)
         .env("USERPROFILE", &home)
@@ -540,9 +588,8 @@ fn run_scenario_full(
         .env("XDG_CACHE_HOME", root.join("xdg-cache"))
         .env("CI", "1")
         .env("NO_COLOR", "1")
-        .args(args)
-        .output()
-        .expect("run symvault");
+        .args(args);
+    let output = output_within(&mut command, SCENARIO_DEADLINE, args);
     let normalize = |raw: &[u8]| normalize_root(&root, &String::from_utf8_lossy(raw));
     let calls = read_host_calls(&root);
     let refused = refused_calls(&calls, host_tools());
@@ -1280,14 +1327,8 @@ fn native_cli_accepts_go_accepting_arity_probes() {
             let mut args = words.clone();
             args.extend(std::iter::repeat_n("x".to_owned(), probe.count));
             let label = format!("{} x{}", row.path, probe.count);
-            let run_args = args.clone();
-            let (sender, receiver) = std::sync::mpsc::channel();
-            std::thread::spawn(move || {
-                let _ = sender.send(run_scenario(&run_args, &BTreeMap::new(), &[], false));
-            });
-            let (code, stdout, stderr) = receiver
-                .recv_timeout(std::time::Duration::from_secs(120))
-                .unwrap_or_else(|_| panic!("{label} {args:?} did not finish within 120 s"));
+            // run_scenario kills and reaps a child that exceeds SCENARIO_DEADLINE.
+            let (code, stdout, stderr) = run_scenario(&args, &BTreeMap::new(), &[], false);
             ran += 1;
             if is_usage_shape(&stderr) || is_usage_shape(&stdout) {
                 failures.push(format!(

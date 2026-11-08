@@ -559,7 +559,15 @@ mod tests {
                     });
                 }
             });
-            assert!(dir.path().join(".lock").is_file());
+            let lock = dir.path().join(".lock");
+            assert!(lock.is_file());
+            // The lock is never group/world accessible, whatever the umask.
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(&lock)
+                .expect("lock metadata")
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o077, 0, "lock mode {mode:o}");
         }
     }
 
