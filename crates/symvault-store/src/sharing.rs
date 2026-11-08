@@ -1455,6 +1455,91 @@ mod tests {
         assert_eq!(snapshot.grants(), persisted.grants());
     }
 
+    /// MCP-003: two writers racing on `mcp-shares.json`, each starting from its own
+    /// stale snapshot, lose no update and leave a valid file. Every `create_at`
+    /// reloads the file under the vault write lock before it publishes.
+    #[test]
+    fn concurrent_writers_lose_no_grant_and_leave_a_valid_file() {
+        const PER_WRITER: usize = 12;
+        let (_root, path) = fixture_path();
+        let vault_root = path.parent().expect("fixture root").to_path_buf();
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let writers: Vec<_> = ["alpha", "beta"]
+            .into_iter()
+            .map(|source| {
+                let barrier = std::sync::Arc::clone(&barrier);
+                let vault_root = vault_root.clone();
+                let path = path.clone();
+                std::thread::spawn(move || {
+                    // Both writers hold the same (empty) snapshot before the race.
+                    let mut snapshot = ShareStore::read(&path).expect("read empty store");
+                    barrier.wait();
+                    (0..PER_WRITER)
+                        .map(|index| {
+                            snapshot
+                                .create_at(
+                                    &vault_root,
+                                    source,
+                                    "target",
+                                    &format!("{source}/secret-{index}"),
+                                    "",
+                                    0,
+                                    "2026-01-02T03:04:05Z",
+                                    None,
+                                )
+                                .expect("racing create")
+                                .id
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        let mut created: Vec<String> = writers
+            .into_iter()
+            .flat_map(|writer| writer.join().expect("writer thread"))
+            .collect();
+
+        let raw = fs::read(&path).expect("read published store");
+        let json: serde_json::Value = serde_json::from_slice(&raw).expect("valid JSON");
+        assert_eq!(
+            json["grants"].as_array().map(Vec::len),
+            Some(2 * PER_WRITER)
+        );
+        let persisted = ShareStore::read(&path).expect("persisted store parses");
+        let mut stored: Vec<String> = persisted
+            .grants()
+            .iter()
+            .map(|grant| grant.id.clone())
+            .collect();
+        created.sort();
+        stored.sort();
+        stored.dedup();
+        assert_eq!(
+            stored.len(),
+            2 * PER_WRITER,
+            "a grant was lost or duplicated"
+        );
+        assert_eq!(
+            stored, created,
+            "stored grants differ from the created ones"
+        );
+        for source in ["alpha", "beta"] {
+            let own = persisted
+                .grants()
+                .iter()
+                .filter(|grant| grant.from_agent == source)
+                .count();
+            assert_eq!(own, PER_WRITER, "{source} lost an update");
+        }
+        let leftovers: Vec<_> = fs::read_dir(&vault_root)
+            .expect("list vault root")
+            .filter_map(Result::ok)
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.contains(".tmp") || name.contains(".partial"))
+            .collect();
+        assert!(leftovers.is_empty(), "temporary files left: {leftovers:?}");
+    }
+
     #[test]
     fn create_rejects_negative_or_overflow_ttl_without_mutating_snapshot() {
         let (_root, path) = fixture_path();
