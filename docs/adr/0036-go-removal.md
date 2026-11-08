@@ -45,7 +45,12 @@ fixture or recapturing a recording needs a worktree of the tag.
   `FuzzDecryptAgeEnvelope` are gone. Rust keeps `fuzz/fuzz_targets/age_envelope.rs`
   (`make rust-fuzz-smoke`). The seed corpus of `FuzzNormalizePath` is kept in
   `fuzz/corpus/go_importer_normalize_path/`. Follow-up: add cargo-fuzz targets
-  for the Rust importers.
+  for the Rust importers. 2026-11-08: restored as `fuzz/fuzz_targets/import_*.rs`
+  (CSV, CSV mapping, Bitwarden, 1PUX, CXF, pass entry + TOTP, path normaliser),
+  all run by `make rust-fuzz-smoke`/`rust-fuzz`. `FuzzParseArgon2idParams` and
+  `FuzzDecryptAgeEnvelope` live on in `age_envelope`; the pass directory walk
+  (`import_pass`, needs gpg and a filesystem) and the safepath write/remove
+  fuzzers are not restored.
 * **Platforms.** Windows and FreeBSD legs and `install.ps1` are dropped
   (the Windows sync-oracle exception stays a recorded historical contract).
 * **Darwin-only recordings.** The output-modes corpus and the Touch ID
