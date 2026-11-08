@@ -858,20 +858,26 @@ Also exercises FFI-001 end to end in a distribution-signed build.
 
 Coordinator preparation (all **BLOCKERS for coordinator** unless done):
 
-- **Privacy manifest.** There is no `PrivacyInfo.xcprivacy` anywhere under
-  `client/`, and the app uses `UserDefaults.standard` (`VaultStore`). #938
-  requires the Xcode privacy report and any app-level manifest "required by the
-  final archive". Expect App Store Connect to warn or reject until a manifest
-  declaring required-reason APIs exists.
-- **Stale instructions.** `docs/ios-testflight.md` still talks about a
-  "Go-Mobile-Framework" in its prose and gives `DEVELOPER_DIR=
-  /Applications/Xcode-26.6.app/...`; the script now builds the Rust
-  `SymvaultFFI.xcframework` and picks a non-beta `/Applications/Xcode*.app`
-  itself. #938 says the host reports Xcode 27.0 `27A266a`; confirm it is a
-  release build, not a beta, before uploading.
+- **Privacy manifest (B10, resolved on local/device-runbook).**
+  `client/Sources/SymvaultIOS/PrivacyInfo.xcprivacy` now exists (XcodeGen puts it
+  into the app target's Resources; `plutil -lint` OK). It declares
+  `UserDefaults` (`CA92.1`, `VaultStore` `deviceEnrolled`), file timestamp
+  (`C617.1`, the Rust core's `stat` calls on vault files in the app container)
+  and system boot time (`35F9.1`, Rust `Instant` -> `mach_absolute_time`). It was
+  derived from source and std symbols, not from a built archive: still check
+  the Xcode privacy report on the real archive and App Store Connect's App
+  Privacy status in S6.2, and add any category the report flags.
+- **Stale instructions (B11, resolved on local/device-runbook).**
+  `docs/ios-testflight.md` now describes the Rust `SymvaultFFI.xcframework`
+  flow (`scripts/build-vaultcore.sh` -> `client/.build/mobilecore`) and no
+  longer pins `Xcode-26.6.app`; the script picks a non-beta
+  `/Applications/Xcode*.app` itself. This Mac reports Xcode 27.2
+  (`27B52`) at `/Applications/Xcode.app`; still confirm it is a release build,
+  not a beta, before uploading.
 - **Build number.** `client/project.yml` sets `MARKETING_VERSION: "1.0"` and
-  `CURRENT_PROJECT_VERSION: "1"`. If build 1 was ever uploaded, bump it first;
-  App Store Connect rejects a repeated build number.
+  `CURRENT_PROJECT_VERSION: "1"`. If build 1 was ever uploaded, bump it first
+  (the TestFlight guide now says so too); App Store Connect rejects a repeated
+  build number. This branch does not change the number.
 - **App Store Connect record** points at `com.symaira.vault.ios`
   (Name `Symaira Vault`, SKU `symaira-vault-ios`), an Internal Testing group
   exists with the maintainer added (no public link).
@@ -910,7 +916,7 @@ symvault run \
 ```
 
 (`symvault` here is your installed one for your real vault, not BIN. These are
-the commands from `docs/ios-testflight.md` minus the stale `DEVELOPER_DIR`.)
+the commands from the corrected `docs/ios-testflight.md`; no `DEVELOPER_DIR` needed.)
 
 Expected: `Signed iPhone archive ready: .../client/.build/testflight/
 SymvaultIOSApp.xcarchive`, then `TestFlight upload submitted to App Store
@@ -945,9 +951,13 @@ screenshot:
    crash), then retry with the server up.
 
 Mac side for 4 and 5 (uses the scratch vault so the real one is untouched).
-`docs/approval-devices.md` says to start the server with `--bind 0.0.0.0`; the
-Rust server refuses wildcard binds (`MCP HTTP wildcard binds are unavailable;
-choose a concrete IP`), so bind the LAN address:
+`docs/approval-devices.md` (B12, resolved on local/device-runbook) now says to
+bind the Mac's concrete LAN IP; the Rust server refuses wildcard binds (`MCP
+HTTP wildcard binds are unavailable; choose a concrete IP`) and, off loopback,
+requires TLS (it generates and reuses a self-signed vault certificate when no
+`--tls-cert`/`--tls-key` is given, so none are needed here). The
+`approval-pair` loopback error text still suggests `--bind 0.0.0.0`; ignore
+that part. Bind the LAN address:
 
 ```sh
 S=/private/tmp/symvault-acceptance
@@ -971,7 +981,7 @@ screen (the app also has a manual entry field). After scanning,
 certificate by the fingerprint in the QR code.
 
 Approval flow: needs an agent write that blocks on approval.
-**BLOCKER for coordinator:** there is no CLI command that enqueues a test
+**BLOCKER for coordinator (B12, enqueue-script part, still open):** there is no CLI command that enqueues a test
 approval request. The only way is an authenticated MCP HTTPS call from an agent
 whose profile has `approvalMode: prompt` (`symvault approval list` and
 `symvault approval decide <id> --approve|--deny` read and decide the same
@@ -1036,9 +1046,9 @@ grants you added for the terminal if you do not want them permanently
 | B7 | S5.5 | No AutoFill or share extension target (#870 open) | Build the extension, or accept host-app-only numbers and say so in the matrix |
 | B8 | S5.5 | No fixture vault encrypted to the on-device identity, no copy-in route, no harness or signposts | Provide the vault (size stated), the install route, and a measurement test |
 | B9 | S5.5 | No numeric memory budget anywhere in the repo | Maintainer states a budget, or FFI-002 stays "measured, recorded" |
-| B10 | S6 | `PrivacyInfo.xcprivacy` absent while `UserDefaults` is used | Add and verify with Xcode's privacy report |
-| B11 | S6 | `docs/ios-testflight.md` stale (Go-Mobile wording, `Xcode-26.6.app` path); build number / Xcode release status | Update the doc; confirm Xcode is a release; bump `CURRENT_PROJECT_VERSION` if needed |
-| B12 | S6.3 | `docs/approval-devices.md` says `--bind 0.0.0.0` (Rust refuses wildcard); no CLI to enqueue a test approval request | Fix the doc; provide a tested enqueue script |
+| B10 | S6 | `PrivacyInfo.xcprivacy` absent while `UserDefaults` is used | **resolved on local/device-runbook** (manifest added, `plutil -lint` OK); still verify with Xcode's privacy report on the real archive |
+| B11 | S6 | `docs/ios-testflight.md` stale (Go-Mobile wording, `Xcode-26.6.app` path); build number / Xcode release status | **resolved on local/device-runbook** (doc updated, build-number note added); human still confirms Xcode is a release and bumps `CURRENT_PROJECT_VERSION` if build 1 was uploaded |
+| B12 | S6.3 | `docs/approval-devices.md` says `--bind 0.0.0.0` (Rust refuses wildcard); no CLI to enqueue a test approval request | Doc fix **resolved on local/device-runbook**; the tested enqueue script is still open |
 
 ---
 
