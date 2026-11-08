@@ -3198,6 +3198,55 @@ mod tests {
         })
     }
 
+    /// A HEAD request to an unrouted path gets the status and headers of the GET
+    /// 404 (`404 page not found`, same Content-Length) with the body suppressed.
+    #[test]
+    fn head_to_an_unrouted_path_returns_404_with_a_suppressed_body() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let address = listener.local_addr().expect("listener address");
+        let server = thread::spawn(move || {
+            for _ in 0..2 {
+                let (stream, _) = listener.accept().expect("accept");
+                let state = test_state();
+                serve_connection_shared(
+                    stream,
+                    Path::new("missing-token-registry.json"),
+                    &state,
+                    None,
+                    None,
+                    HttpTimeouts::default(),
+                )
+                .expect("serve unrouted request");
+            }
+        });
+        let raw = |method: &str| {
+            let mut stream = TcpStream::connect(address).expect("connect");
+            write!(
+                stream,
+                "{method} /no-such-route HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n"
+            )
+            .expect("send request");
+            let mut bytes = Vec::new();
+            stream.read_to_end(&mut bytes).expect("read until close");
+            String::from_utf8(bytes).expect("HTTP response UTF-8")
+        };
+        let get = raw("GET");
+        let head = raw("HEAD");
+        server.join().expect("server thread");
+
+        assert_eq!(raw_status(&get), 404, "{get}");
+        assert_eq!(raw_body(&get), "404 page not found\n");
+        assert_eq!(raw_status(&head), 404, "{head}");
+        assert!(head.starts_with("HTTP/1.1 404 Not Found\r\n"), "{head}");
+        assert!(head.contains("Content-Length: 19\r\n"), "{head}");
+        assert_eq!(raw_body(&head), "", "HEAD must not carry a body: {head:?}");
+        assert_eq!(
+            head.split_once("\r\n\r\n").map(|(headers, _)| headers),
+            get.split_once("\r\n\r\n").map(|(headers, _)| headers),
+            "HEAD and GET must send the same status line and headers"
+        );
+    }
+
     #[test]
     fn local_approval_route_is_mounted_without_mcp_bearer_auth() {
         use hmac::{Hmac, KeyInit, Mac};

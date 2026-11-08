@@ -14,10 +14,9 @@
 //! the recorded outcome implies (approved/denied by `local-cli`, or untouched
 //! when the request was refused).
 //!
-//! Not reproducible end to end (declared, not hidden): `decide_expired` needs a
-//! queue entry whose expiry the Rust queue API does not let a caller choose
-//! (the TTL is fixed at five minutes); expiry is covered by the queue unit
-//! tests in `crates/symvault-mcp/src/approval.rs`.
+//! Every recorded case is reproduced, `decide_expired` included: its queue entry
+//! is seeded with `ApprovalQueue::enqueue_with_ttl` and a TTL that has elapsed
+//! before the CLI decides it (Go's `Request.ExpiresAt` override).
 
 use std::{
     collections::BTreeMap,
@@ -41,8 +40,6 @@ use symvault_mcp::{
 
 const FIXTURE: &str = "../../testdata/port/approval/queue.json";
 const CERTS: &str = "../../testdata/port/approval/certs";
-/// Cases the Rust queue API cannot reproduce (see the module comment).
-const NOT_REPRODUCIBLE: &[&str] = &["decide_expired"];
 
 // ---------------------------------------------------------------- fixture
 
@@ -386,9 +383,11 @@ fn snapshot(queue: &ApprovalQueue, ids: &[(String, String)]) -> BTreeMap<String,
         .collect()
 }
 
+/// Seeds queue entry number `number`, whose canonical id is `apr-a<number>`.
 fn seed(
     queue: &ApprovalQueue,
     ids: &mut Vec<(String, String)>,
+    number: usize,
     path: &str,
     write: bool,
     reason: &str,
@@ -396,8 +395,7 @@ fn seed(
     let id = queue
         .enqueue("agent-e2e", path, write, reason)
         .expect("enqueue");
-    let canonical = format!("apr-a{:011}", ids.len() + 1);
-    ids.push((id, canonical));
+    ids.push((id, format!("apr-a{number:011}")));
     // Distinct created_at values pin the newest-first listing order.
     thread::sleep(Duration::from_millis(5));
 }
@@ -413,22 +411,41 @@ fn run_all(
     seed(
         &queue,
         &mut ids,
+        1,
         "notes/approve.md",
         true,
         "approve fixture",
     );
-    seed(&queue, &mut ids, "notes/deny.md", false, "deny fixture");
-    seed(&queue, &mut ids, "notes/quiet.md", false, "quiet fixture");
+    seed(&queue, &mut ids, 2, "notes/deny.md", false, "deny fixture");
+    seed(
+        &queue,
+        &mut ids,
+        3,
+        "notes/quiet.md",
+        false,
+        "quiet fixture",
+    );
 
     let mut failures = Vec::new();
     for case in &fixture.cases {
-        if NOT_REPRODUCIBLE.contains(&case.id.as_str()) {
-            continue;
+        if case.id == "decide_expired" {
+            // Mirrors the generator's expired pre-action (canonical id 5): a
+            // request whose lifetime has already elapsed when the CLI decides.
+            let id = queue
+                .enqueue_with_ttl(
+                    "agent-e2e",
+                    "notes/expired.md",
+                    true,
+                    "expired fixture",
+                    Duration::from_millis(1),
+                )
+                .expect("enqueue expiring request");
+            ids.push((id, "apr-a00000000005".to_owned()));
+            thread::sleep(Duration::from_millis(50));
         }
         if case.id == "tls_only_list" {
-            // Mirrors the generator's `enqueue_tls` pre-action (canonical id 4;
-            // the skipped `decide_expired` entry would have been 5).
-            seed(&queue, &mut ids, "notes/tls.md", true, "tls fixture");
+            // Mirrors the generator's `enqueue_tls` pre-action (canonical id 4).
+            seed(&queue, &mut ids, 4, "notes/tls.md", true, "tls fixture");
         }
         let problems = run_case(fixture, queue_secret_class, &server_for, &queue, &ids, case);
         if !problems.is_empty() {
@@ -583,22 +600,20 @@ fn rust_cli_matches_go_recorded_outcomes_against_the_real_rust_listener() {
         failures.len(),
         failures.join("\n")
     );
-    let replayed = fixture.cases.len() - NOT_REPRODUCIBLE.len();
     eprintln!(
-        "replayed {replayed} of {} recorded Go cases end to end",
+        "replayed {} of {} recorded Go cases end to end",
+        fixture.cases.len(),
         fixture.cases.len()
     );
 }
 
 #[test]
-fn the_reproducible_set_is_exactly_the_recorded_set_minus_the_declared_gap() {
+fn every_recorded_case_including_decide_expired_is_replayed() {
     let fixture = load_fixture();
-    for declared in NOT_REPRODUCIBLE {
-        assert!(
-            fixture.cases.iter().any(|case| case.id == *declared),
-            "declared gap {declared} is not in the fixture any more"
-        );
-    }
+    assert!(
+        fixture.cases.iter().any(|case| case.id == "decide_expired"),
+        "decide_expired is not in the fixture any more"
+    );
     let mtls = fixture
         .cases
         .iter()
