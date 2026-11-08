@@ -10,7 +10,10 @@
 //! re-verifies it against the pinned oracle; nothing here needs a Go toolchain.
 //! Only runs whose Go outcome is a rejection before the command body are
 //! replayed against the binary, so no replay can touch a real vault or network;
-//! the accepting rows are covered by the in-crate `cobra_usage` unit tests.
+//! the accepting rows are covered by the in-crate `cobra_usage` unit tests and, as a
+//! usage-shape check only (not byte parity), by
+//! `native_cli_accepts_go_accepting_arity_probes` below, which runs them through the
+//! built binary in an isolated, uninitialized sandbox.
 //! `argv_shapes` adds the shapes an arity sweep cannot reach (flag *types*, such as
 //! `device join --pairing-file <path> <token>`) and the group help pages; each row
 //! may bring disposable files that are written into the working directory first.
@@ -179,6 +182,9 @@ const USAGE_CASES: usize = 159;
 const ARGV_SHAPES: usize = 24;
 const ARITY_ROWS: usize = 116;
 const REJECTED_ARITY_PROBES: usize = 236;
+const ACCEPTING_ARITY_PROBES: usize = 344;
+/// Accepting probes of the `ACCEPTING_SWEEP_SKIPPED` commands.
+const SKIPPED_ACCEPTING_PROBES: usize = 39;
 const GATE_REFUSALS: usize = 223;
 const NOT_INITIALIZED_CASES: usize = 29;
 const NIL_ARGS_COMMANDS: usize = 64;
@@ -1205,6 +1211,113 @@ fn native_cli_matches_go_argument_validators() {
         }
     }
     assert_eq!(replayed, REJECTED_ARITY_PROBES);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// Commands the accepting-probe sweep does not run, because their body starts a
+/// long-running server or TUI, probes the host, or can reach the network (git remotes,
+/// update checks, doctor's network checks). Their rejecting probes are still replayed.
+const ACCEPTING_SWEEP_SKIPPED: &[&str] = &[
+    "symvault broker",
+    "symvault mcp",
+    "symvault serve",
+    "symvault ui",
+    "symvault doctor",
+    "symvault startup-profile",
+    "symvault sync",
+    "symvault git",
+    "symvault remote init",
+    "symvault remote status",
+    "symvault update",
+    "symvault update apply",
+    "symvault update check",
+    "symvault update info",
+];
+
+/// Whether the text has the shape of cobra's argument-validator or unknown-command
+/// errors (the messages the rejecting rows of the corpus freeze). Messages a command
+/// body prints for its own reasons (`requires exactly 1 argument`, `Unknown help
+/// topic`, the exit-2 deprecation notices of the retired aliases) are not matched.
+fn is_usage_shape(text: &str) -> bool {
+    text.lines().any(|line| {
+        line.starts_with("Error: accepts ")
+            || line.starts_with("Error: requires at least ")
+            || line.starts_with("Error: unknown command ")
+            || line.starts_with("Error: unknown flag")
+            || line.contains("arg(s), received")
+            || line.contains("arg(s), only received")
+    })
+}
+
+/// The accepting rows of the arity sweep (Go ran the command body for them) go through
+/// the built binary in an isolated, uninitialized sandbox: whatever the body then
+/// prints, the argument count must not be rejected as a usage error. The probes are
+/// `<command path> x...`, exactly as the generator ran them.
+#[test]
+fn native_cli_accepts_go_accepting_arity_probes() {
+    let fixture = fixture();
+    let mut failures = Vec::new();
+    let (mut ran, mut skipped) = (0usize, 0usize);
+    for row in &fixture.arity {
+        let words: Vec<String> = row
+            .path
+            .strip_prefix("symvault")
+            .expect("path starts with the binary name")
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect();
+        for probe in row.probes.iter().filter(|probe| !probe.rejected) {
+            assert!(
+                probe.observation.is_none(),
+                "{} x{}: accepting probes carry no bytes",
+                row.path,
+                probe.count
+            );
+            if ACCEPTING_SWEEP_SKIPPED.contains(&row.path.as_str()) {
+                skipped += 1;
+                continue;
+            }
+            let mut args = words.clone();
+            args.extend(std::iter::repeat_n("x".to_owned(), probe.count));
+            let label = format!("{} x{}", row.path, probe.count);
+            let run_args = args.clone();
+            let (sender, receiver) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let _ = sender.send(run_scenario(&run_args, &BTreeMap::new(), &[], false));
+            });
+            let (code, stdout, stderr) = receiver
+                .recv_timeout(std::time::Duration::from_secs(120))
+                .unwrap_or_else(|_| panic!("{label} {args:?} did not finish within 120 s"));
+            ran += 1;
+            if is_usage_shape(&stderr) || is_usage_shape(&stdout) {
+                failures.push(format!(
+                    "{label} {args:?} was treated as a usage error\n  rust: {code} {stdout:?} {stderr:?}"
+                ));
+            }
+        }
+    }
+    let accepting: usize = fixture
+        .arity
+        .iter()
+        .map(|row| row.probes.iter().filter(|probe| !probe.rejected).count())
+        .sum();
+    // Negative control: the detector flags every rejection the corpus froze, so a
+    // clean sweep above cannot come from a detector that matches nothing.
+    for row in &fixture.arity {
+        for probe in row.probes.iter().filter(|probe| probe.rejected) {
+            let observation = probe.observation.as_ref().expect("rejected probe bytes");
+            assert!(
+                is_usage_shape(&observation.stderr),
+                "{} x{}: {:?} is not recognised as a usage error",
+                row.path,
+                probe.count,
+                observation.stderr
+            );
+        }
+    }
+    assert_eq!(ran + skipped, accepting);
+    assert_eq!(accepting, ACCEPTING_ARITY_PROBES);
+    assert_eq!(skipped, SKIPPED_ACCEPTING_PROBES);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
