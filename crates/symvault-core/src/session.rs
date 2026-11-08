@@ -378,7 +378,7 @@ impl SessionManager {
     ///
     /// Every intermediate copy of the key (keyring bytes, base64 text, decoded
     /// bytes, the fixed-size array) is wiped on drop.
-    fn load_wrap_key(&self, vault: &str) -> Result<Zeroizing<[u8; 32]>, SessionError> {
+    fn load_wrap_key(&self, vault: &str) -> Result<Zeroizing<Vec<u8>>, SessionError> {
         let raw = match self.keyring.get(&Self::key(vault, WRAP_KEY_ACCOUNT)) {
             Ok(raw) => Zeroizing::new(raw),
             Err(SessionError::NotFound) => return Err(SessionError::WrapKeyMissing),
@@ -398,24 +398,27 @@ impl SessionManager {
                 decoded.len()
             )));
         }
-        let mut key = Zeroizing::new([0_u8; 32]);
+        // A heap buffer: moving a `Zeroizing<[u8; 32]>` by value would leave an
+        // unwiped copy of the key in the old stack slot, moving a `Vec` moves
+        // only its pointer.
+        let mut key = Zeroizing::new(vec![0_u8; 32]);
         key.copy_from_slice(&decoded);
         Ok(key)
     }
     /// Go replaces any unusable wrap key on save (`getOrCreateWrapKey`): every
     /// load failure, not only absence, falls through to generating a new one.
-    fn get_or_create_wrap_key(&self, vault: &str) -> Result<Zeroizing<[u8; 32]>, SessionError> {
+    fn get_or_create_wrap_key(&self, vault: &str) -> Result<Zeroizing<Vec<u8>>, SessionError> {
         if let Ok(key) = self.load_wrap_key(vault) {
             return Ok(key);
         }
-        let mut raw = Zeroizing::new([0_u8; 32]);
+        let mut raw = Zeroizing::new(vec![0_u8; 32]);
         fill(&mut raw[..]).map_err(|e| SessionError::Crypto(e.to_string()))?;
-        let encoded = Zeroizing::new(B64.encode(*raw));
+        let encoded = Zeroizing::new(B64.encode(&raw[..]));
         self.keyring
             .set(&Self::key(vault, WRAP_KEY_ACCOUNT), encoded.as_bytes())?;
         Ok(raw)
     }
-    fn cipher(key: &[u8; 32]) -> Result<Aes256Gcm, SessionError> {
+    fn cipher(key: &[u8]) -> Result<Aes256Gcm, SessionError> {
         Aes256Gcm::new_from_slice(key).map_err(|e| SessionError::Crypto(e.to_string()))
     }
     fn encrypt(&self, vault: &str, value: &[u8]) -> Result<(String, String), SessionError> {

@@ -22,6 +22,7 @@ use symvault_core::redact::{PatternDetector, ScanOptions, Scanner, redact_known_
 use symvault_crypto::Identity;
 use symvault_mcp::{CommandExecution, CommandExecutor};
 use symvault_store::{Entry, StoreError};
+use zeroize::Zeroizing;
 
 /// Environment inherited by Go's `secrets.RunCommand` before caller-selected
 /// passthrough names and resolved secret mappings are applied.
@@ -275,7 +276,7 @@ pub(crate) fn format_go_value(value: &Value) -> String {
             if value == 0.0 && value.is_sign_negative() {
                 return "-0".to_owned();
             }
-            let scientific = format!("{value:e}");
+            let scientific = zeroize::Zeroizing::new(format!("{value:e}"));
             let (mantissa, exponent) = scientific.split_once('e').expect("scientific float");
             let exponent: i32 = exponent.parse().expect("float exponent");
             if !(-4..6).contains(&exponent) {
@@ -289,16 +290,38 @@ pub(crate) fn format_go_value(value: &Value) -> String {
             }
         }
         Value::String(value) => value.clone(),
+        // The element texts and the joined text are copies of the value: wipe
+        // them. Only the returned string is left to the caller.
         Value::Array(values) => {
-            let values = values.iter().map(format_go_value).collect::<Vec<_>>();
-            format!("[{}]", values.join(" "))
+            let parts: Vec<Zeroizing<String>> = values
+                .iter()
+                .map(|value| Zeroizing::new(format_go_value(value)))
+                .collect();
+            let joined = Zeroizing::new(
+                parts
+                    .iter()
+                    .map(|part| part.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            );
+            format!("[{}]", *joined)
         }
         Value::Object(values) => {
-            let values = values
+            let parts: Vec<Zeroizing<String>> = values
                 .iter()
-                .map(|(key, value)| format!("{key}:{}", format_go_value(value)))
-                .collect::<Vec<_>>();
-            format!("map[{}]", values.join(" "))
+                .map(|(key, value)| {
+                    let inner = Zeroizing::new(format_go_value(value));
+                    Zeroizing::new(format!("{key}:{}", *inner))
+                })
+                .collect();
+            let joined = Zeroizing::new(
+                parts
+                    .iter()
+                    .map(|part| part.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            );
+            format!("map[{}]", *joined)
         }
     }
 }
