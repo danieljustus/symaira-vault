@@ -854,7 +854,10 @@ AREA_KDF_MIGRATION_TESTS := 10
 # `arguments` probes recorded from the oracle, 3 call.rs unit tests for the
 # raw-text arguments decode; measured: 447 passed, 0 failed over 56 result lines).
 # 448 after the coordinator's anomaly_dispatch order pin (decode before lookup/token scope).
-AREA_MCP_TEST_COUNT := 448
+# 449 from local/impl-residuals (+1: http.rs unit test
+# head_to_an_unrouted_path_returns_404_with_a_suppressed_body; measured at the
+# 95419793 gate: 449 passed, 0 failed).
+AREA_MCP_TEST_COUNT := 449
 
 # `make -s print-<VARIABLE>` prints a variable's value, for the workflows that must
 # not repeat the constants above.
