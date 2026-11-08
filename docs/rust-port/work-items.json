@@ -130,11 +130,12 @@
     {
       "id": "RUST-015",
       "title": "Remove Go backend at the Rust-only cutover",
-      "status": "blocked",
+      "status": "passed",
       "depends_on": ["RUST-014"],
       "contract_rows": [],
       "acceptance": ["zero tracked backend .go files", "Rust full gate green", "Swift/editor gates green"],
-      "decision": "Maintainer decision 2026-11-02: Go removal is done locally and merged into local/rust-port; push, PR and release remain separate authorizations. Per D6 the generator .go files under scripts/rust-port/cmd are not backend code: at Go removal they are archived on the tag legacy/go-oracle, and frozen fixtures stay."
+      "decision": "Maintainer decision 2026-11-02: Go removal is done locally and merged into local/rust-port; push, PR and release remain separate authorizations. Per D6 the generator .go files under scripts/rust-port/cmd are not backend code: at Go removal they are archived on the tag legacy/go-oracle, and frozen fixtures stay.",
+      "evidence": "Go backend removed: #1575 (squash a57f4cdf, Rust port: replace Go with Rust and remove the Go implementation), ADR 0036 (docs/adr/0036-go-removal.md). Oracle tag legacy/go-oracle (ce2390d7) and history tag legacy/rust-port-history (69139e4d) are on origin. Closeout 2026-11-08: set to passed per the maintainer order recorded in ADR 0036 (complete Go removal, no fallback, no observation window); the depends_on RUST-014 status is not changed by this record. The acceptance entry 'Rust full gate green' is confirmed by the local-gate receipts and the closing CI run, not by this record."
     }
   ]
 }
