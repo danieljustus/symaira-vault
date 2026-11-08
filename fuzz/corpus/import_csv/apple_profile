@@ -1,0 +1,2 @@
+Title,URL,Username,Password,Notes,OTPAuth
+GitHub,https://github.com,u,p,n,otpauth://totp/x?secret=JBSWY3DPEHPK3PXP

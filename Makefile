@@ -26,6 +26,8 @@ MIRI_TARGET_DIR := target/miri-2026-09-03
 MIRI_FLAGS := -Zmiri-disable-isolation
 MIRI_TEST_ARGS := --skip config::tests:: --skip config_typed::tests:: --skip go_yaml_depth::
 RUST_FUZZ_TOOLCHAIN := nightly-2026-09-03
+# Every cargo-fuzz target in fuzz/fuzz_targets (override to run a subset).
+RUST_FUZZ_TARGETS ?= age_envelope import_csv import_csv_mapping import_bitwarden import_1pux import_cxf import_pass_entry import_normalize_path
 RUST_FUZZ_RUNS ?= 128
 RUST_FUZZ_MAX_TOTAL_TIME ?= 10
 RUST_FUZZ_MAX_LEN ?= 4096
@@ -509,20 +511,27 @@ rust-fuzz-lock:
 	$(CARGO) check --manifest-path "$(RUST_FUZZ_MANIFEST)" --locked; \
 	echo "Fuzz manifest and lockfile are present and locked."
 
-# Bounded PR smoke; the corpus is copied because libFuzzer may add files to it.
+# Bounded PR smoke over every target in RUST_FUZZ_TARGETS; each corpus is copied
+# because libFuzzer may add files to it. RUST_FUZZ_MAX_TOTAL_TIME is per target.
 rust-fuzz-smoke: rust-fuzz-lock
 	@set -eu; \
-	corpus="$$(mktemp -d)"; \
-	runs_arg=""; \
 	lock_before="$$(shasum -a 256 "$(RUST_FUZZ_LOCK)")"; \
+	runs_arg=""; \
 	if [ -n "$(RUST_FUZZ_RUNS)" ]; then runs_arg="-runs=$(RUST_FUZZ_RUNS)"; fi; \
-	trap 'rm -rf "$$corpus"' EXIT; \
-	cp -R "$(RUST_FUZZ_DIR)/corpus/age_envelope/." "$$corpus/"; \
-	CARGOFLAGS=--locked $(CARGO) +$(RUST_FUZZ_TOOLCHAIN) fuzz run --fuzz-dir "$(RUST_FUZZ_DIR)" --sanitizer none age_envelope "$$corpus" -- \
-		$$runs_arg -max_total_time=$(RUST_FUZZ_MAX_TOTAL_TIME) \
-		-max_len=$(RUST_FUZZ_MAX_LEN) -timeout=$(RUST_FUZZ_TIMEOUT) \
-		-rss_limit_mb=$(RUST_FUZZ_RSS_LIMIT_MB) -seed=992 -verbosity=0 \
-		-print_final_stats=1 -dict="$(CURDIR)/$(RUST_FUZZ_DIR)/dictionaries/age_envelope.dict"; \
+	for target in $(RUST_FUZZ_TARGETS); do \
+		test -d "$(RUST_FUZZ_DIR)/corpus/$$target" || { echo "Missing seed corpus for $$target" >&2; exit 1; }; \
+		dict_arg=""; \
+		if [ -f "$(RUST_FUZZ_DIR)/dictionaries/$$target.dict" ]; then dict_arg="-dict=$(CURDIR)/$(RUST_FUZZ_DIR)/dictionaries/$$target.dict"; fi; \
+		corpus="$$(mktemp -d)"; \
+		echo "== fuzz $$target =="; \
+		cp -R "$(RUST_FUZZ_DIR)/corpus/$$target/." "$$corpus/"; \
+		CARGOFLAGS=--locked $(CARGO) +$(RUST_FUZZ_TOOLCHAIN) fuzz run --fuzz-dir "$(RUST_FUZZ_DIR)" --sanitizer none "$$target" "$$corpus" -- \
+			$$runs_arg -max_total_time=$(RUST_FUZZ_MAX_TOTAL_TIME) \
+			-max_len=$(RUST_FUZZ_MAX_LEN) -timeout=$(RUST_FUZZ_TIMEOUT) \
+			-rss_limit_mb=$(RUST_FUZZ_RSS_LIMIT_MB) -seed=992 -verbosity=0 \
+			-print_final_stats=1 $$dict_arg || { rm -rf "$$corpus"; exit 1; }; \
+		rm -rf "$$corpus"; \
+	done; \
 	lock_after="$$(shasum -a 256 "$(RUST_FUZZ_LOCK)")"; \
 	test "$$lock_before" = "$$lock_after" || { echo "Fuzz run modified $(RUST_FUZZ_LOCK)" >&2; exit 1; }
 
