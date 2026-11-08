@@ -177,13 +177,8 @@ pub struct ApprovalResult {
 }
 
 /// Checks whether a controlling terminal is available for reading and
-/// writing. Unsupported platforms (anything non-unix, including Windows)
-/// fail closed and always report no TTY.
-///
-/// ponytail: Windows has no controlling-terminal seam here, so approval
-/// always fails closed there. Upgrade path: port `open_real_terminal` to the
-/// Win32 console API (`CONIN$`/`CONOUT$` + `SetConsoleMode`) behind
-/// `cfg(windows)`, mirroring Go's `go-tty` cross-platform behaviour.
+/// writing. Unsupported platforms (anything non-unix) fail closed and always
+/// report no TTY.
 #[must_use]
 pub fn is_tty_present() -> bool {
     #[cfg(unix)]

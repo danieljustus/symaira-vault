@@ -26,10 +26,6 @@
 //! * Go cannot fail to subscribe to signals; Rust can (a handler may not be
 //!   installable). `symvault get` then refuses to copy and exits 1 instead of
 //!   leaving a secret that an interrupt could no longer clear.
-//! * Windows: the console close/logoff/shutdown events are delivered by `ctrlc`
-//!   without Go's "block until the OS ends the process" wait, so the clear may
-//!   lose the race against process termination there; Ctrl-C and Ctrl-Break are
-//!   equivalent to Go's `os.Interrupt`.
 //! * Go styles the two `cliout` lines with lipgloss when stderr is a color
 //!   terminal. This module always writes plain text.
 
@@ -144,8 +140,7 @@ impl CancelToken {
 pub enum Wake {
     Elapsed,
     Cancelled,
-    /// A termination request arrived: SIGINT/SIGTERM/SIGHUP on Unix; on Windows
-    /// Ctrl-C, Ctrl-Break and the console close/logoff/shutdown events.
+    /// A termination request arrived: SIGINT/SIGTERM/SIGHUP on Unix.
     Signal,
 }
 
@@ -171,8 +166,7 @@ pub trait Clock: Send + Sync {
 }
 
 /// Where termination requests come from. Production uses the OS (signal-hook
-/// on Unix, the console control handler through `ctrlc` on Windows); tests
-/// inject a source they can fire by hand.
+/// on Unix); tests inject a source they can fire by hand.
 pub trait InterruptSource: Send + Sync {
     /// Makes every future termination request set `flag`. Called at most once
     /// per [`RealClock`].
@@ -222,37 +216,13 @@ impl Drop for UnixSignals {
     }
 }
 
-/// Windows: Go lists `os.Interrupt` and `SIGTERM`, and the Go runtime maps
-/// CTRL_C_EVENT and CTRL_BREAK_EVENT to the former and CTRL_CLOSE_EVENT,
-/// CTRL_LOGOFF_EVENT and CTRL_SHUTDOWN_EVENT to the latter. `ctrlc` installs one
-/// `SetConsoleCtrlHandler` routine that reacts to every control event, so all
-/// five set the flag.
-///
-/// `ctrlc` allows one handler per process. Only `symvault get` installs this
-/// source (and the other `ctrlc` users are different commands), so a second
-/// installation would be a bug and is reported as an error rather than ignored.
-#[cfg(windows)]
-struct WindowsConsoleControl;
-
-#[cfg(windows)]
-impl InterruptSource for WindowsConsoleControl {
-    fn install(&self, flag: Arc<AtomicBool>) -> Result<(), String> {
-        ctrlc::set_handler(move || flag.store(true, Ordering::SeqCst))
-            .map_err(|error| error.to_string())
-    }
-}
-
 /// The OS source of this target, or `None` where no signals are observed.
 fn system_interrupts() -> Option<Box<dyn InterruptSource>> {
     #[cfg(unix)]
     {
         Some(Box::new(UnixSignals::default()))
     }
-    #[cfg(windows)]
-    {
-        Some(Box::new(WindowsConsoleControl))
-    }
-    #[cfg(not(any(unix, windows)))]
+    #[cfg(not(unix))]
     {
         None
     }
@@ -260,7 +230,7 @@ fn system_interrupts() -> Option<Box<dyn InterruptSource>> {
 
 /// Wall-clock implementation. [`RealClock::with_termination_signals`] mirrors
 /// Go `signal.Notify(os.Interrupt, SIGTERM[, SIGHUP])`: SIGINT/SIGTERM/SIGHUP
-/// on Unix and the console control events on Windows. The handler is installed
+/// on Unix. The handler is installed
 /// by [`Clock::arm_termination_signals`], i.e. only when `get` is about to
 /// copy, so a Ctrl-C at the unlock prompt keeps its default meaning (Go
 /// subscribes inside `StartAutoClear`, also after unlock).
@@ -566,8 +536,8 @@ fn wait_and_clear(
 }
 
 /// The OS clipboard for `get`: `pbcopy`/`pbpaste` on macOS, the atotto-style
-/// tool selection from [`crate::desktop_commands`] on Linux, `arboard` on
-/// Windows, unavailable elsewhere.
+/// tool selection from [`crate::desktop_commands`] on Linux, unavailable
+/// elsewhere.
 #[must_use]
 pub fn native_get_clipboard() -> Arc<dyn TextClipboard> {
     #[cfg(target_os = "macos")]
@@ -578,11 +548,7 @@ pub fn native_get_clipboard() -> Arc<dyn TextClipboard> {
     {
         command_text_clipboard(Arc::new(crate::desktop_commands::SystemHost::new()))
     }
-    #[cfg(windows)]
-    {
-        Arc::new(WindowsClipboard)
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         Arc::new(UnsupportedClipboard)
     }
@@ -645,28 +611,10 @@ impl TextClipboard for CommandTextClipboard {
     }
 }
 
-#[cfg(windows)]
-struct WindowsClipboard;
-
-#[cfg(windows)]
-impl TextClipboard for WindowsClipboard {
-    fn copy(&self, text: &str) -> Result<(), String> {
-        arboard::Clipboard::new()
-            .and_then(|mut board| board.set_text(text))
-            .map_err(|error| error.to_string())
-    }
-
-    fn read(&self) -> Result<String, String> {
-        arboard::Clipboard::new()
-            .and_then(|mut board| board.get_text())
-            .map_err(|error| error.to_string())
-    }
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 struct UnsupportedClipboard;
 
-#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 impl TextClipboard for UnsupportedClipboard {
     fn copy(&self, _text: &str) -> Result<(), String> {
         Err(crate::desktop_commands::MISSING_CLIPBOARD_COMMANDS.to_owned())

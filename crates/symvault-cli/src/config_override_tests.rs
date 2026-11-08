@@ -44,14 +44,8 @@ fn child() {
         Err(_) => serde_json::json!({"path":"", "error_class":"flags"}),
         Ok(cli) => match resolve_vault(cli.vault.as_deref(), cli._profile.as_deref()) {
             Ok(path) => {
-                let home =
-                    std::env::var(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).unwrap();
+                let home = std::env::var("HOME").unwrap();
                 let path = path.to_string_lossy().replace(&home, "HOME");
-                let path = if cfg!(windows) {
-                    path.replace('\\', "/")
-                } else {
-                    path
-                };
                 serde_json::json!({"path":path, "error_class":""})
             }
             Err(message) => serde_json::json!({"path":"", "error_class":

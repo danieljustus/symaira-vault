@@ -19,20 +19,16 @@ pub use macos_keychain::SecurityBiometricItems;
 #[cfg(any(
     target_os = "macos",
     target_os = "linux",
-    target_os = "windows",
     target_os = "freebsd",
     target_os = "openbsd",
     target_os = "netbsd"
 ))]
 mod os_keyring;
-#[cfg(windows)]
-pub mod windows_attachment;
 #[cfg(target_os = "macos")]
 pub use macos::{MacOsDaemon, MacOsKeyring, MacOsPlatform, MacOsTouchId};
 #[cfg(any(
     target_os = "macos",
     target_os = "linux",
-    target_os = "windows",
     target_os = "freebsd",
     target_os = "openbsd",
     target_os = "netbsd"
@@ -53,9 +49,9 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-/// Native automated typing for this OS. Linux and Windows use the command
-/// adapters in [`desktop_commands`]; their tool routing is proven with injected
-/// and fake-tool hosts only, not against a live desktop session. Other systems
+/// Native automated typing for this OS. Linux uses the command adapters in
+/// [`desktop_commands`]; their tool routing is proven with injected and
+/// fake-tool hosts only, not against a live desktop session. Other systems
 /// fail closed.
 #[must_use]
 pub fn native_autotype() -> Arc<dyn Autotype> {
@@ -69,13 +65,7 @@ pub fn native_autotype() -> Arc<dyn Autotype> {
             desktop_commands::SystemHost::new(),
         )))
     }
-    #[cfg(windows)]
-    {
-        Arc::new(desktop_commands::WindowsAutotype::new(Arc::new(
-            desktop_commands::SystemHost::new(),
-        )))
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         Arc::new(UnavailablePlatform)
     }

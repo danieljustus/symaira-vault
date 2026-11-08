@@ -86,7 +86,6 @@ use symvault_core::platform::TouchId;
 #[cfg(not(any(
     target_os = "macos",
     target_os = "linux",
-    target_os = "windows",
     target_os = "freebsd",
     target_os = "openbsd",
     target_os = "netbsd"
@@ -102,7 +101,6 @@ use symvault_platform::FallbackKeyring;
 #[cfg(any(
     target_os = "macos",
     target_os = "linux",
-    target_os = "windows",
     target_os = "freebsd",
     target_os = "openbsd",
     target_os = "netbsd"
@@ -3113,12 +3111,6 @@ fn run_doctor(
 fn cli_home_directory() -> Result<PathBuf, String> {
     std::env::var_os("HOME")
         .filter(|value| !value.is_empty())
-        .or_else(|| {
-            cfg!(windows)
-                .then(|| std::env::var_os("USERPROFILE"))
-                .flatten()
-                .filter(|value| !value.is_empty())
-        })
         .map(PathBuf::from)
         .ok_or_else(|| "cannot determine home directory".to_owned())
 }
@@ -3149,12 +3141,6 @@ fn run_profile(command: &ProfileCommand, vault: Option<&Path>, quiet: bool) -> E
     let result = (|| {
         let home = std::env::var_os("HOME")
             .filter(|value| !value.is_empty())
-            .or_else(|| {
-                cfg!(windows)
-                    .then(|| std::env::var_os("USERPROFILE"))
-                    .flatten()
-                    .filter(|value| !value.is_empty())
-            })
             .map(PathBuf::from)
             .ok_or_else(|| "cannot determine home directory".to_owned())?;
         let mut output = io::stdout().lock();
@@ -3192,11 +3178,6 @@ fn run_audit_export(
     let result = (|| {
         let home = std::env::var_os("HOME")
             .filter(|value| !value.is_empty())
-            .or_else(|| {
-                cfg!(windows)
-                    .then(|| std::env::var_os("USERPROFILE"))
-                    .flatten()
-            })
             .map(PathBuf::from)
             .ok_or_else(|| "cannot determine home directory".to_owned())?;
         let mut rendered = Vec::new();
@@ -3272,12 +3253,6 @@ fn run_audit(
     let result = (|| {
         let home = std::env::var_os("HOME")
             .filter(|value| !value.is_empty())
-            .or_else(|| {
-                cfg!(windows)
-                    .then(|| std::env::var_os("USERPROFILE"))
-                    .flatten()
-                    .filter(|value| !value.is_empty())
-            })
             .map(PathBuf::from)
             .ok_or_else(|| "cannot determine home directory".to_owned())?;
         let json = audit_json || output_format == Some("json");
@@ -5113,13 +5088,6 @@ fn service_config(warn: bool) -> Option<Config> {
 /// Renders an io error the way Go's `*os.PathError` does ("no such file or
 /// directory", "permission denied", ...).
 fn go_io_reason(error: &std::io::Error) -> String {
-    #[cfg(windows)]
-    match error.raw_os_error() {
-        Some(2) => return "The system cannot find the file specified.".to_owned(),
-        Some(3) => return "The system cannot find the path specified.".to_owned(),
-        Some(5) => return "Access is denied.".to_owned(),
-        _ => {}
-    }
     match error.kind() {
         std::io::ErrorKind::NotFound => "no such file or directory".to_owned(),
         std::io::ErrorKind::PermissionDenied => "permission denied".to_owned(),
@@ -6142,17 +6110,13 @@ fn expand_policy_path(path: &Path) -> Result<PathBuf, String> {
         .to_str()
         .ok_or_else(|| "policy path must be UTF-8".to_owned())?;
     if let Some(rest) = raw.strip_prefix('~') {
-        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        let home = std::env::var_os("HOME")
             .filter(|value| !value.is_empty())
             .ok_or_else(|| "cannot determine home directory".to_owned())?;
         // Go's filepath.Join(home, path[1:]) keeps a separator-prefixed rest
         // under home; PathBuf::join would instead replace home. A backslash
-        // is a separator only on Windows, and a literal filename byte on Unix.
-        let rest = if cfg!(windows) {
-            rest.trim_start_matches(['/', '\\'])
-        } else {
-            rest.trim_start_matches('/')
-        };
+        // is a literal filename byte on Unix.
+        let rest = rest.trim_start_matches('/');
         return Ok(agent_list_commands::clean_path(
             &PathBuf::from(home).join(rest),
         ));
@@ -6165,7 +6129,7 @@ fn expand_vault_path(path: &Path) -> Result<PathBuf, String> {
         .to_str()
         .ok_or_else(|| "vault path must be UTF-8".to_owned())?;
     if raw == "~" || raw.starts_with("~/") {
-        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        let home = std::env::var_os("HOME")
             .filter(|value| !value.is_empty())
             .ok_or_else(|| "cannot determine home directory".to_owned())?;
         if raw == "~" {
@@ -6220,7 +6184,6 @@ fn runtime_session_manager() -> RuntimeSession {
     #[cfg(any(
         target_os = "macos",
         target_os = "linux",
-        target_os = "windows",
         target_os = "freebsd",
         target_os = "openbsd",
         target_os = "netbsd"
@@ -6238,7 +6201,6 @@ fn runtime_session_manager() -> RuntimeSession {
     #[cfg(not(any(
         target_os = "macos",
         target_os = "linux",
-        target_os = "windows",
         target_os = "freebsd",
         target_os = "openbsd",
         target_os = "netbsd"

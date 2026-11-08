@@ -379,16 +379,7 @@ fn replace_all(input: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
 }
 
 fn to_slash(path: &[u8]) -> Vec<u8> {
-    #[cfg(windows)]
-    {
-        path.iter()
-            .map(|byte| if *byte == b'\\' { b'/' } else { *byte })
-            .collect()
-    }
-    #[cfg(not(windows))]
-    {
-        path.to_vec()
-    }
+    path.to_vec()
 }
 
 #[cfg(test)]

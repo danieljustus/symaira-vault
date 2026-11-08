@@ -106,44 +106,26 @@ pub(super) fn configure_accepted_client(client: &TcpStream) -> io::Result<()> {
 
 pub(super) struct Socket {
     pub(super) stream: TcpStream,
-    cancellation: HttpShutdown,
 }
 
 impl Socket {
-    pub(super) fn new(stream: TcpStream, cancellation: &HttpShutdown) -> io::Result<Self> {
-        #[cfg(windows)]
-        stream.set_nonblocking(true)?;
+    pub(super) fn new(stream: TcpStream) -> io::Result<Self> {
         stream.set_read_timeout(Some(IO_TIMEOUT))?;
         stream.set_write_timeout(Some(IO_TIMEOUT))?;
-        Ok(Self {
-            stream,
-            cancellation: cancellation.clone(),
-        })
+        Ok(Self { stream })
     }
     pub(super) fn duplicate(&self) -> io::Result<Self> {
-        Self::new(self.stream.try_clone()?, &self.cancellation)
+        Self::new(self.stream.try_clone()?)
     }
 }
 
 impl Read for Socket {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
-        #[cfg(windows)]
-        {
-            self.cancellation
-                .socket_io(self.stream.read_timeout()?, || self.stream.read(buffer))
-        }
-        #[cfg(not(windows))]
         self.stream.read(buffer)
     }
 }
 impl Write for Socket {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
-        #[cfg(windows)]
-        {
-            self.cancellation
-                .socket_io(Some(IO_TIMEOUT), || self.stream.write(buffer))
-        }
-        #[cfg(not(windows))]
         self.stream.write(buffer)
     }
     fn flush(&mut self) -> io::Result<()> {
@@ -158,7 +140,7 @@ fn handle_client(
     allow_private: bool,
     cancellation: &HttpShutdown,
 ) -> Result<(), String> {
-    let mut client = Socket::new(client, cancellation).map_err(|_| "configure CONNECT I/O")?;
+    let mut client = Socket::new(client).map_err(|_| "configure CONNECT I/O")?;
     let mut header = Vec::with_capacity(1024);
     let started = Instant::now();
     while header.len() < HEADER_LIMIT && started.elapsed() < Duration::from_secs(30) {
@@ -221,7 +203,7 @@ fn handle_client(
     else {
         return Ok(());
     };
-    let mut upstream = Socket::new(upstream, cancellation).map_err(|_| "configure upstream I/O")?;
+    let mut upstream = Socket::new(upstream).map_err(|_| "configure upstream I/O")?;
     client
         .stream
         .set_read_timeout(Some(IO_TIMEOUT))

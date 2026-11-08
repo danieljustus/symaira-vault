@@ -390,20 +390,6 @@ pub fn apply_fixes(
 
 /// Formats an I/O error to match Go's `*os.PathError` (`open <path>: <error>`).
 fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> String {
-    #[cfg(windows)]
-    let err_msg = match err.raw_os_error() {
-        Some(2) => "The system cannot find the file specified.",
-        Some(3) => "The system cannot find the path specified.",
-        Some(5) => "Access is denied.",
-        _ => {
-            if err.kind() == io::ErrorKind::NotFound {
-                "The system cannot find the file specified."
-            } else {
-                "general error"
-            }
-        }
-    };
-    #[cfg(not(windows))]
     let err_msg = match err.raw_os_error() {
         Some(2) => "no such file or directory",
         Some(13) => "permission denied",
@@ -640,8 +626,6 @@ fn check_vault_identity_encrypted(vault_dir: &Path, _opts: &DoctorOptions) -> Do
 }
 
 fn check_vault_permissions(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
-    // The body below is `#[cfg(unix)]`-only, so on Windows the closure captures nothing.
-    #[cfg_attr(windows, allow(unused_variables))]
     let vd = vault_dir.to_path_buf();
     let fix_fn = move || {
         #[cfg(unix)]
@@ -661,59 +645,45 @@ fn check_vault_permissions(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorRes
         Ok(())
     };
 
-    #[cfg(windows)]
-    {
+    use std::os::unix::fs::PermissionsExt;
+    let mut issues = Vec::new();
+    let entries_dir = vault_dir.join("entries");
+    if let Ok(meta) = fs::metadata(&entries_dir) {
+        let perm = meta.permissions().mode() & 0o777;
+        if perm & 0o077 != 0 {
+            issues.push(format!("entries/ has mode {:o} (expected 0700)", perm));
+        }
+    }
+    let identity_path = vault_dir.join("identity.age");
+    if let Ok(meta) = fs::metadata(&identity_path) {
+        let perm = meta.permissions().mode() & 0o777;
+        if perm & 0o177 != 0 {
+            issues.push(format!("identity.age has mode {:o} (expected 0600)", perm));
+        }
+    }
+    if issues.is_empty() {
         DoctorResult::new(
             "vault.permissions",
             "File permissions",
             Status::Ok,
-            "not applicable on Windows",
+            "entries/=0700, identity.age=0600",
             true,
         )
         .with_fix(fix_fn)
-    }
-    #[cfg(not(windows))]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut issues = Vec::new();
-        let entries_dir = vault_dir.join("entries");
-        if let Ok(meta) = fs::metadata(&entries_dir) {
-            let perm = meta.permissions().mode() & 0o777;
-            if perm & 0o077 != 0 {
-                issues.push(format!("entries/ has mode {:o} (expected 0700)", perm));
-            }
-        }
-        let identity_path = vault_dir.join("identity.age");
-        if let Ok(meta) = fs::metadata(&identity_path) {
-            let perm = meta.permissions().mode() & 0o777;
-            if perm & 0o177 != 0 {
-                issues.push(format!("identity.age has mode {:o} (expected 0600)", perm));
-            }
-        }
-        if issues.is_empty() {
-            DoctorResult::new(
-                "vault.permissions",
-                "File permissions",
-                Status::Ok,
-                "entries/=0700, identity.age=0600",
-                true,
-            )
-            .with_fix(fix_fn)
-        } else {
-            DoctorResult::new(
-                "vault.permissions",
-                "File permissions",
-                Status::Warn,
-                issues.join("; "),
-                true,
-            )
-            .with_hint(format!(
-                "run `chmod 0700 {} && chmod 0600 {}`",
-                entries_dir.display(),
-                identity_path.display()
-            ))
-            .with_fix(fix_fn)
-        }
+    } else {
+        DoctorResult::new(
+            "vault.permissions",
+            "File permissions",
+            Status::Warn,
+            issues.join("; "),
+            true,
+        )
+        .with_hint(format!(
+            "run `chmod 0700 {} && chmod 0600 {}`",
+            entries_dir.display(),
+            identity_path.display()
+        ))
+        .with_fix(fix_fn)
     }
 }
 
@@ -2678,7 +2648,6 @@ fn touch_id_available() -> bool {
 #[cfg(any(
     target_os = "macos",
     target_os = "linux",
-    target_os = "windows",
     target_os = "freebsd",
     target_os = "openbsd",
     target_os = "netbsd"
@@ -2718,7 +2687,6 @@ fn verify_os_keyring() -> Result<(), String> {
 #[cfg(not(any(
     target_os = "macos",
     target_os = "linux",
-    target_os = "windows",
     target_os = "freebsd",
     target_os = "openbsd",
     target_os = "netbsd"

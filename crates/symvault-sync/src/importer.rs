@@ -642,13 +642,6 @@ fn validate_csv_quotes(bytes: &[u8]) -> Result<(), ImportError> {
 /// ` (os error N)` suffix.
 #[must_use]
 pub fn go_io_reason(error: &std::io::Error) -> String {
-    #[cfg(windows)]
-    match error.raw_os_error() {
-        Some(2) => return "The system cannot find the file specified.".to_owned(),
-        Some(3) => return "The system cannot find the path specified.".to_owned(),
-        Some(5) => return "Access is denied.".to_owned(),
-        _ => {}
-    }
     use std::io::ErrorKind;
     match error.kind() {
         ErrorKind::NotFound => "no such file or directory".to_owned(),

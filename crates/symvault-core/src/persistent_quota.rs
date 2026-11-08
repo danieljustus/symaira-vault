@@ -46,14 +46,7 @@ pub struct NativeQuotaPlatform;
 fn native_lock(file: &File) -> Result<(), QuotaError> {
     file.lock().map_err(|e| QuotaError::Lock(e.to_string()))
 }
-#[cfg(windows)]
-fn native_lock(file: &File) -> Result<(), QuotaError> {
-    // std's Windows backend calls LockFileEx with an exclusive whole-file
-    // range; keep this branch explicit so cross-target compilation covers the
-    // production Windows locking path rather than a Unix fallback.
-    file.lock().map_err(|e| QuotaError::Lock(e.to_string()))
-}
-#[cfg(not(any(unix, windows)))]
+#[cfg(not(unix))]
 fn native_lock(_: &File) -> Result<(), QuotaError> {
     Err(QuotaError::Lock("native file locking unavailable".into()))
 }
@@ -62,11 +55,7 @@ fn native_lock(_: &File) -> Result<(), QuotaError> {
 fn native_unlock(file: &File) -> Result<(), QuotaError> {
     file.unlock().map_err(|e| QuotaError::Lock(e.to_string()))
 }
-#[cfg(windows)]
-fn native_unlock(file: &File) -> Result<(), QuotaError> {
-    file.unlock().map_err(|e| QuotaError::Lock(e.to_string()))
-}
-#[cfg(not(any(unix, windows)))]
+#[cfg(not(unix))]
 fn native_unlock(_: &File) -> Result<(), QuotaError> {
     Err(QuotaError::Lock("native file locking unavailable".into()))
 }

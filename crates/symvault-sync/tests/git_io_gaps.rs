@@ -351,7 +351,7 @@ fn auth_server(status: &str) -> (u16, thread::JoinHandle<()>) {
     let port = listener.local_addr().unwrap().port();
     let status = status.to_owned();
     let handle = thread::spawn(move || {
-        // Windows runners can take several seconds to spawn the Git processes
+        // Slow runners can take several seconds to spawn the Git processes
         // that reach this listener; the loop still exits on the first request.
         let deadline = Instant::now() + Duration::from_secs(30);
         listener.set_nonblocking(true).expect("set nonblocking");
@@ -553,7 +553,7 @@ fn pull_classifies_offline_under_a_german_locale() {
 }
 
 // Compile a dependency-free native helper once per test process. This keeps
-// frozen Rust replay independent of Go and avoids shell emulation on Windows.
+// frozen Rust replay independent of Go.
 fn native_git_helper() -> &'static Path {
     static ROOT: std::sync::OnceLock<(TempDir, PathBuf)> = std::sync::OnceLock::new();
     let root = ROOT.get_or_init(|| {
@@ -566,11 +566,7 @@ fn native_git_helper() -> &'static Path {
             include_str!("fixtures/git_transport_helper.rs.txt"),
         )
         .expect("write fixed helper source");
-        let helper = directory.join(if cfg!(windows) {
-            "git-helper.exe"
-        } else {
-            "git-helper"
-        });
+        let helper = directory.join("git-helper");
         let output = Command::new("rustc")
             .args(["--edition=2024", "--crate-name", "git_fixture_helper"])
             .arg(&source)
@@ -604,21 +600,6 @@ fn native_ssh_command(mode: &str, marker: &Path) -> String {
 fn fixture_child_alive(pid: &str) -> bool {
     let parsed: u32 = pid.parse().expect("fixture PID is decimal");
     assert!(parsed > 1, "invalid synthetic PID");
-    if cfg!(windows) {
-        let output = Command::new("tasklist")
-            .args(["/fi", &format!("PID eq {parsed}"), "/fo", "csv", "/nh"])
-            .output()
-            .expect("query actual native process");
-        assert!(output.status.success(), "native process query failed");
-        let mut reader = csv::ReaderBuilder::new()
-            .has_headers(false)
-            .flexible(true)
-            .from_reader(output.stdout.as_slice());
-        return reader.byte_records().any(|row| {
-            let row = row.expect("native tasklist CSV");
-            row.get(1).is_some_and(|value| value == pid.as_bytes())
-        });
-    }
     Command::new("kill")
         .args(["-0", pid])
         .status()
@@ -657,11 +638,7 @@ fn pull_preserves_configured_askpass_and_suppresses_terminal_prompt() {
     let (root, repo, _remote) = pair();
     let (port, server) = auth_server("401 Unauthorized");
     let marker = root.path().join("askpass-called");
-    let helper = root.path().join(if cfg!(windows) {
-        "askpass-helper.exe"
-    } else {
-        "askpass-helper"
-    });
+    let helper = root.path().join("askpass-helper");
     fs::copy(native_git_helper(), &helper).expect("copy native askpass helper");
     let remote = format!("http://127.0.0.1:{port}/repo.git");
     git(repo.root(), &["remote", "set-url", "origin", &remote]);
@@ -759,13 +736,7 @@ fn push_timeout_replays_go_descendant_cleanup_projection() {
         }
     });
     if !gone {
-        let _ = if cfg!(windows) {
-            Command::new("taskkill")
-                .args(["/PID", &pid, "/T", "/F"])
-                .status()
-        } else {
-            Command::new("kill").args(["-KILL", &pid]).status()
-        };
+        let _ = Command::new("kill").args(["-KILL", &pid]).status();
     }
     assert!(gone, "timed-out SSH descendant {pid} is still alive");
 }

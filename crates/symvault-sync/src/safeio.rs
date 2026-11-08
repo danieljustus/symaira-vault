@@ -216,26 +216,7 @@ pub fn open_append(path: &Path) -> Result<File, SafeIoError> {
     }
 }
 
-#[cfg(windows)]
-fn open_append_checked(path: &Path) -> Result<File, SafeIoError> {
-    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
-    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
-
-    let file = OpenOptions::new()
-        .read(true)
-        .append(true)
-        .create(true)
-        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
-        .open(path)?;
-    let metadata = file.metadata()?;
-    if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 || !metadata.is_file() {
-        return Err(SafeIoError::NotRegularFile);
-    }
-    Ok(file)
-}
-
-#[cfg(all(not(unix), not(windows)))]
+#[cfg(not(unix))]
 fn open_append_checked(path: &Path) -> Result<File, SafeIoError> {
     Ok(append_read_options().open(path)?)
 }
@@ -303,7 +284,7 @@ pub fn create_dir_all(path: &Path) -> Result<(), SafeIoError> {
     Ok(dir_builder().create(path)?)
 }
 
-#[cfg(all(not(unix), not(windows)))]
+#[cfg(not(unix))]
 fn append_read_options() -> fs::OpenOptions {
     let mut options = fs::OpenOptions::new();
     options.read(true).append(true).create(true);
@@ -399,25 +380,5 @@ mod tests {
                 .success()
         );
         assert!(open_append(&fifo).is_err());
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn open_append_refuses_a_reparse_point_swapped_before_open() {
-        use std::os::windows::fs::symlink_file;
-
-        let directory = tempfile::tempdir().expect("temp directory");
-        let target = directory.path().join("target");
-        let link = directory.path().join("recipients-link");
-        fs::write(&target, b"sentinel\n").expect("target");
-        symlink_file(&target, &link).expect("create symlink fixture");
-
-        // Exercise the post-open guard directly: this represents a reparse
-        // point swapped in after open_append's initial path check.
-        assert!(open_append_checked(&link).is_err());
-        assert_eq!(
-            fs::read(&target).expect("target remains unchanged"),
-            b"sentinel\n"
-        );
     }
 }

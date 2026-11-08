@@ -218,38 +218,9 @@ fn publish(parent: &fs::File, target: &Path, temporary: &str) -> io::Result<()> 
     rustix::fs::renameat(parent, temporary, parent, target.file_name().unwrap()).map_err(Into::into)
 }
 
-#[cfg(windows)]
-fn publish(_parent: &fs::File, target: &Path, temporary: &str) -> io::Result<()> {
-    rename_with_retry(target, temporary, |source, destination| {
-        fs::rename(source, destination)
-    })
-}
-
-#[cfg(not(any(unix, windows)))]
+#[cfg(not(unix))]
 fn publish(_parent: &fs::File, target: &Path, temporary: &str) -> io::Result<()> {
     fs::rename(target.with_file_name(temporary), target)
-}
-
-#[cfg(any(windows, test))]
-fn rename_with_retry(
-    target: &Path,
-    temporary: &str,
-    mut rename: impl FnMut(&Path, &Path) -> io::Result<()>,
-) -> io::Result<()> {
-    use std::time::Duration;
-
-    let temporary_path = target.with_file_name(temporary);
-    let mut last_error = None;
-    for attempt in 0..10 {
-        match rename(&temporary_path, target) {
-            Ok(()) => return Ok(()),
-            Err(error) => last_error = Some(error),
-        }
-        if attempt < 9 {
-            std::thread::sleep(Duration::from_millis(10));
-        }
-    }
-    Err(last_error.expect("at least one rename attempt"))
 }
 
 #[cfg(unix)]
@@ -278,7 +249,7 @@ fn sync_parent(parent: &fs::File) -> io::Result<()> {
 
 #[cfg(not(unix))]
 fn sync_parent(_parent: &fs::File) -> io::Result<()> {
-    // Directory durability on Windows is an explicit unverified contract.
+    // Directory durability on non-unix targets is an explicit unverified contract.
     Ok(())
 }
 
@@ -476,34 +447,6 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(fs::read(&target).unwrap(), b"new");
         assert!(!dir.path().join("owned").exists());
-    }
-
-    #[test]
-    fn windows_rename_retries_a_transient_failure() {
-        use std::cell::Cell;
-
-        let dir = tempdir();
-        let target = dir.path().join("entry.age");
-        let temporary = dir.path().join("temporary");
-        fs::write(&target, b"old").unwrap();
-        fs::write(&temporary, b"new").unwrap();
-        let attempts = Cell::new(0);
-        rename_with_retry(&target, "temporary", |source, destination| {
-            let attempt = attempts.get();
-            attempts.set(attempt + 1);
-            if attempt == 0 {
-                return Err(io::Error::new(
-                    io::ErrorKind::PermissionDenied,
-                    "transient sharing violation",
-                ));
-            }
-            fs::rename(source, destination)
-        })
-        .unwrap();
-
-        assert_eq!(attempts.get(), 2);
-        assert_eq!(fs::read(&target).unwrap(), b"new");
-        assert!(!temporary.exists());
     }
 
     #[test]

@@ -1742,8 +1742,7 @@ fn detect_from_path(abs_path: &str) -> Option<&'static str> {
 }
 
 fn home_dir() -> Option<String> {
-    let name = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
-    std::env::var(name).ok().filter(|value| !value.is_empty())
+    std::env::var("HOME").ok().filter(|value| !value.is_empty())
 }
 
 /// Layer 3: Homebrew Cellar markers and dpkg receipt files.
@@ -1770,19 +1769,12 @@ fn detect_from_go_cache(abs_path: &str) -> Option<&'static str> {
     None
 }
 
-/// Layer 5: Windows never claims a writability fallback; elsewhere a
-/// user-writable parent directory means direct download.
-#[cfg(windows)]
-fn detect_from_writability(_abs_path: &str) -> &'static str {
-    BUILD_FROM_SOURCE
-}
-
+/// Layer 5: a user-writable parent directory means direct download.
 #[cfg(unix)]
 fn detect_from_writability(abs_path: &str) -> &'static str {
     use std::os::unix::fs::MetadataExt;
-    // Platform-gated: `Path` is only used on unix (windows takes &str),
-    // so the import lives inside this cfg to keep -D unused-imports green
-    // on every target.
+    // Platform-gated: `Path` is only used by this unix-only function, so the
+    // import lives inside this cfg to keep -D unused-imports green.
     use std::path::Path;
 
     let dir = Path::new(abs_path)
@@ -1825,15 +1817,6 @@ mod tests {
         assert_eq!(
             detect_from_writability(&probe.to_string_lossy()),
             DIRECT_DOWNLOAD
-        );
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn writability_is_build_from_source_on_windows() {
-        assert_eq!(
-            detect_from_writability("C:\\probe\\symvault"),
-            BUILD_FROM_SOURCE
         );
     }
 }

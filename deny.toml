@@ -9,8 +9,6 @@ targets = [
   "aarch64-unknown-linux-musl",
   "x86_64-apple-darwin",
   "aarch64-apple-darwin",
-  "x86_64-pc-windows-msvc",
-  "aarch64-pc-windows-msvc",
   "x86_64-unknown-freebsd",
   "aarch64-unknown-freebsd",
   "aarch64-apple-ios",
@@ -41,19 +39,6 @@ allow = [
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
-
-# ADR 0029: pinned arboard Windows text-clipboard implementation. Boost 1.0
-# is permissive; these explicit package/version exceptions preserve the general
-# license allowlist and require review when either implementation changes.
-[[licenses.exceptions]]
-name = "clipboard-win"
-version = "=5.4.1"
-allow = ["BSL-1.0"]
-
-[[licenses.exceptions]]
-name = "error-code"
-version = "=3.4.0"
-allow = ["BSL-1.0"]
 
 [sources]
 unknown-registry = "deny"

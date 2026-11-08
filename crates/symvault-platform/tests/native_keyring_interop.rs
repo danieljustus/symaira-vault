@@ -1,7 +1,6 @@
 #![cfg(any(
     target_os = "macos",
     target_os = "linux",
-    target_os = "windows",
     target_os = "freebsd",
     target_os = "openbsd",
     target_os = "netbsd"

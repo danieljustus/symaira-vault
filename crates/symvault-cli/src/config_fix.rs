@@ -482,11 +482,7 @@ fn signal_name(signal: i32) -> String {
 }
 
 fn home_dir() -> String {
-    #[cfg(windows)]
-    let key = "USERPROFILE";
-    #[cfg(not(windows))]
-    let key = "HOME";
-    env::var(key).unwrap_or_default()
+    env::var("HOME").unwrap_or_default()
 }
 
 // --- colour: Go's cliout.Hintf / cliout.Errorf on stderr ------------------

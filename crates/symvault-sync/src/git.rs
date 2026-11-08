@@ -9,7 +9,6 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
     time::Duration,
 };
-#[cfg(not(windows))]
 use std::{thread, time::Instant};
 use thiserror::Error;
 
@@ -42,7 +41,6 @@ pub enum GitError {
 
 /// Map a failed `git` spawn to [`GitError`]. `NotFound` means the executable is
 /// missing unless the requested working directory is the missing path.
-#[cfg_attr(windows, allow(dead_code))]
 fn spawn_error(program: &str, cwd: Option<&Path>, error: io::Error) -> GitError {
     let cwd_missing = cwd.is_some_and(|dir| !dir.exists());
     if program == "git" && error.kind() == io::ErrorKind::NotFound && !cwd_missing {
@@ -53,22 +51,6 @@ fn spawn_error(program: &str, cwd: Option<&Path>, error: io::Error) -> GitError 
 }
 
 const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
-
-fn retry_init_operation<T>(
-    windows: bool,
-    mut operation: impl FnMut() -> Result<T, GitError>,
-) -> Result<T, GitError> {
-    match operation() {
-        Err(GitError::Io(error)) if windows && error.raw_os_error() == Some(5) => {
-            // Retry this idempotent init step, not the entire constructor: a
-            // previous step may already have created .git while configuration
-            // still needs to run. Keep persistent denials and other failures.
-            std::thread::sleep(Duration::from_millis(100));
-            operation()
-        }
-        result => result,
-    }
-}
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CommitOptions {
@@ -113,14 +95,13 @@ pub struct GitRepository {
 impl GitRepository {
     pub fn init(root: impl AsRef<Path>) -> Result<Self, GitError> {
         let root = root.as_ref().to_path_buf();
-        retry_init_operation(cfg!(windows), || {
-            fs::create_dir_all(&root).map_err(GitError::Io)
-        })
-        .inspect_err(|error| {
-            if let GitError::Io(error) = error {
-                report_process_io_error("init create directory", error);
-            }
-        })?;
+        fs::create_dir_all(&root)
+            .map_err(GitError::Io)
+            .inspect_err(|error| {
+                if let GitError::Io(error) = error {
+                    report_process_io_error("init create directory", error);
+                }
+            })?;
         if !root.is_dir() {
             return Err(GitError::InvalidPath(root));
         }
@@ -141,13 +122,11 @@ impl GitRepository {
                     ["config", "user.email", "symvault@example.com"].as_slice(),
                 ),
             ] {
-                retry_init_operation(cfg!(windows), || repo.command(args)).inspect_err(
-                    |error| {
-                        if let GitError::Io(error) = error {
-                            report_process_io_error(operation, error);
-                        }
-                    },
-                )?;
+                repo.command(args).inspect_err(|error| {
+                    if let GitError::Io(error) = error {
+                        report_process_io_error(operation, error);
+                    }
+                })?;
             }
         }
         symvault_store::data_safety::exclude_marker_from_git(&repo.root);
@@ -1093,66 +1072,51 @@ fn run_process_with_timeout(
         command.process_group(0);
     }
 
-    #[cfg(windows)]
-    {
-        windows_process::run(
-            command,
-            stdout_path,
-            stderr_path,
-            args.first().copied().unwrap_or("command"),
-            timeout,
-        )
-    }
-
-    #[cfg(not(windows))]
-    {
-        let mut child = match command.spawn() {
-            Ok(child) => child,
-            Err(error) => {
-                let _ = fs::remove_file(&stdout_path);
-                let _ = fs::remove_file(&stderr_path);
-                return Err(spawn_error(program, cwd, error));
-            }
-        };
-        let deadline = Instant::now() + timeout;
-        let timed_out = loop {
-            match child.try_wait() {
-                Ok(Some(_)) => break false,
-                Ok(None) if Instant::now() >= deadline => break true,
-                Ok(None) => thread::sleep(Duration::from_millis(10)),
-                Err(error) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    let _ = fs::remove_file(&stdout_path);
-                    let _ = fs::remove_file(&stderr_path);
-                    return Err(GitError::Io(error));
-                }
-            }
-        };
-
-        if timed_out {
-            terminate_process_group(&mut child);
-            let _ = child.wait();
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => {
             let _ = fs::remove_file(&stdout_path);
             let _ = fs::remove_file(&stderr_path);
-            let operation = args.first().copied().unwrap_or("command").to_owned();
-            return Err(GitError::Timeout { operation, timeout });
+            return Err(spawn_error(program, cwd, error));
         }
+    };
+    let deadline = Instant::now() + timeout;
+    let timed_out = loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break false,
+            Ok(None) if Instant::now() >= deadline => break true,
+            Ok(None) => thread::sleep(Duration::from_millis(10)),
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = fs::remove_file(&stdout_path);
+                let _ = fs::remove_file(&stderr_path);
+                return Err(GitError::Io(error));
+            }
+        }
+    };
 
-        let status = child.wait()?;
-        let stdout = read_and_remove(&stdout_path)?;
-        let stderr = read_and_remove(&stderr_path)?;
-        Ok(Output {
-            status,
-            stdout,
-            stderr,
-        })
+    if timed_out {
+        terminate_process_group(&mut child);
+        let _ = child.wait();
+        let _ = fs::remove_file(&stdout_path);
+        let _ = fs::remove_file(&stderr_path);
+        let operation = args.first().copied().unwrap_or("command").to_owned();
+        return Err(GitError::Timeout { operation, timeout });
     }
+
+    let status = child.wait()?;
+    let stdout = read_and_remove(&stdout_path)?;
+    let stderr = read_and_remove(&stderr_path)?;
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
 }
 
 fn temporary_output_file(label: &str) -> Result<(PathBuf, std::fs::File), io::Error> {
     // Do not recycle names while another command still holds a deleted file.
-    // Legacy Windows deletion can leave names pending with AccessDenied.
     static NEXT_OUTPUT_ID: AtomicU64 = AtomicU64::new(0);
     let base = std::env::temp_dir();
     for _ in 0..100 {
@@ -1215,241 +1179,6 @@ fn terminate_process_group(child: &mut std::process::Child) {
         .args(["-KILL", "--", &group])
         .output();
     let _ = child.kill();
-}
-
-#[cfg(windows)]
-#[allow(unsafe_code)]
-mod windows_process {
-    use super::{GitError, read_and_remove, report_process_io_error};
-    use std::{
-        fs, io,
-        os::windows::{io::AsRawHandle, process::CommandExt},
-        process::{Command, Output},
-        thread,
-        time::{Duration, Instant},
-    };
-
-    use windows_sys::Win32::{
-        Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE},
-        System::{
-            Diagnostics::ToolHelp::{
-                CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First,
-                Thread32Next,
-            },
-            JobObjects::{
-                AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-                JOBOBJECT_BASIC_LIMIT_INFORMATION, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-                JobObjectExtendedLimitInformation, SetInformationJobObject, TerminateJobObject,
-            },
-            Threading::{CREATE_SUSPENDED, OpenThread, ResumeThread, THREAD_SUSPEND_RESUME},
-        },
-    };
-
-    struct Job(HANDLE);
-
-    impl Job {
-        fn new() -> io::Result<Self> {
-            let handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
-            if handle.is_null() {
-                let error = io::Error::last_os_error();
-                report_process_io_error("CreateJobObjectW", &error);
-                return Err(error);
-            }
-
-            let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
-                BasicLimitInformation: JOBOBJECT_BASIC_LIMIT_INFORMATION {
-                    LimitFlags: JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-                    ..Default::default()
-                },
-                ..Default::default()
-            };
-            let configured = unsafe {
-                SetInformationJobObject(
-                    handle,
-                    JobObjectExtendedLimitInformation,
-                    (&mut limits as *mut JOBOBJECT_EXTENDED_LIMIT_INFORMATION)
-                        .cast::<core::ffi::c_void>(),
-                    std::mem::size_of_val(&limits) as u32,
-                )
-            };
-            if configured == 0 {
-                let error = io::Error::last_os_error();
-                report_process_io_error("SetInformationJobObject", &error);
-                unsafe { CloseHandle(handle) };
-                return Err(error);
-            }
-            Ok(Self(handle))
-        }
-
-        fn assign(&self, process: HANDLE) -> io::Result<()> {
-            if unsafe { AssignProcessToJobObject(self.0, process) } == 0 {
-                Err(io::Error::last_os_error())
-            } else {
-                Ok(())
-            }
-        }
-
-        fn terminate(&self) -> io::Result<()> {
-            if unsafe { TerminateJobObject(self.0, 1) } == 0 {
-                Err(io::Error::last_os_error())
-            } else {
-                Ok(())
-            }
-        }
-    }
-
-    impl Drop for Job {
-        fn drop(&mut self) {
-            unsafe { CloseHandle(self.0) };
-        }
-    }
-
-    pub(super) fn run(
-        mut command: Command,
-        stdout_path: std::path::PathBuf,
-        stderr_path: std::path::PathBuf,
-        operation: &str,
-        timeout: Duration,
-    ) -> Result<Output, GitError> {
-        command.creation_flags(CREATE_SUSPENDED);
-        let job = match Job::new()
-            .inspect_err(|error| report_process_io_error("create/configure job", error))
-        {
-            Ok(job) => job,
-            Err(error) => {
-                let _ = fs::remove_file(stdout_path);
-                let _ = fs::remove_file(stderr_path);
-                return Err(GitError::Io(error));
-            }
-        };
-        let mut child = match command.spawn() {
-            Ok(child) => child,
-            Err(error) => {
-                report_process_io_error("spawn suspended child", &error);
-                let _ = fs::remove_file(stdout_path);
-                let _ = fs::remove_file(stderr_path);
-                return Err(GitError::Io(error));
-            }
-        };
-
-        if let Err(error) = job.assign(child.as_raw_handle()) {
-            report_process_io_error("assign job", &error);
-            abort_child(&job, &mut child);
-            let _ = fs::remove_file(stdout_path);
-            let _ = fs::remove_file(stderr_path);
-            return Err(GitError::Io(error));
-        }
-        if let Err(error) = resume_primary_thread(child.id()) {
-            report_process_io_error("resume primary thread", &error);
-            abort_child(&job, &mut child);
-            let _ = fs::remove_file(stdout_path);
-            let _ = fs::remove_file(stderr_path);
-            return Err(GitError::Io(error));
-        }
-
-        let deadline = Instant::now() + timeout;
-        let timed_out = loop {
-            match child.try_wait() {
-                Ok(Some(_)) => break false,
-                Ok(None) if Instant::now() >= deadline => break true,
-                Ok(None) => thread::sleep(Duration::from_millis(10)),
-                Err(error) => {
-                    abort_child(&job, &mut child);
-                    report_process_io_error("poll child", &error);
-                    let _ = fs::remove_file(stdout_path);
-                    let _ = fs::remove_file(stderr_path);
-                    return Err(GitError::Io(error));
-                }
-            }
-        };
-
-        if timed_out {
-            abort_child(&job, &mut child);
-            let _ = fs::remove_file(stdout_path);
-            let _ = fs::remove_file(stderr_path);
-            return Err(GitError::Timeout {
-                operation: operation.to_owned(),
-                timeout,
-            });
-        }
-
-        let status = child
-            .wait()
-            .inspect_err(|error| report_process_io_error("wait child", error))?;
-        drop(job);
-        let stdout = read_and_remove(&stdout_path)?;
-        let stderr = read_and_remove(&stderr_path)?;
-        Ok(Output {
-            status,
-            stdout,
-            stderr,
-        })
-    }
-
-    fn abort_child(job: &Job, child: &mut std::process::Child) {
-        let _ = job.terminate();
-        // Assignment can fail while CREATE_SUSPENDED is still in effect, so
-        // the child must be killed explicitly before waiting for it.
-        let _ = child.kill();
-        let _ = child.wait();
-    }
-
-    fn resume_primary_thread(pid: u32) -> io::Result<()> {
-        let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
-        if snapshot == INVALID_HANDLE_VALUE {
-            let error = io::Error::last_os_error();
-            report_process_io_error("CreateToolhelp32Snapshot", &error);
-            return Err(error);
-        }
-
-        let mut entry = THREADENTRY32 {
-            dwSize: std::mem::size_of::<THREADENTRY32>() as u32,
-            ..Default::default()
-        };
-        let first = unsafe { Thread32First(snapshot, &mut entry) };
-        if first == 0 {
-            let error = io::Error::last_os_error();
-            report_process_io_error("Thread32First", &error);
-            unsafe { CloseHandle(snapshot) };
-            return Err(error);
-        }
-
-        loop {
-            if entry.th32OwnerProcessID == pid {
-                let thread = unsafe { OpenThread(THREAD_SUSPEND_RESUME, 0, entry.th32ThreadID) };
-                if thread.is_null() {
-                    let error = io::Error::last_os_error();
-                    report_process_io_error("OpenThread", &error);
-                    unsafe { CloseHandle(snapshot) };
-                    return Err(error);
-                }
-                let previous = unsafe { ResumeThread(thread) };
-                let resume_error = if previous == u32::MAX {
-                    let error = io::Error::last_os_error();
-                    report_process_io_error("ResumeThread", &error);
-                    Some(error)
-                } else if previous != 1 {
-                    Some(io::Error::other(format!(
-                        "primary process thread had suspend count {previous}, want 1"
-                    )))
-                } else {
-                    None
-                };
-                unsafe {
-                    CloseHandle(thread);
-                    CloseHandle(snapshot);
-                }
-                return resume_error.map_or(Ok(()), Err);
-            }
-
-            if unsafe { Thread32Next(snapshot, &mut entry) } == 0 {
-                let error = io::Error::last_os_error();
-                report_process_io_error("Thread32Next", &error);
-                unsafe { CloseHandle(snapshot) };
-                return Err(error);
-            }
-        }
-    }
 }
 
 fn validate_name(name: &str) -> Result<(), GitError> {
@@ -1515,102 +1244,10 @@ mod tests {
     }
 
     #[test]
-    fn init_retry_finishes_configuration_after_git_directory_exists() {
-        let root = tempfile::tempdir().expect("isolated repository");
-        let repo = GitRepository::init(root.path()).expect("initialize real Git repository");
-        repo.command(&["config", "--unset", "user.email"])
-            .expect("remove final configuration step");
-        assert!(root.path().join(".git").is_dir());
-        let mut attempts = 0;
-        retry_init_operation(true, || {
-            attempts += 1;
-            if attempts == 1 {
-                return Err(GitError::Io(io::Error::from_raw_os_error(5)));
-            }
-            repo.command(&["config", "user.email", "symvault@example.com"])
-        })
-        .expect("recover one Windows init operation");
-        assert_eq!(attempts, 2);
-        let output = repo
-            .command(&["config", "user.email"])
-            .expect("read real config");
-        assert_eq!(
-            String::from_utf8(output.stdout).unwrap().trim(),
-            "symvault@example.com"
-        );
-    }
-
-    #[test]
-    fn init_retry_keeps_persistent_denials_and_does_not_retry_other_failures() {
-        let mut attempts = 0;
-        let error: GitError = retry_init_operation::<()>(true, || {
-            attempts += 1;
-            Err(GitError::Io(io::Error::from_raw_os_error(5)))
-        })
-        .expect_err("persistent denial must fail");
-        assert_eq!(attempts, 2);
-        assert!(matches!(error, GitError::Io(error) if error.raw_os_error() == Some(5)));
-
-        for (windows, failure) in [
-            (false, GitError::Io(io::Error::from_raw_os_error(5))),
-            (true, GitError::Io(io::Error::from_raw_os_error(32))),
-            (
-                true,
-                GitError::Io(io::Error::new(
-                    io::ErrorKind::PermissionDenied,
-                    "no native code",
-                )),
-            ),
-            (
-                true,
-                GitError::Command {
-                    status: "5".into(),
-                    stderr: "denied".into(),
-                },
-            ),
-            (
-                true,
-                GitError::Timeout {
-                    operation: "init".into(),
-                    timeout: GIT_COMMAND_TIMEOUT,
-                },
-            ),
-        ] {
-            let mut failure = Some(failure);
-            let mut attempts = 0;
-            let result = retry_init_operation::<()>(windows, || {
-                attempts += 1;
-                Err(failure.take().expect("non-retryable failure was retried"))
-            });
-            assert!(result.is_err());
-            assert_eq!(attempts, 1);
-        }
-    }
-
-    #[test]
     fn temporary_output_names_are_not_reused_while_deleted_handles_are_open() {
         let label = "delete-pending-regression";
         let (first_path, first_file) = temporary_output_file(label).unwrap();
         fs::remove_file(&first_path).unwrap();
-        // Windows may use legacy delete-pending or immediate POSIX unlink.
-        // Neither mode permits the allocator to recycle a still-owned name.
-        #[cfg(windows)]
-        {
-            match OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&first_path)
-            {
-                Ok(recreated) => {
-                    drop(recreated);
-                    fs::remove_file(&first_path).expect("remove own POSIX-unlinked control");
-                }
-                Err(error) => {
-                    assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
-                    assert_eq!(error.raw_os_error(), Some(5));
-                }
-            }
-        }
         let second = temporary_output_file(label);
         drop(first_file);
         let (second_path, second_file) = second.expect("allocate a fresh output name");
@@ -1812,13 +1449,7 @@ mod tests {
         let local = tempfile::tempdir().expect("local repository");
         let bare = tempfile::tempdir().expect("bare repository");
         let remote = tempfile::tempdir().expect("remote checkout");
-        // Windows rejects LF in filenames. Keep the same Unicode and space
-        // coverage on every platform, with the stronger newline case where
-        // the filesystem accepts it.
-        #[cfg(unix)]
         let file_name = "über login\n.age";
-        #[cfg(windows)]
-        let file_name = "über login.age";
         let relative_name = format!("entries/{file_name}");
         let path = local.path().join(&relative_name);
         let remote_path = remote.path().join(&relative_name);
@@ -2032,151 +1663,5 @@ mod tests {
             }
         });
         assert!(descendant_gone, "timed-out descendant {pid} is still alive");
-    }
-
-    #[cfg(windows)]
-    #[allow(unsafe_code)]
-    mod windows_process_tests {
-        use super::*;
-        use std::{
-            fs,
-            process::Command,
-            thread,
-            time::{Duration, Instant},
-        };
-
-        use windows_sys::Win32::{
-            Foundation::{CloseHandle, WAIT_OBJECT_0, WAIT_TIMEOUT},
-            System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject},
-        };
-
-        const HELPER_ENV: &str = "SYMVAULT_RUST_GIT_PROCESS_TREE_HELPER";
-        const HELPER_TEST: &str = "git::tests::windows_process_tests::descendant_helper";
-
-        #[test]
-        fn timeout_kills_descendants_and_reaps_inherited_output_handles() {
-            let directory = tempfile::tempdir().expect("temporary directory");
-            let launcher = directory.path().join("launch.cmd");
-            let executable = std::env::current_exe().expect("test executable");
-            let launcher_body = format!(
-                "@echo off\r\nset \"{HELPER_ENV}=child\"\r\ncall \"{}\" --exact {HELPER_TEST} --nocapture\r\n",
-                executable.display()
-            );
-            fs::write(&launcher, launcher_body).expect("write helper launcher");
-            let working_directory = directory.path().to_path_buf();
-            let runner = thread::spawn(move || {
-                run_process_with_timeout(
-                    "cmd.exe",
-                    &["/D", "/C", "call launch.cmd"],
-                    Some(&working_directory),
-                    Duration::from_secs(5),
-                )
-            });
-            let ready_deadline = Instant::now() + Duration::from_secs(3);
-            while !directory.path().join("ready").is_file() && Instant::now() < ready_deadline {
-                thread::sleep(Duration::from_millis(25));
-            }
-            let error = runner
-                .join()
-                .expect("runner thread")
-                .expect_err("helper must exceed the deadline");
-            assert!(matches!(error, GitError::Timeout { .. }));
-
-            let child_pid = read_pid(directory.path().join("child.pid"));
-            let grandchild_pid = read_pid(directory.path().join("grandchild.pid"));
-            assert!(
-                wait_process_gone(child_pid),
-                "child {child_pid} is still alive"
-            );
-            assert!(
-                wait_process_gone(grandchild_pid),
-                "grandchild {grandchild_pid} is still alive"
-            );
-            assert!(directory.path().join("ready").is_file());
-        }
-
-        #[test]
-        fn already_gone_process_is_reaped_without_error() {
-            let output = run_process_with_timeout(
-                "cmd.exe",
-                &["/D", "/C", "exit", "0"],
-                None,
-                // Setup bound, not the behavior under test: generous so load and coverage
-                // instrumentation cannot win the race (#1564-#1567).
-                Duration::from_secs(30),
-            )
-            .expect("already-gone process should complete");
-            assert!(output.status.success());
-        }
-
-        #[test]
-        fn descendant_helper() {
-            let Ok(mode) = std::env::var(HELPER_ENV) else {
-                return;
-            };
-            let child_pid = std::env::current_dir()
-                .expect("helper working directory")
-                .join("child.pid");
-            let grandchild_pid = child_pid.with_file_name("grandchild.pid");
-            let ready = child_pid.with_file_name("ready");
-
-            match mode.as_str() {
-                "child" => {
-                    fs::write(&child_pid, std::process::id().to_string()).expect("write child pid");
-                    let executable = std::env::current_exe().expect("test executable");
-                    Command::new(executable)
-                        .args(["--exact", HELPER_TEST, "--nocapture"])
-                        .env(HELPER_ENV, "grandchild")
-                        .spawn()
-                        .expect("spawn grandchild helper")
-                        .wait()
-                        .expect("wait for grandchild helper");
-                }
-                "grandchild" => {
-                    fs::write(&grandchild_pid, std::process::id().to_string())
-                        .expect("write grandchild pid");
-                    fs::write(&ready, b"ready\n").expect("write helper readiness");
-                }
-                _ => return,
-            }
-
-            loop {
-                thread::sleep(Duration::from_secs(30));
-            }
-        }
-
-        fn read_pid(path: std::path::PathBuf) -> u32 {
-            let deadline = Instant::now() + Duration::from_secs(30);
-            loop {
-                if let Ok(value) = fs::read_to_string(&path) {
-                    return value.trim().parse().expect("valid helper pid");
-                }
-                assert!(
-                    Instant::now() < deadline,
-                    "helper pid file missing: {}",
-                    path.display()
-                );
-                thread::sleep(Duration::from_millis(25));
-            }
-        }
-
-        fn wait_process_gone(pid: u32) -> bool {
-            let deadline = Instant::now() + Duration::from_secs(30);
-            loop {
-                let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, pid) };
-                if handle.is_null() {
-                    return true;
-                }
-                let state = unsafe { WaitForSingleObject(handle, 0) };
-                unsafe { CloseHandle(handle) };
-                if state == WAIT_OBJECT_0 {
-                    return true;
-                }
-                if state != WAIT_TIMEOUT || Instant::now() >= deadline {
-                    return false;
-                }
-                thread::sleep(Duration::from_millis(25));
-            }
-        }
     }
 }

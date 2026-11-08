@@ -137,16 +137,12 @@ impl Installer {
 /// The oracle's `os.UserHomeDir` error text, kept verbatim; the platform name in
 /// the message follows Go's implementation.
 fn home_dir_error_message() -> &'static str {
-    if cfg!(windows) {
-        "get home directory: %USERPROFILE% is not defined"
-    } else {
-        "get home directory: $HOME is not defined"
-    }
+    "get home directory: $HOME is not defined"
 }
 
-/// Mirrors Go's os.UserHomeDir: HOME on Unix, USERPROFILE on Windows.
+/// Mirrors Go's os.UserHomeDir: HOME on Unix.
 pub(crate) fn home_dir() -> Option<PathBuf> {
-    env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+    env::var_os("HOME")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
 }
@@ -738,13 +734,7 @@ mod tests {
 
     #[test]
     fn validation_rejects_injected_values() {
-        // Absolute paths look different per platform; `fixture_installer` keeps
-        // Unix-style values because the plist fixture compares bytes.
-        let (bin, vault) = if cfg!(windows) {
-            ("C:\\opt\\symvault\\symvault", "C:\\data\\vault")
-        } else {
-            ("/opt/symvault/bin/symvault", "/data/vault")
-        };
+        let (bin, vault) = ("/opt/symvault/bin/symvault", "/data/vault");
         let installer = Installer {
             binary_path: PathBuf::from(bin),
             vault_dir: PathBuf::from(vault),

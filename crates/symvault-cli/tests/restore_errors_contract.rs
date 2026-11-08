@@ -508,23 +508,3 @@ fn windows_expectation_is_derived_from_go_source_not_guessed() {
         "restore failed: create vault directory: mkdir $DEST: path is not a regular file"
     );
 }
-
-/// `ab:c` is an NTFS alternate-data-stream name: the Unix recording does not
-/// apply, so Rust's Windows behaviour is pinned here on its own terms (it
-/// refuses the member instead of creating a hidden stream) and is not claimed
-/// as Go parity (the exact OS text is host-defined and not pinned).
-#[cfg(windows)]
-#[test]
-fn colon_member_names_are_refused_on_windows() {
-    for name in ["unsafe-name/ab:c", "unsafe-dir-name/ab:c"] {
-        let case = corpus_case(name);
-        assert!(case.unix_only, "{name} must stay Unix-only");
-        let root = tempfile::tempdir().unwrap();
-        let archive = root.path().join("input.tar.gz");
-        let tar = case_tar(&case);
-        fs::write(&archive, wrapped(&case.wrap, &tar)).unwrap();
-        let dest = root.path().join("vault");
-        let error = backup_commands::restore(&dest, &archive).unwrap_err();
-        assert!(error.starts_with("restore failed: create "), "{error}");
-    }
-}

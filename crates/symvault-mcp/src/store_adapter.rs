@@ -42,19 +42,6 @@ pub type SharedAuditLogger = Arc<Mutex<symvault_store::audit::Logger>>;
 
 fn runtime_vault_dir(root: &Path) -> String {
     let directory = root.to_string_lossy();
-    // Windows canonicalization uses verbatim paths for I/O. Expose the ordinary
-    // drive/UNC spelling in runtime metadata, as Go does, without changing I/O.
-    #[cfg(windows)]
-    {
-        if let Some(rest) = directory.strip_prefix(r"\\?\UNC\") {
-            return format!(r"\\{rest}");
-        }
-        if let Some(rest) = directory.strip_prefix(r"\\?\")
-            && rest.as_bytes().get(1) == Some(&b':')
-        {
-            return rest.to_owned();
-        }
-    }
     directory.into_owned()
 }
 

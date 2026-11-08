@@ -483,17 +483,10 @@ pub fn load_agent_payment_policy(
 pub fn default_data_dir() -> PathBuf {
     let base = match std::env::var("XDG_DATA_HOME") {
         Ok(dir) if !dir.is_empty() => PathBuf::from(dir),
-        _ => {
-            let home = if cfg!(windows) {
-                std::env::var("USERPROFILE")
-            } else {
-                std::env::var("HOME")
-            };
-            match home {
-                Ok(home) if !home.is_empty() => PathBuf::from(home).join(".local").join("share"),
-                _ => PathBuf::new(),
-            }
-        }
+        _ => match std::env::var("HOME") {
+            Ok(home) if !home.is_empty() => PathBuf::from(home).join(".local").join("share"),
+            _ => PathBuf::new(),
+        },
     };
     base.join("symaira-vault")
 }

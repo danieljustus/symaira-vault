@@ -28,55 +28,10 @@ pub fn native_command_clipboard() -> Arc<dyn Clipboard> {
     }
 }
 
-/// The clipboard for the interactive TUI: the command clipboard on macOS and
-/// Linux (Go's TUI writes through atotto too), `arboard` on Windows.
+/// The clipboard for the interactive TUI: the command clipboard (Go's TUI
+/// writes through atotto too).
 pub fn native_text_clipboard() -> Arc<dyn Clipboard> {
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    {
-        native_command_clipboard()
-    }
-    #[cfg(target_os = "windows")]
-    {
-        match arboard::Clipboard::new() {
-            Ok(backend) => Arc::new(NativeTextClipboard(std::sync::Mutex::new(backend))),
-            Err(_) => Arc::new(symvault_core::platform::UnavailablePlatform),
-        }
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    {
-        native_command_clipboard()
-    }
-}
-
-#[cfg(target_os = "windows")]
-struct NativeTextClipboard(std::sync::Mutex<arboard::Clipboard>);
-
-#[cfg(target_os = "windows")]
-impl Clipboard for NativeTextClipboard {
-    fn set(&self, text: &[u8]) -> Result<(), symvault_core::platform::PlatformError> {
-        let text = std::str::from_utf8(text).map_err(|_| clipboard_error())?;
-        self.0
-            .lock()
-            .map_err(|_| clipboard_error())?
-            .set_text(text)
-            .map_err(|_| clipboard_error())
-    }
-
-    fn clear(&self) -> Result<(), symvault_core::platform::PlatformError> {
-        self.0
-            .lock()
-            .map_err(|_| clipboard_error())?
-            .clear()
-            .map_err(|_| clipboard_error())
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn clipboard_error() -> symvault_core::platform::PlatformError {
-    symvault_core::platform::PlatformError {
-        kind: symvault_core::platform::PlatformErrorKind::Failed,
-        message: "native text clipboard operation failed".into(),
-    }
+    native_command_clipboard()
 }
 
 /// One retained timer worker. Expiry continues while the caller's foreground

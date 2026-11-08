@@ -108,9 +108,7 @@ fn locked_secure_input_metadata_available() -> bool {
     if mode == "tty" {
         return false;
     }
-    let names: &[&str] = if cfg!(windows) {
-        &["powershell.exe"]
-    } else if cfg!(target_os = "macos") {
+    let names: &[&str] = if cfg!(target_os = "macos") {
         &["osascript"]
     } else {
         &["zenity", "kdialog"]

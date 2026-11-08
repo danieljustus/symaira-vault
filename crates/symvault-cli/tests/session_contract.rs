@@ -68,18 +68,10 @@ fn fixture() -> Fixture {
 }
 
 // The Go oracle includes angle brackets to exercise JSON HTML escaping.
-// Windows cannot create those filenames; retain ampersand and U+2028 there.
-// Apply this only to synthetic filesystem paths, never to other fixture output.
 fn fixture_path(root: &Path, relative: &str) -> PathBuf {
     relative
         .split('/')
-        .fold(root.to_path_buf(), |path, component| {
-            if cfg!(windows) {
-                path.join(component.replace(['<', '>'], ""))
-            } else {
-                path.join(component)
-            }
-        })
+        .fold(root.to_path_buf(), |path, component| path.join(component))
 }
 
 fn run_case(case: &Case) -> (std::process::Output, test_temp_root::TempRoot) {

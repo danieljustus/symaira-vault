@@ -923,28 +923,6 @@ pub(crate) fn warn_sink(message: &str) {
 /// (see [`fix`]) runs instead of reporting the failure, exactly as Go's
 /// `configValidateCmd` does; a non-terminal stdin validates as usual.
 pub(crate) fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> String {
-    #[cfg(windows)]
-    if err.kind() == io::ErrorKind::PermissionDenied
-        && fs::metadata(path).is_ok_and(|metadata| metadata.is_dir())
-    {
-        // Rust's File::open rejects directories, whereas Go opens them and
-        // reports the later Windows ReadFile error.
-        return format!("read {}: Incorrect function.", path.display());
-    }
-    #[cfg(windows)]
-    let err_msg = match err.raw_os_error() {
-        Some(2) => "The system cannot find the file specified.",
-        Some(3) => "The system cannot find the path specified.",
-        Some(5) => "Access is denied.",
-        _ => {
-            if err.kind() == io::ErrorKind::NotFound {
-                "The system cannot find the file specified."
-            } else {
-                "general error"
-            }
-        }
-    };
-    #[cfg(not(windows))]
     let err_msg = match err.raw_os_error() {
         Some(2) => "no such file or directory",
         Some(13) => "permission denied",
@@ -959,7 +937,6 @@ pub(crate) fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> St
             }
         }
     };
-    #[cfg(not(windows))]
     let op = if err.kind() == io::ErrorKind::IsADirectory {
         "read"
     } else {
@@ -1049,9 +1026,6 @@ pub fn resolve_path(file: Option<PathBuf>) -> Result<PathBuf, String> {
     {
         return Ok(path);
     }
-    #[cfg(windows)]
-    let home = env::var_os("USERPROFILE");
-    #[cfg(not(windows))]
     let home = env::var_os("HOME");
     let home = home
         .filter(|value| !value.is_empty())

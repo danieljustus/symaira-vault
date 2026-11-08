@@ -126,7 +126,7 @@ pub(crate) fn parse_manifest(data: &[u8]) -> Result<(Manifest, &[u8]), ()> {
 
 pub(crate) fn expand_tilde(value: &str) -> Option<PathBuf> {
     let suffix = value.strip_prefix("~/")?;
-    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })?;
+    let home = std::env::var_os("HOME")?;
     Some(PathBuf::from(home).join(suffix))
 }
 

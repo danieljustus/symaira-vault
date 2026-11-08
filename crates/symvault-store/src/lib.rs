@@ -2020,28 +2020,12 @@ fn open_nofollow_kind(path: &Path, final_directory: bool) -> io::Result<fs::File
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "empty path"))
 }
 
-#[cfg(windows)]
-fn open_nofollow(path: &Path) -> io::Result<fs::File> {
-    use std::os::windows::fs::OpenOptionsExt;
-    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
-    fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS)
-        .open(path)
-}
-
-#[cfg(windows)]
-fn open_directory_nofollow(path: &Path) -> io::Result<fs::File> {
-    open_nofollow(path)
-}
-
-#[cfg(not(any(unix, windows)))]
+#[cfg(not(unix))]
 fn open_nofollow(path: &Path) -> io::Result<fs::File> {
     fs::OpenOptions::new().read(true).open(path)
 }
 
-#[cfg(not(any(unix, windows)))]
+#[cfg(not(unix))]
 fn open_directory_nofollow(path: &Path) -> io::Result<fs::File> {
     open_nofollow(path)
 }
@@ -3471,23 +3455,7 @@ fn open_root_write_lock(root_cap: &fs::File, root: &Path) -> Result<fs::File, St
     {
         let _ = root_cap;
     }
-    #[cfg(windows)]
-    let file = {
-        use std::os::windows::fs::OpenOptionsExt;
-        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-        fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
-            .open(&path)
-            .map_err(|source| StoreError::Write {
-                path: path.clone(),
-                source,
-            })?
-    };
-    #[cfg(all(not(unix), not(windows)))]
+    #[cfg(not(unix))]
     let file = fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -3502,16 +3470,6 @@ fn open_root_write_lock(root_cap: &fs::File, root: &Path) -> Result<fs::File, St
         path: path.clone(),
         source,
     })?;
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
-        if metadata.file_type().is_symlink()
-            || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-        {
-            return Err(StoreError::Symlink(path));
-        }
-    }
     if !metadata.is_file() {
         return Err(StoreError::NotRegularFile(path));
     }

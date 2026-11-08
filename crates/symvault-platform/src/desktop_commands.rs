@@ -410,18 +410,11 @@ impl SystemHost {
         }
         command.env_clear();
         let base = self.base_env();
-        let mut passed: Vec<(String, String)> = base
+        let passed: Vec<(String, String)> = base
             .iter()
             .filter(|(key, _)| env.passes(key))
             .cloned()
             .collect();
-        if env == EnvPolicy::Whitelist {
-            let systemroot = base
-                .iter()
-                .find(|(k, _)| k.eq_ignore_ascii_case("SYSTEMROOT"))
-                .map(|(_, v)| v.clone());
-            add_critical_env(&mut passed, systemroot, cfg!(windows));
-        }
         command.envs(passed);
         command
             .stdin(Stdio::piped())
@@ -579,23 +572,6 @@ fn is_executable(path: &Path) -> bool {
     {
         true
     }
-}
-
-/// Go's `exec` re-adds `SYSTEMROOT` on Windows when `cmd.Env` is set without
-/// it (`addCriticalEnv`); the value is the host's, possibly empty.
-fn add_critical_env(
-    env: &mut Vec<(String, String)>,
-    host_systemroot: Option<String>,
-    windows: bool,
-) {
-    if !windows
-        || env
-            .iter()
-            .any(|(k, _)| k.eq_ignore_ascii_case("SYSTEMROOT"))
-    {
-        return;
-    }
-    env.push(("SYSTEMROOT".to_owned(), host_systemroot.unwrap_or_default()));
 }
 
 impl DesktopHost for SystemHost {
@@ -1124,23 +1100,6 @@ mod tests {
         let calls = host.calls.lock().unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].3, EnvPolicy::Whitelist);
-    }
-
-    #[test]
-    fn critical_env_readds_systemroot_only_on_windows_when_absent() {
-        let mut env = vec![("PATH".to_owned(), "x".to_owned())];
-        add_critical_env(&mut env, Some("C:\\Windows".to_owned()), false);
-        assert_eq!(env.len(), 1, "non-Windows must not add anything");
-        add_critical_env(&mut env, Some("C:\\Windows".to_owned()), true);
-        assert_eq!(env[1], ("SYSTEMROOT".to_owned(), "C:\\Windows".to_owned()));
-        add_critical_env(&mut env, Some("other".to_owned()), true);
-        assert_eq!(env.len(), 2, "already present");
-        let mut lower = vec![("SystemRoot".to_owned(), "a".to_owned())];
-        add_critical_env(&mut lower, None, true);
-        assert_eq!(lower.len(), 1, "case-insensitive match like Go EqualFold");
-        let mut empty = Vec::new();
-        add_critical_env(&mut empty, None, true);
-        assert_eq!(empty, [("SYSTEMROOT".to_owned(), String::new())]);
     }
 
     #[test]

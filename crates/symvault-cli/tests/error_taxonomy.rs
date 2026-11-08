@@ -364,28 +364,6 @@ fn fixture() -> Fixture {
     serde_json::from_str(&raw).expect("parse error-taxonomy fixture")
 }
 
-/// The fixture was recorded by Go on Unix. Windows renders the same ENOENT errors
-/// with the system message table (`main.rs::go_io_reason`, which is also what Go
-/// prints on Windows), so map those texts back to the recorded Unix wording. The
-/// Unix comparison is untouched: this is a no-op outside Windows.
-#[cfg(windows)]
-fn windows_errno_to_go_unix(text: String) -> String {
-    text.replace(
-        "The system cannot find the file specified.",
-        "no such file or directory",
-    )
-    .replace(
-        "The system cannot find the path specified.",
-        "no such file or directory",
-    )
-    .replace("Access is denied.", "permission denied")
-}
-
-#[cfg(not(windows))]
-fn windows_errno_to_go_unix(text: String) -> String {
-    text
-}
-
 fn run_with_files(args: &[String], files: &BTreeMap<String, String>) -> (i32, String, String) {
     run_scenario(args, files, &[], false)
 }
@@ -559,8 +537,7 @@ fn run_scenario_full(
         .args(args)
         .output()
         .expect("run symvault");
-    let normalize =
-        |raw: &[u8]| windows_errno_to_go_unix(normalize_root(&root, &String::from_utf8_lossy(raw)));
+    let normalize = |raw: &[u8]| normalize_root(&root, &String::from_utf8_lossy(raw));
     let calls = read_host_calls(&root);
     let refused = refused_calls(&calls, host_tools());
     assert!(

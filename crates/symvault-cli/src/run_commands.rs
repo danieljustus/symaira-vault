@@ -539,19 +539,6 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
     for (name, value) in &materialized_files.environment {
         child_command.env(name, value);
     }
-    #[cfg(windows)]
-    if !has_system_root_assignment(
-        options.environment,
-        options.extra_environment,
-        options.passthrough,
-    ) {
-        // os/exec injects SystemRoot for Windows children when the caller
-        // clears the environment. Keep the same bootstrap variable when the
-        // Rust runner applies its explicit whitelist.
-        if let Some(value) = std::env::var_os("SystemRoot") {
-            child_command.env("SystemRoot", value);
-        }
-    }
     if let Some(directory) = options.working_directory {
         child_command.current_dir(directory);
     }
@@ -868,24 +855,6 @@ fn terminate_process_tree(child: &mut std::process::Child) {
     let _ = child.kill();
 }
 
-#[cfg(windows)]
-fn has_system_root_assignment(
-    environment: &BTreeMap<String, String>,
-    extra_environment: &[(OsString, OsString)],
-    passthrough: &[String],
-) -> bool {
-    environment
-        .keys()
-        .any(|name| name.eq_ignore_ascii_case("SystemRoot"))
-        || extra_environment
-            .iter()
-            .any(|(name, _)| name.to_string_lossy().eq_ignore_ascii_case("SystemRoot"))
-        || passthrough
-            .iter()
-            .flat_map(|names| names.split(','))
-            .any(|name| name.eq_ignore_ascii_case("SystemRoot"))
-}
-
 fn terminate_after_spawn_failure<T>(
     child: &mut std::process::Child,
     message: &str,
@@ -1110,9 +1079,8 @@ fn go_exec_error(program: &str, working_directory_exists: bool, error: &std::io:
     if program.contains(std::path::is_separator) {
         return format!("fork/exec {program}: no such file or directory");
     }
-    let path_variable = if cfg!(windows) { "%PATH%" } else { "$PATH" };
     format!(
-        "exec: {}: executable file not found in {path_variable}",
+        "exec: {}: executable file not found in $PATH",
         symvault_core::go_quote(program)
     )
 }
@@ -1441,46 +1409,6 @@ mod tests {
         );
     }
 
-    #[cfg(windows)]
-    #[test]
-    fn cleanup_zeroes_materialized_file_while_another_process_handle_is_open() {
-        use std::io::Read as _;
-
-        let files = BTreeMap::from([("PIN".to_owned(), b"synthetic-file-pin".to_vec())]);
-        let mut materialized = materialize_secret_files(&files).expect("materialize secret file");
-        let path = PathBuf::from(
-            materialized
-                .environment
-                .iter()
-                .find(|(name, _)| name == "SYMVAULT_FILE_PIN")
-                .expect("file environment assignment")
-                .1
-                .clone(),
-        );
-        let mut held_reader = fs::File::open(&path).expect("child-compatible read handle");
-
-        // Windows may defer unlink while a child keeps a handle open. Cleanup
-        // must still overwrite the content and report incomplete unlinking.
-        let cleanup = materialized.cleanup();
-        let mut observed = Vec::new();
-        held_reader
-            .read_to_end(&mut observed)
-            .expect("read through the still-open child handle");
-        assert_eq!(observed, vec![0; b"synthetic-file-pin".len()]);
-
-        drop(held_reader);
-        if cleanup.is_err() {
-            materialized
-                .cleanup()
-                .expect("retry cleanup after the child handle closes");
-        }
-        assert!(!path.exists(), "materialized secret file remains");
-        assert!(
-            !path.parent().expect("private directory").exists(),
-            "private directory remains"
-        );
-    }
-
     #[cfg(unix)]
     #[test]
     fn mcp_command_executor_materializes_private_files_and_cleans_them_after_success() {
@@ -1711,10 +1639,9 @@ mod tests {
     #[test]
     fn spawn_failures_read_like_go_os_exec() {
         let missing = std::io::Error::from(std::io::ErrorKind::NotFound);
-        let path_variable = if cfg!(windows) { "%PATH%" } else { "$PATH" };
         assert_eq!(
             go_exec_error("x", true, &missing),
-            format!("exec: \"x\": executable file not found in {path_variable}")
+            "exec: \"x\": executable file not found in $PATH"
         );
         assert_eq!(
             go_exec_error("./x", true, &missing),
