@@ -16,11 +16,21 @@ fuzz_target!(|input: &[u8]| {
     for forbidden in ['"', '*', '?', '<', '>', '|', ':', '\\'] {
         assert!(!normalized.contains(forbidden), "{forbidden:?} survived");
     }
-    // Prefixing must never reintroduce a parent segment from a normalised path.
+    // Joining two normalised halves must not reintroduce a parent segment and
+    // must keep the path half verbatim at the end (apply_prefix only trims the
+    // prefix, so the prefix side is not compared byte for byte).
     let mid = text.len() / 2;
     if text.is_char_boundary(mid) {
         let (prefix, path) = text.split_at(mid);
-        let joined = normalize_path(&apply_prefix(prefix, path));
-        assert!(!joined.contains(".."));
+        let (prefix, path) = (normalize_path(prefix), normalize_path(path));
+        let joined = apply_prefix(&prefix, &path);
+        assert!(
+            !joined.contains(".."),
+            "parent segment after join: {joined:?}"
+        );
+        assert!(
+            joined.ends_with(&path),
+            "path half lost: {joined:?} / {path:?}"
+        );
     }
 });
