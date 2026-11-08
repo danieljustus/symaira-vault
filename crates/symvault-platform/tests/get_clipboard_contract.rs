@@ -471,6 +471,52 @@ fn scenario_clipboard(secret: &str) -> FakeClipboard {
     }
 }
 
+/// A clock whose wait panics: stands for any panic between the copy and the end
+/// of the auto-clear wait.
+struct PanickingClock;
+
+impl Clock for PanickingClock {
+    fn elapsed(&self) -> Duration {
+        Duration::ZERO
+    }
+
+    fn wait_until(&self, _at: Duration, _cancel: &CancelToken, _watch_signals: bool) -> Wake {
+        panic!("injected panic after the copy");
+    }
+}
+
+#[test]
+fn a_panic_after_the_copy_still_clears_the_clipboard() {
+    let clipboard = scenario_clipboard("unwind-secret");
+    let mut stderr = Vec::new();
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = copy_and_auto_clear(
+            &clipboard,
+            "unwind-secret",
+            10,
+            &PanickingClock,
+            &mut stderr,
+        );
+    }));
+    assert!(outcome.is_err(), "the injected panic must propagate");
+    let state = clipboard.state.lock().unwrap();
+    assert_eq!(state.1, ["copy:unwind-secret", "copy:"]);
+    assert_eq!(
+        state.0, "",
+        "the unwind guard must leave the clipboard empty"
+    );
+}
+
+#[test]
+fn without_an_auto_clear_a_panic_free_copy_stays_on_the_clipboard() {
+    let clipboard = scenario_clipboard("kept-secret");
+    let mut stderr = Vec::new();
+    copy_and_auto_clear(&clipboard, "kept-secret", 0, &PanickingClock, &mut stderr).unwrap();
+    let state = clipboard.state.lock().unwrap();
+    assert_eq!(state.1, ["copy:kept-secret"]);
+    assert_eq!(state.0, "kept-secret");
+}
+
 #[test]
 fn injected_interrupt_clears_and_verifies_long_before_the_deadline() {
     let source = HandSource::default();

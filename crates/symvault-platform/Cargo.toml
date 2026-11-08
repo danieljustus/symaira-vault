@@ -11,6 +11,7 @@ publish = false
 serde_json.workspace = true
 base64 = "=0.23.1"
 symvault-core.workspace = true
+zeroize = { version = "=1.9.1", features = ["alloc"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))'.dependencies]
 keyring = { version = "=4.2.0", default-features = false, features = ["v1"] }

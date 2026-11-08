@@ -4092,7 +4092,8 @@ fn copy_get_field_to_clipboard(
     if destination == clip::GetDestination::Stdout {
         return Ok(false);
     }
-    let text = run_commands::format_go_value(value);
+    // The copied secret is wiped from memory once the flow ends.
+    let text = Zeroizing::new(run_commands::format_go_value(value));
     let seconds = clip::auto_clear_seconds(section.map(|section| section.auto_clear_duration));
     clip::copy_and_auto_clear(
         environment.clipboard,

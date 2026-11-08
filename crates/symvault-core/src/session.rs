@@ -1,6 +1,6 @@
 //! Session cache contracts with injected keyring and clock boundaries.
 use aes_gcm::{
-    Aes256Gcm, Key, Nonce,
+    Aes256Gcm, Nonce,
     aead::{Aead, KeyInit},
 };
 use base64::{Engine, engine::general_purpose::STANDARD as B64};
@@ -12,7 +12,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use thiserror::Error;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 pub const SESSION_ACCOUNT: &str = "session";
 pub const IDENTITY_ACCOUNT: &str = "identity";
@@ -375,9 +375,12 @@ impl SessionManager {
     /// Reads the wrap key exactly as Go stores it: standard base64 text of 32
     /// bytes. A missing or empty entry is `WrapKeyMissing`; anything else that
     /// is not 32 decoded bytes is `WrapKeyInvalid`; backend failures pass through.
-    fn load_wrap_key(&self, vault: &str) -> Result<[u8; 32], SessionError> {
+    ///
+    /// Every intermediate copy of the key (keyring bytes, base64 text, decoded
+    /// bytes, the fixed-size array) is wiped on drop.
+    fn load_wrap_key(&self, vault: &str) -> Result<Zeroizing<[u8; 32]>, SessionError> {
         let raw = match self.keyring.get(&Self::key(vault, WRAP_KEY_ACCOUNT)) {
-            Ok(raw) => raw,
+            Ok(raw) => Zeroizing::new(raw),
             Err(SessionError::NotFound) => return Err(SessionError::WrapKeyMissing),
             Err(error) => return Err(error),
         };
@@ -387,28 +390,37 @@ impl SessionManager {
         let decoded = std::str::from_utf8(&raw)
             .ok()
             .and_then(|text| B64.decode(text).ok())
+            .map(Zeroizing::new)
             .ok_or_else(|| SessionError::WrapKeyInvalid("not standard base64".into()))?;
-        decoded.try_into().map_err(|decoded: Vec<u8>| {
-            SessionError::WrapKeyInvalid(format!("invalid length: got {}, want 32", decoded.len()))
-        })
+        if decoded.len() != 32 {
+            return Err(SessionError::WrapKeyInvalid(format!(
+                "invalid length: got {}, want 32",
+                decoded.len()
+            )));
+        }
+        let mut key = Zeroizing::new([0_u8; 32]);
+        key.copy_from_slice(&decoded);
+        Ok(key)
     }
     /// Go replaces any unusable wrap key on save (`getOrCreateWrapKey`): every
     /// load failure, not only absence, falls through to generating a new one.
-    fn get_or_create_wrap_key(&self, vault: &str) -> Result<[u8; 32], SessionError> {
+    fn get_or_create_wrap_key(&self, vault: &str) -> Result<Zeroizing<[u8; 32]>, SessionError> {
         if let Ok(key) = self.load_wrap_key(vault) {
             return Ok(key);
         }
-        let mut raw = [0; 32];
-        fill(&mut raw).map_err(|e| SessionError::Crypto(e.to_string()))?;
-        self.keyring.set(
-            &Self::key(vault, WRAP_KEY_ACCOUNT),
-            B64.encode(raw).as_bytes(),
-        )?;
+        let mut raw = Zeroizing::new([0_u8; 32]);
+        fill(&mut raw[..]).map_err(|e| SessionError::Crypto(e.to_string()))?;
+        let encoded = Zeroizing::new(B64.encode(*raw));
+        self.keyring
+            .set(&Self::key(vault, WRAP_KEY_ACCOUNT), encoded.as_bytes())?;
         Ok(raw)
+    }
+    fn cipher(key: &[u8; 32]) -> Result<Aes256Gcm, SessionError> {
+        Aes256Gcm::new_from_slice(key).map_err(|e| SessionError::Crypto(e.to_string()))
     }
     fn encrypt(&self, vault: &str, value: &[u8]) -> Result<(String, String), SessionError> {
         let key = self.get_or_create_wrap_key(vault)?;
-        let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(key));
+        let cipher = Self::cipher(&key)?;
         let mut nonce = [0; 12];
         fill(&mut nonce).map_err(|e| SessionError::Crypto(e.to_string()))?;
         let encrypted = cipher
@@ -418,7 +430,7 @@ impl SessionManager {
     }
     fn decrypt(&self, vault: &str, encrypted: &str, nonce: &str) -> Result<Vec<u8>, SessionError> {
         let key = self.load_wrap_key(vault)?;
-        let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(key));
+        let cipher = Self::cipher(&key)?;
         let payload = B64
             .decode(encrypted)
             .map_err(|e| SessionError::Crypto(format!("decode ciphertext: {e}")))?;

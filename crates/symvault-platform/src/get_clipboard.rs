@@ -35,6 +35,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+use zeroize::Zeroizing;
+
 /// Go `clipboard.ErrClipboardNotCleared`.
 pub const NOT_CLEARED_MESSAGE: &str = "clipboard still contains the copied secret after clear; a clipboard-history manager may have restored it";
 
@@ -79,8 +81,9 @@ pub fn verify_cleared(
     if expected_absent.is_empty() {
         return Ok(());
     }
-    let current = read().map_err(VerifyError::Read)?;
-    if current == expected_absent {
+    // The read-back is a copy of the secret when the clear failed: wipe it.
+    let current = Zeroizing::new(read().map_err(VerifyError::Read)?);
+    if *current == expected_absent {
         Err(VerifyError::NotCleared)
     } else {
         Ok(())
@@ -364,6 +367,29 @@ pub fn countdown(
     }
 }
 
+/// Clears the clipboard if a panic unwinds between the copy of a secret and the
+/// end of its auto-clear wait. Best effort and with the same semantics as the
+/// timer clear (an empty copy; the result is ignored because nobody can act on
+/// it while unwinding). Disarmed once the normal flow has cleared and verified.
+struct ClearOnUnwind<'a> {
+    clipboard: &'a dyn TextClipboard,
+    armed: bool,
+}
+
+impl ClearOnUnwind<'_> {
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for ClearOnUnwind<'_> {
+    fn drop(&mut self) {
+        if self.armed {
+            let _ = self.clipboard.copy("");
+        }
+    }
+}
+
 /// Failure of the copy itself: Go wraps it as `copy to clipboard: <cause>` with
 /// exit code 1 (`ExitGeneralError`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -483,7 +509,14 @@ pub fn copy_and_auto_clear(
         if auto_clear_seconds <= 0 {
             return Ok(());
         }
+        // Armed only while an auto-clear is promised: without one the secret
+        // stays on the clipboard on purpose, as in Go.
+        let mut unwind_clear = ClearOnUnwind {
+            clipboard,
+            armed: true,
+        };
         wait_and_clear(clipboard, secret, auto_clear_seconds, clock, &say);
+        unwind_clear.disarm();
         Ok(())
     })
 }
@@ -577,7 +610,7 @@ impl TextClipboard for PasteboardTextClipboard {
     fn read(&self) -> Result<String, String> {
         self.0
             .read()
-            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+            .map(|bytes| String::from_utf8_lossy(&Zeroizing::new(bytes)).into_owned())
             .map_err(|error| error.message)
     }
 }
@@ -606,7 +639,7 @@ impl TextClipboard for CommandTextClipboard {
     fn read(&self) -> Result<String, String> {
         self.0
             .read()
-            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+            .map(|bytes| String::from_utf8_lossy(&Zeroizing::new(bytes)).into_owned())
             .map_err(|error| error.message)
     }
 }
