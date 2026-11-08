@@ -114,7 +114,7 @@ jobs:
       - name: "[MCP process] Set up pinned Python"
         id: "mcp_process-1"
         if: "${{ !cancelled() && needs.select.outputs.mcp_process != 'false' && steps.prologue.outcome == 'success' }}"
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
         env:
@@ -220,7 +220,7 @@ jobs:
       - name: "[MCP HTTP process] Set up pinned Python"
         id: "mcp_http_process-1"
         if: "${{ !cancelled() && needs.select.outputs.mcp_http_process != 'false' && steps.prologue.outcome == 'success' }}"
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
         env:
@@ -319,7 +319,7 @@ jobs:
       - name: "[CONNECT] Set up pinned Python"
         id: "broker_connect-1"
         if: "${{ !cancelled() && needs.select.outputs.broker_connect != 'false' && steps.prologue.outcome == 'success' }}"
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
       - name: "[CONNECT] Execute four native socket regressions"
@@ -381,7 +381,7 @@ jobs:
       - name: "[Egress broker] Set up pinned Python"
         id: "broker_egress-1"
         if: "${{ !cancelled() && needs.select.outputs.broker_egress != 'false' && steps.prologue.outcome == 'success' }}"
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
       - name: "[Egress broker] Execute actual native TLS and lifetime regressions"
@@ -481,7 +481,7 @@ jobs:
       - name: "[Intake CLI] Set up pinned Python"
         id: "intake_cli-1"
         if: "${{ !cancelled() && needs.select.outputs.intake_cli != 'false' && steps.prologue.outcome == 'success' }}"
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
         env:
@@ -556,7 +556,7 @@ jobs:
       - name: "[Serve CLI] Set up pinned Python"
         id: "serve_cli-1"
         if: "${{ !cancelled() && needs.select.outputs.serve_cli != 'false' && steps.prologue.outcome == 'success' }}"
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
         env:
@@ -634,7 +634,7 @@ jobs:
       - name: "[API transport] Set up pinned Python"
         id: "api_transport-1"
         if: "${{ !cancelled() && needs.select.outputs.api_transport != 'false' && steps.prologue.outcome == 'success' }}"
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
         env:
@@ -702,7 +702,7 @@ jobs:
       - name: "[KDF policy] Set up pinned Python"
         id: "kdf_policy-1"
         if: "${{ !cancelled() && needs.select.outputs.kdf_policy != 'false' && steps.prologue.outcome == 'success' }}"
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
         env:
@@ -756,7 +756,7 @@ jobs:
       - name: "[Read policy] Set up pinned Python"
         id: "vault_read_policy-1"
         if: "${{ !cancelled() && needs.select.outputs.vault_read_policy != 'false' && steps.prologue.outcome == 'success' }}"
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
         env:
@@ -839,7 +839,7 @@ jobs:
       - name: "[CLI artifacts] Set up pinned Python"
         id: "cli_artifacts-1"
         if: "${{ !cancelled() && needs.select.outputs.cli_artifacts != 'false' && steps.prologue.outcome == 'success' }}"
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
         env:
