@@ -4,6 +4,19 @@ Decided 2026-10-30. The remaining Rust migration is finished on one local
 branch and reaches `main` through a single closing pull request. Per-slice pull
 requests and per-slice hosted CI runs are suspended for the port.
 
+> **Closeout note 2026-11-08.** The Go implementation is gone ([ADR 0036](../adr/0036-go-removal.md),
+> #1575, squash `a57f4cdf`): the Go race/full-suite lanes and the Go matrix jobs
+> named in rule 3 and under "Known limits" no longer exist, and the gate runs
+> Rust only. Windows is out of scope (#1550, #1551; Windows Rust code removed by
+> #1553), so Windows legs and "3-OS" clauses below are void; the supported
+> targets are Linux and macOS arm64 (plus the iOS client). The history tag used
+> at the #1575 squash was `legacy/rust-port-history` (pushed, `69139e4d`), not the
+> `rust-port/local-history` named in rule 6; the Go oracle is the pushed tag
+> `legacy/go-oracle` (`ce2390d7`). The promotion rule (rule 4: `PASS (local)`
+> with `macos` and `linux` receipts, confirmed by the closing CI run) is
+> unchanged. Proposed ratification of the remaining Go-only residuals:
+> [ADR 0037](../adr/0037-proposed-ratification-at-rust-cutover.md).
+
 ## Rules
 
 1. **Branch.** All port work lands on `local/rust-port` (worktree
