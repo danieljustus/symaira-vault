@@ -956,8 +956,8 @@ bind the Mac's concrete LAN IP; the Rust server refuses wildcard binds (`MCP
 HTTP wildcard binds are unavailable; choose a concrete IP`) and, off loopback,
 requires TLS (it generates and reuses a self-signed vault certificate when no
 `--tls-cert`/`--tls-key` is given, so none are needed here). The
-`approval-pair` loopback error text still suggests `--bind 0.0.0.0`; ignore
-that part. Bind the LAN address:
+`approval-pair` loopback error now points at `--bind <lan-ip>` too. Bind the
+LAN address:
 
 ```sh
 S=/private/tmp/symvault-acceptance

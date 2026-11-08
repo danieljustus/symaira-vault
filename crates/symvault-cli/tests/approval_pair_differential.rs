@@ -582,6 +582,16 @@ fn approval_pair_rejects_loopback_server_like_go_oracle() {
             message.contains("127.0.0.1 (loopback-only)"),
             "{name} error did not explain loopback binding: {message}"
         );
+        // Intentional divergence: Go advised `--bind 0.0.0.0`, which the Rust
+        // server refuses (wildcard binds are unavailable), so Rust must point
+        // at a concrete LAN IP instead.
+        if name == "Rust" {
+            assert!(
+                !message.contains("--bind 0.0.0.0 (all"),
+                "Rust must not advise a wildcard bind it refuses: {message}"
+            );
+            assert!(message.contains("--bind <lan-ip>"), "{message}");
+        }
     }
     assert_eq!(oracle.calls(), 2);
 }

@@ -60,14 +60,12 @@ symvault device approval-pair
 
   ```text
   Error: 'symvault serve' is bound to 127.0.0.1 (loopback-only) — a phone on
-  the LAN cannot reach it. Restart the server with --bind 0.0.0.0 (all
-  interfaces) or --bind <lan-ip>, then run 'approval-pair' again
+  the LAN cannot reach it. Restart the server with --bind <lan-ip> (wildcard
+  binds such as 0.0.0.0 are refused), then run 'approval-pair' again
   ```
 
-  Ignore the `--bind 0.0.0.0` suggestion in that message: the server refuses
-  wildcard binds (`MCP HTTP wildcard binds are unavailable; choose a concrete
-  IP`). Restart it with `--bind "$(ipconfig getifaddr en0)"` (the Mac's
-  concrete LAN IP), then run `approval-pair` again.
+  Restart it with `--bind "$(ipconfig getifaddr en0)"` (the Mac's concrete LAN
+  IP), then run `approval-pair` again.
 
 ## Listing and revoking
 
