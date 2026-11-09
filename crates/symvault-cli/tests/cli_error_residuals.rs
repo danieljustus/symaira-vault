@@ -138,7 +138,28 @@ fn normalized(bytes: &[u8], roots: &[&Path]) -> String {
             text = text.replace(&spelling, "<SANDBOX>");
         }
     }
-    text
+    mask_temp_suffix(&text)
+}
+
+/// Go names the temp file of an atomic registry write `<file>.tmp-<random
+/// decimal>` and the recording keeps the one value of that run. A different
+/// random suffix is not a behaviour difference, so the digits after `.tmp-` are
+/// replaced by `<RANDOM>` on both sides; the recording itself is untouched.
+fn mask_temp_suffix(text: &str) -> String {
+    const MARKER: &str = ".tmp-";
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find(MARKER) {
+        let (head, tail) = rest.split_at(at + MARKER.len());
+        out.push_str(head);
+        let digits = tail.bytes().take_while(u8::is_ascii_digit).count();
+        if digits > 0 {
+            out.push_str("<RANDOM>");
+        }
+        rest = &tail[digits..];
+    }
+    out.push_str(rest);
+    out
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -868,28 +889,10 @@ impl Sandbox {
 }
 
 /// Cases whose Rust answer differs from Go's outside the not-initialized shape,
-/// pinned so a fix is noticed. In a sandbox without the vault directory Go reads
-/// the registries as empty (or fails at the write of its `.tmp-<random>` file),
-/// where Rust opens the directory first and reports `failed to read <dir>`.
-/// Found by the R3 sweep and recorded as ADR 0037 R21.
-const OPEN: &[(&str, &str)] = &[
-    (
-        "agent token new",
-        "Go: write token registry: open <dir>/mcp-tokens.json.tmp-<random>",
-    ),
-    (
-        "agent token revoke",
-        "Go: token \"x\" not found or already revoked",
-    ),
-    (
-        "agent token rotate",
-        "Go: write token registry: open <dir>/mcp-tokens.json.tmp-<random>",
-    ),
-    (
-        "share revoke",
-        "Go: revoke share grant: share grant x not found",
-    ),
-];
+/// pinned so a fix is noticed. Empty since ADR 0037 R21 was closed: in a sandbox
+/// without the vault directory the token/share registries read as empty, as in
+/// Go (`agent token new|rotate|revoke`, `share revoke`).
+const OPEN: &[(&str, &str)] = &[];
 
 #[test]
 #[cfg_attr(

@@ -123,6 +123,9 @@ pub enum StoreError {
     ValueLimit(String),
     #[error("data-safety gate: {0}")]
     DataSafety(String),
+    /// A registry write failure whose text is already Go's, printed verbatim.
+    #[error("{0}")]
+    RegistryWrite(String),
 }
 
 /// Which on-disk entry namespace was observed.
@@ -3444,6 +3447,25 @@ impl SearchIndex {
             Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(()),
             Err(source) => Err(StoreError::Write { path, source }),
         }
+    }
+}
+
+/// Opens the vault root capability for a registry (`mcp-tokens.json`,
+/// `mcp-shares.json`) mutation.
+///
+/// Go reads these registries with a plain `os.ReadFile` that treats a missing
+/// file as empty, and only fails at the later write.  A vault root that does not
+/// exist therefore reads as an empty registry (`Ok(None)`); the caller decides
+/// what an empty registry means and must never create the directory.  Every
+/// other failure, including a symlinked root, still fails closed.
+pub(crate) fn open_registry_root(root: &Path) -> Result<Option<fs::File>, StoreError> {
+    match open_directory_nofollow(root) {
+        Ok(file) => Ok(Some(file)),
+        Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(source) => Err(StoreError::Read {
+            path: root.to_path_buf(),
+            source,
+        }),
     }
 }
 

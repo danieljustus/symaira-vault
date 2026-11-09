@@ -15,6 +15,13 @@ use crate::{Store, StoreError, read_open_regular_with_metadata};
 
 /// The Go share-store file name used below a vault directory.
 pub const SHARE_STORE_FILE: &str = "mcp-shares.json";
+
+fn revoke_clock(now: &str) -> Result<String, StoreError> {
+    time::OffsetDateTime::parse(now, &time::format_description::well_known::Rfc3339)
+        .map_err(|error| StoreError::Config(format!("invalid revoke clock: {error}")))?
+        .format(&time::format_description::well_known::Rfc3339)
+        .map_err(|error| StoreError::Config(format!("invalid revoke clock: {error}")))
+}
 const SHARE_STORE_VERSION: i64 = 1;
 
 /// A grant lifecycle state as serialized by the Go server.
@@ -224,10 +231,9 @@ impl ShareStore {
         now: &str,
     ) -> Result<ShareGrant, StoreError> {
         let root = root.as_ref();
-        let root_cap = crate::open_directory_nofollow(root).map_err(|source| StoreError::Read {
-            path: root.to_path_buf(),
-            source,
-        })?;
+        let Some(root_cap) = crate::open_registry_root(root)? else {
+            return Self::revoke_in_missing_root(grant_id, now);
+        };
         let _lock = crate::open_root_write_lock(&root_cap, root)?;
         self.revoke_locked(root, &root_cap, grant_id, now, None)
     }
@@ -244,10 +250,9 @@ impl ShareStore {
         now: &str,
     ) -> Result<ShareGrant, StoreError> {
         let root = root.as_ref();
-        let root_cap = crate::open_directory_nofollow(root).map_err(|source| StoreError::Read {
-            path: root.to_path_buf(),
-            source,
-        })?;
+        let Some(root_cap) = crate::open_registry_root(root)? else {
+            return Self::revoke_in_missing_root(grant_id, now);
+        };
         let _lock = crate::open_root_write_lock(&root_cap, root)?;
         self.revoke_locked(root, &root_cap, grant_id, now, Some(expected_from_agent))
     }
@@ -449,6 +454,15 @@ impl ShareStore {
         Ok(grant)
     }
 
+    /// A vault root that does not exist reads as an empty share store, as it does
+    /// in Go, so every grant is unknown. Nothing is written or created.
+    fn revoke_in_missing_root(grant_id: &str, now: &str) -> Result<ShareGrant, StoreError> {
+        revoke_clock(now)?;
+        Err(StoreError::Config(format!(
+            "share grant {grant_id} not found"
+        )))
+    }
+
     fn revoke_locked(
         &mut self,
         root: &Path,
@@ -457,10 +471,7 @@ impl ShareStore {
         now: &str,
         expected_from_agent: Option<&str>,
     ) -> Result<ShareGrant, StoreError> {
-        let now = time::OffsetDateTime::parse(now, &time::format_description::well_known::Rfc3339)
-            .map_err(|error| StoreError::Config(format!("invalid revoke clock: {error}")))?
-            .format(&time::format_description::well_known::Rfc3339)
-            .map_err(|error| StoreError::Config(format!("invalid revoke clock: {error}")))?;
+        let now = revoke_clock(now)?;
         let path = root.join(SHARE_STORE_FILE);
         let mut current = Self::read(&path)?;
         let position = current
@@ -944,6 +955,31 @@ mod tests {
             .expect("canonical vault directory");
         let path = canonical_root.join(SHARE_STORE_FILE);
         (root, store, path)
+    }
+
+    /// ADR 0037 R21: a vault directory that does not exist is an empty share
+    /// store, so every grant is unknown, and the directory is not created.
+    #[test]
+    fn revoke_in_missing_vault_root_reports_unknown_grant_without_creating_it() {
+        let root = tempfile::tempdir().expect("sandbox");
+        let missing = root.path().join("absent");
+        let now = "2026-01-02T03:04:05Z";
+        let mut shares = ShareStore::default();
+
+        let error = shares.revoke_at(&missing, "x", now).expect_err("unknown");
+        assert_eq!(
+            error.to_string(),
+            "invalid vault config: share grant x not found"
+        );
+        let error = shares
+            .revoke_at_for_agent(&missing, "x", "agent", now)
+            .expect_err("unknown");
+        assert!(matches!(&error, StoreError::Config(m) if m == "share grant x not found"));
+        let error = shares
+            .revoke_at(&missing, "x", "not a time")
+            .expect_err("clock");
+        assert!(error.to_string().contains("invalid revoke clock"));
+        assert!(!missing.exists(), "the vault directory must not be created");
     }
 
     #[test]
