@@ -267,7 +267,10 @@ impl GitRepository {
         if limit > 0 {
             args.push(&limit_arg);
         }
-        args.extend(["--date=iso-strict", "--format=%H%x1f%an%x1f%ae%x1f%aI%x1f%s%x1e"]);
+        args.extend([
+            "--date=iso-strict",
+            "--format=%H%x1f%an%x1f%ae%x1f%aI%x1f%s%x1e",
+        ]);
         if let Some(path) = path.filter(|path| !path.is_empty()) {
             validate_paths(&[path.to_owned()])?;
             args.extend(["--", path]);

@@ -220,7 +220,11 @@ fn corpus_case(text: &str, name: &str) -> Case {
 #[test]
 fn gzip_header_flags_restore_matches_go_corpus() {
     let fixture = fixture(GZIP_HEADER_FIXTURE);
-    assert_eq!(fixture.cases.len(), GZIP_HEADER_CASES, "corpus size changed");
+    assert_eq!(
+        fixture.cases.len(),
+        GZIP_HEADER_CASES,
+        "corpus size changed"
+    );
     let accepted = fixture.cases.iter().filter(|c| c.error.is_empty()).count();
     assert!(
         accepted >= 20 && fixture.cases.len() - accepted >= 15,
@@ -236,7 +240,10 @@ fn tar_special_header_caps_restore_matches_go_corpus() {
     assert_eq!(fixture.cases.len(), TAR_CAP_CASES, "corpus size changed");
     for boundary in ["over-cap-by-one", "over-cap-by-512"] {
         for kind in ["pax-global", "gnu-longlink"] {
-            let case = corpus_case(TAR_CAP_FIXTURE, &format!("tar-special-cap/{kind}/{boundary}"));
+            let case = corpus_case(
+                TAR_CAP_FIXTURE,
+                &format!("tar-special-cap/{kind}/{boundary}"),
+            );
             assert_eq!(
                 case.error, "restore failed: read archive: archive/tar: header field too long",
                 "{}",
@@ -253,7 +260,10 @@ fn tar_special_header_caps_restore_matches_go_corpus() {
 fn comparator_rejects_a_changed_error_message() {
     let mut case = corpus_case(GZIP_HEADER_FIXTURE, "gzip-header/header/fhcrc-wrong");
     run_case(&case).expect("unmodified case matches");
-    assert_eq!(case.error, "restore failed: read gzip: gzip: invalid header");
+    assert_eq!(
+        case.error,
+        "restore failed: read gzip: gzip: invalid header"
+    );
     case.error = "restore failed: read gzip: unexpected EOF".into();
     assert!(run_case(&case).unwrap_err().contains("error differs"));
 }

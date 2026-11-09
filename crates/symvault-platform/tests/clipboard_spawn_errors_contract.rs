@@ -84,10 +84,8 @@ fn host_goos() -> &'static str {
 }
 
 fn sandbox(label: &str) -> PathBuf {
-    let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "clipboard-spawn-{}-{label}",
-        std::process::id()
-    ));
+    let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("clipboard-spawn-{}-{label}", std::process::id()));
     let _ = fs::remove_dir_all(&path);
     fs::create_dir_all(&path).unwrap();
     path

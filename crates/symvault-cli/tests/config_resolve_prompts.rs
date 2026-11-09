@@ -86,8 +86,10 @@ struct SeedFile {
 }
 
 fn fixture() -> Fixture {
-    serde_json::from_str(include_str!("../../../testdata/port/cli/config-prompts.json"))
-        .expect("decode the Go config prompt recording")
+    serde_json::from_str(include_str!(
+        "../../../testdata/port/cli/config-prompts.json"
+    ))
+    .expect("decode the Go config prompt recording")
 }
 
 fn seed() -> Vec<SeedFile> {
@@ -222,10 +224,7 @@ fn run(case: &Case, seed: &[SeedFile]) -> Run {
         code: status.code().unwrap_or(-1),
         stdout: normalize_root(&root, &String::from_utf8_lossy(&stdout)),
         stderr: normalize_root(&root, &String::from_utf8_lossy(&stderr)),
-        config_after: normalize_root(
-            &root,
-            &fs::read_to_string(&config_path).unwrap_or_default(),
-        ),
+        config_after: normalize_root(&root, &fs::read_to_string(&config_path).unwrap_or_default()),
     }
 }
 

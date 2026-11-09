@@ -203,7 +203,9 @@ fn pass_importer_matches_go_for_invalid_utf8_names() {
             let go_raw = b64(&case.error_b64);
             let go_text = String::from_utf8_lossy(&go_raw).into_owned();
             match result {
-                Ok(entries) => failures.push(format!("{id}: rust accepted {} entries", entries.len())),
+                Ok(entries) => {
+                    failures.push(format!("{id}: rust accepted {} entries", entries.len()))
+                }
                 Err(ImportError::Parse(text)) => {
                     let text = text.replace(store.to_str().unwrap(), STORE_MARKER);
                     if text != go_text {
@@ -255,9 +257,7 @@ fn pass_importer_matches_go_for_invalid_utf8_names() {
                         .as_ref()
                         .map(|list| list.iter().map(|w| w.clone().into_bytes()).collect());
                     if rust_warnings != warnings {
-                        failures.push(format!(
-                            "{id}: warnings {rust_warnings:?}, Go {warnings:?}"
-                        ));
+                        failures.push(format!("{id}: warnings {rust_warnings:?}, Go {warnings:?}"));
                     }
                 }
             }
