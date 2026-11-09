@@ -1752,6 +1752,13 @@
    "ref": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
    "value": "124ef8368fb3f41ad7267ce3a7ed87f5b79a75e07f18819fb15e5a3db9e17a75"
   },
+  "testdata/port/sync/pass-gpg-invalid-names.json#/oracle#program_sha256": {
+   "kind": "other",
+   "class": "recorded",
+   "algo": "claimed",
+   "ref": null,
+   "value": "eef240aa467c5a0674d0e2048ae98ed29c049b9c8e8d89eb8132ac18018f7f51"
+  },
   "testdata/port/sync/pass-gpg.json#/oracle#generator_digest": {
    "kind": "generator",
    "class": "recorded",
