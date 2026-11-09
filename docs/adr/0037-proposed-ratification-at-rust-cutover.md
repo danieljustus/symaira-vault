@@ -473,7 +473,7 @@ the declared differences named here.
 | R14 | `cli_signal_literals.rs::broker_passthrough_literals_match_go`, `intake_watch_interval_literals_match_go` | `testdata/port/cli-observations/cli_signal_literals.json` | 54 signal-ended runs, all equal; no Rust change |
 | R15 | `cli_unlock_ttl.rs::unlock_ttl_matches_go_against_the_keychain` | `testdata/port/cli-observations/cli_unlock_ttl.json` | 33 cases; 4 Rust fixes |
 
-Differences left open, for the maintainer's decision:
+Differences decided by the maintainer on 2026-11-10 (ratified as recommended, items 37 to 39 of the decision table; the R4 unreachable branch is not a difference):
 
 - **R4, transport wording (recommend R, cosmetic).** A failed fetch prints the
   HTTP stack's own text after the product prefix (`Get "<url>": dial tcp:
@@ -751,6 +751,21 @@ automated; a maintainer records them as a manual acceptance note.
 | 36 refresh refused at the exact deadline | HTTP-003 | R | R: ratified |
 | U1 to U7 unenumerable classes | see section | R | R: ratified |
 | Anchor wording | CLI-005 | wording | ratified (wording) |
+| 37 R4 transport wording (addendum 2026-11-10) | CLI-006 | R | R: ratified 2026-11-10 |
+| 38 R4 first asset URL host check (addendum 2026-11-10) | CLI-006 | R | R: ratified 2026-11-10 |
+| 39 R6 native `doctor` without colour (addendum 2026-11-10) | CLI-006 | R | R: ratified 2026-11-10 |
+
+## Addendum 2026-11-10
+
+The maintainer (Daniel Justus) ratified the three CLI-006 differences that the
+R4 and R6 recordings left open, as recommended: the transport error wording of
+`update` (cosmetic), Rust's refusal of a first release asset URL that is not
+HTTPS on a GitHub host (security-motivated; Go only checked redirects) and the
+native `doctor` never emitting ANSI colour (cosmetic). Their pins stay as they
+are (`DECLARED_HOST_CHECK`, `DECLARED_UNCOLOURED`, the `<TRANSPORT>`
+reduction) and now pin ratified differences. The CFG-002 warning-order
+difference (`mcp_empty_bind_with_print_by_default`) was not ratified; Rust was
+changed to validate `mcp.bind` after the section merge like Go.
 
 ## Consequences
 

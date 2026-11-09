@@ -1095,11 +1095,7 @@ impl Config {
             config.git = Some(parse_git(v)?);
         }
         if let Some(v) = root.get(key("mcp")).filter(|v| !v.is_null()) {
-            let mcp = parse_mcp(v, warnings)?;
-            if mcp.bind.is_empty() {
-                return Err(ConfigError::Invalid("mcp.bind must not be empty".into()));
-            }
-            config.mcp = Some(mcp);
+            config.mcp = Some(parse_mcp(v, warnings)?);
         }
         if let Some(v) = root.get(key("update")).filter(|v| !v.is_null()) {
             config.update = Some(parse_update(v)?);
@@ -1121,6 +1117,12 @@ impl Config {
         }
         if let Some(v) = scalar(root, "paymentPolicies") {
             config.payment_policies = parse_payment_policies(v)?;
+        }
+        // Go validates `mcp.bind` only after every section has merged, so the
+        // clipboard merge (and its once-per-process deprecation warning) runs
+        // before an empty bind rejects the document (CFG-002).
+        if config.mcp.as_ref().is_some_and(|mcp| mcp.bind.is_empty()) {
+            return Err(ConfigError::Invalid("mcp.bind must not be empty".into()));
         }
         // Go ends every load by recording the resolved method as the flag.
         config.use_touch_id = Some(config.auth_method == AuthMethod::Touchid);

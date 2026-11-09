@@ -256,15 +256,12 @@ fn mask_adjudicated(snapshot: &mut Snapshot) {
     }
 }
 
-/// Residual ordering divergence, asserted exactly.
-///
-/// Go checks `mcp.bind` only after every section has merged, so a document
-/// that carries both an empty `mcp.bind` and `clipboard.printByDefault` is
-/// rejected *after* the clipboard merge consumed the once-per-process warning;
-/// a later valid load stays silent. Rust rejects `mcp.bind` before it parses
-/// the clipboard section, so the guard is untouched and the later load warns.
-/// The rejection itself agrees; only the warning on the next load differs.
-const ADJUDICATED_WARNING_ORDER: [&str; 1] = ["mcp_empty_bind_with_print_by_default"];
+// Go checks `mcp.bind` only after every section has merged, so a document
+// that carries both an empty `mcp.bind` and `clipboard.printByDefault` is
+// rejected after the clipboard merge consumed the once-per-process warning
+// and a later valid load stays silent. Rust follows the same order (CFG-002,
+// formerly an adjudicated warning-order divergence), so the case is compared
+// like every other one.
 
 #[test]
 fn fixture_has_pinned_provenance_and_schema() {
@@ -315,24 +312,7 @@ fn sections_match_go_oracle() {
             let (config, warnings) = result.unwrap_or_else(|error| {
                 panic!("{label}: Go accepted this input, Rust failed: {error}")
             });
-            if ADJUDICATED_WARNING_ORDER.contains(&case.name.as_str()) {
-                assert!(
-                    expected.warnings.is_empty(),
-                    "{label}: Go is expected to stay silent after its earlier consumption"
-                );
-                assert_eq!(
-                    warnings,
-                    vec![
-                        "clipboard.printByDefault is deprecated; use clipboard.copyByDefault instead"
-                            .to_owned()
-                    ],
-                    "{label}: the adjudicated warning-order divergence closed or widened"
-                );
-            } else {
-                assert_eq!(warnings, expected.warnings, "warnings for {label}");
-            }
-            // Only the warning diverges for the warning-order case; the
-            // resulting configuration must still match Go exactly.
+            assert_eq!(warnings, expected.warnings, "warnings for {label}");
             let mut actual = snapshot_of(&config);
             let mut want = expected
                 .snapshot
