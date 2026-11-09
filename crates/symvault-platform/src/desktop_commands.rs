@@ -576,8 +576,12 @@ fn is_executable(path: &Path) -> bool {
     }
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        metadata.permissions().mode() & 0o111 != 0
+        // Go's `exec.LookPath` (lp_unix.go) asks `unix.Eaccess(X_OK)`: the
+        // kernel's answer for the *effective* user and group, which honours
+        // ownership, ACLs and read-only/noexec mounts. A bare `mode & 0o111`
+        // would accept a file only another user may run.
+        use rustix::fs::{Access, AtFlags, CWD, accessat};
+        accessat(CWD, path, Access::EXEC_OK, AtFlags::EACCESS).is_ok()
     }
     #[cfg(not(unix))]
     {
@@ -1082,6 +1086,62 @@ mod tests {
     use std::sync::Mutex;
 
     type RecordedCall = (String, Vec<String>, Vec<u8>, EnvPolicy);
+
+    #[cfg(unix)]
+    mod is_executable_contract {
+        use super::super::is_executable;
+        use std::os::unix::fs::PermissionsExt;
+        use std::path::{Path, PathBuf};
+
+        fn scratch(label: &str) -> PathBuf {
+            let dir = std::env::temp_dir()
+                .join(format!("symvault-is-exec-{label}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            dir
+        }
+
+        fn file_with_mode(dir: &Path, name: &str, mode: u32) -> PathBuf {
+            let path = dir.join(name);
+            std::fs::write(&path, b"#!/bin/sh\n").unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+            path
+        }
+
+        #[test]
+        fn is_executable_follows_the_effective_users_x_ok_not_any_exec_bit() {
+            let dir = scratch("eaccess");
+            let owner_exec = file_with_mode(&dir, "owner", 0o100);
+            let group_only = file_with_mode(&dir, "group", 0o010);
+            let other_only = file_with_mode(&dir, "other", 0o001);
+            let none = file_with_mode(&dir, "none", 0o644);
+
+            // Owner-executable file owned by the current user: always runnable.
+            assert!(is_executable(&owner_exec));
+            // No execute bit at all: not runnable, not even for root.
+            assert!(!is_executable(&none));
+            // A directory is never a program, whatever its mode.
+            assert!(!is_executable(&dir));
+            assert!(!is_executable(&dir.join("missing")));
+
+            // The files are owned by the current user, so only the owner class
+            // applies: a group- or other-only bit does not let this user run
+            // them. Root is the exception (any exec bit passes), so skip there.
+            if rustix::process::geteuid().is_root() {
+                eprintln!("skipping non-owner mode assertions: running as root");
+            } else {
+                assert!(
+                    !is_executable(&group_only),
+                    "0o010 must not run for the owner"
+                );
+                assert!(
+                    !is_executable(&other_only),
+                    "0o001 must not run for the owner"
+                );
+            }
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
 
     #[derive(Default)]
     struct Recorder {

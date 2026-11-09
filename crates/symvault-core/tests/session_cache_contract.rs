@@ -122,3 +122,84 @@ fn session_cache_is_keyring_only_and_never_touches_the_filesystem() {
         assert!(!production.contains(banned), "session.rs uses {banned}");
     }
 }
+
+/// A keyring whose next `Get` of the wrap key fails once with a transient
+/// backend error (everything else passes through to memory).
+struct TransientWrapKeyGetFault {
+    inner: symvault_core::session::MemoryKeyring,
+    armed: std::sync::atomic::AtomicBool,
+}
+
+impl symvault_core::session::Keyring for TransientWrapKeyGetFault {
+    fn get(&self, key: &str) -> Result<Vec<u8>, symvault_core::session::SessionError> {
+        if key.ends_with("|wrap-key") && self.armed.swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(symvault_core::session::SessionError::Keyring(
+                "transient get failure".into(),
+            ));
+        }
+        self.inner.get(key)
+    }
+    fn set(&self, key: &str, value: &[u8]) -> Result<(), symvault_core::session::SessionError> {
+        self.inner.set(key, value)
+    }
+    fn delete(&self, key: &str) -> Result<(), symvault_core::session::SessionError> {
+        self.inner.delete(key)
+    }
+}
+
+/// Rust-only pin of a documented Go-parity residual risk (not a fix target):
+/// Go's `getOrCreateWrapKey` treats *any* wrap-key `Get` failure, not just
+/// absence, as "unusable" and generates a new key on the next save. A transient
+/// keyring fault therefore replaces the wrap key, and a previously sealed
+/// identity can no longer be opened. If this test starts failing, the behaviour
+/// diverged from Go (`session.go`) and SESSION-001 must be re-evaluated.
+#[test]
+fn transient_wrap_key_get_fault_then_save_replaces_the_key_and_orphans_the_sealed_identity() {
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
+    use symvault_core::session::{Keyring, SessionManager};
+
+    const TTL: Duration = Duration::from_secs(3600);
+    const MAX: Duration = Duration::from_secs(8 * 3600);
+    let wrap_key = "symvault:v|wrap-key";
+
+    let keyring = Arc::new(TransientWrapKeyGetFault {
+        inner: symvault_core::session::MemoryKeyring::new(),
+        armed: std::sync::atomic::AtomicBool::new(false),
+    });
+    let manager = SessionManager::with_system_clock(keyring.clone());
+
+    manager
+        .save_identity("v", b"AGE-SECRET-KEY-sealed-before-fault", TTL, MAX)
+        .unwrap();
+    let original_wrap_key = keyring.get(wrap_key).unwrap();
+    assert_eq!(
+        manager.load_identity("v", false).unwrap(),
+        b"AGE-SECRET-KEY-sealed-before-fault"
+    );
+
+    // The next save sees the wrap key `Get` fail once, treats the key as
+    // unusable and writes a fresh one. `save_passphrase` leaves the identity
+    // record untouched, so it stays sealed under the old key.
+    keyring.armed.store(true, Ordering::SeqCst);
+    manager
+        .save_passphrase("v", b"new-passphrase", TTL, MAX)
+        .unwrap();
+    assert!(
+        !keyring.armed.load(Ordering::SeqCst),
+        "the fault must have been consumed by the save"
+    );
+
+    let replaced_wrap_key = keyring.get(wrap_key).unwrap();
+    assert_ne!(
+        replaced_wrap_key, original_wrap_key,
+        "a transient Get failure makes the save replace the wrap key (Go parity)"
+    );
+    assert_eq!(manager.load_passphrase("v").unwrap(), b"new-passphrase");
+    assert!(
+        manager.load_identity("v", false).is_err(),
+        "the identity sealed under the replaced wrap key must no longer open"
+    );
+}

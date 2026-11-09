@@ -810,10 +810,18 @@ mod process {
     #[test]
     fn relative_and_empty_path_entries_never_receive_the_secret() {
         // (label, PATH with {bin}, where the capturing xdotool is, secret delivered?)
-        let shapes: [(&str, &str, &[&str], bool); 8] = [
+        let shapes: [(&str, &str, &[&str], bool); 9] = [
             ("relative", "rel", &["rel"], false),
             ("dot", ".", &["cwd"], false),
             ("empty-entry", ":{bin}", &["cwd"], false),
+            // Go's `exec.LookPath` meets the empty entry first, resolves it to
+            // "." and returns `ErrDot` without trying the absolute entry.
+            (
+                "empty-entry-shadows-absolute",
+                ":{bin}",
+                &["cwd", "bin"],
+                false,
+            ),
             ("empty-path", "", &["cwd"], false),
             (
                 "relative-shadows-absolute",
