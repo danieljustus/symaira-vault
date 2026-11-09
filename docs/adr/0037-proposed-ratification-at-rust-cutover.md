@@ -573,6 +573,15 @@ persistent connection. Findings:
   request (not from the end of the headers), write budget starting when the
   headers are complete (a body finishing after `write_timeout` gets no
   response), idle not bounded by any budget.
+- **Replay client ordering (hosted-CI finding, no server change).** On a slow
+  macOS runner `header-ends-after-read-budget-body-together` closed at 3.5 s
+  instead of idling. The filler dribble (last byte at 1450 ms) and the 1500 ms
+  step were separate threads; a descheduled dribble thread delivered its `x`
+  bytes behind the finished request, which the server correctly treats as the
+  start of a second request bound by `read_header_timeout` (1500 + 2000 ms).
+  Go behaves identically for that byte order. The replay client now sends the
+  merged timeline from one thread (it may run late, never reorders), so the
+  compared byte order is always the recorded one.
 - 13 probes end, on the Go side, in the handler's `400 invalid_client_metadata`
   envelope after a body-read timeout where Rust closes without a response. This
   is the ADR 0024 decision ("Go's optional body-timeout error ... Rust
