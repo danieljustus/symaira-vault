@@ -877,6 +877,13 @@
    "ref": null,
    "value": "2f0eb79be70febfa74544200a22d75adda2ea78aa74ca0391272d311314c008a"
   },
+  "testdata/port/mcp/autotype-run-command.json#/oracle#program_sha256": {
+   "kind": "other",
+   "class": "recorded",
+   "algo": "claimed",
+   "ref": null,
+   "value": "813b385d37619fdbd27acedacd0601b9e7788a04aa009d5bccfe2be7814cf141"
+  },
   "testdata/port/mcp/clipboard-auto-clear.json#/oracle#generator_hash": {
    "kind": "generator",
    "class": "recomputed",
