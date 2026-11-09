@@ -399,7 +399,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: "http-write-macos-latest"
-          path: "target/native-http-write.json\ntarget/native-tls-output.json\ntarget/native-tls-output-mutation.json\ntarget/native-tls-output-mutation.mutant.json\ntarget/native-write-tests.txt\ntarget/native-write-cli-owner.txt\ntarget/native-oracle-process-tests.txt\ntarget/native-winsock-metadata.json\ntarget/native-winsock-schema.json\ntarget/native-winsock-loss.json\n"
+          path: "target/native-http-write.json\ntarget/native-tls-output.json\ntarget/native-tls-output-mutation.json\ntarget/native-tls-output-mutation.mutant.json\ntarget/native-write-tests.txt\ntarget/native-write-cli-owner.txt\ntarget/native-oracle-process-tests.txt\n"
           if-no-files-found: "error"
       - name: "[HTTP absolute write deadlines] reset worktree between satellites"
         id: reset-write

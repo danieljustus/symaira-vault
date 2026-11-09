@@ -111,8 +111,6 @@ SATELLITES = {
     'scripts/rust-port/http_write_contract.py',
     'scripts/rust-port/http_write_mutation.py',
     'scripts/rust-port/test_http_write_contract.py',
-    'scripts/rust-port/http_winsock_metadata.py',
-    'scripts/rust-port/http_winsock_stop.cpp',
     'scripts/rust-port/http_oauth*',
     'scripts/rust-port/http_process*',
     'scripts/rust-port/mcp_process_contract.py',

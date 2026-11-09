@@ -1717,29 +1717,20 @@ mcp-execute-api-https-differential: mcp-execute-api-https-fixtures-check
 # CLI-007 (#1242): real SIGINT/SIGTERM/SIGHUP/SIGQUIT delivery to the actual Go
 # oracle (pinned in the driver, built from `git archive`) and the Rust CLI for
 # broker, run, run --broker and intake watch: ending status, output, listener,
-# orphaned child and on-disk state. Windows Ctrl-Break is covered by
-# egress_contract.py / intake_watch_contract.py; this Unix driver is skipped there.
+# orphaned child and on-disk state. Windows is out of scope (#1550).
 # Set SIGNAL_PROCESS_ARGS=--allow-dirty-for-development for an uncommitted candidate.
 SIGNAL_PROCESS_ARGS ?=
 .PHONY: signal-process-differential
 signal-process-differential:
-ifeq ($(OS),Windows_NT)
-	@echo "SKIP Unix signal process contract: Windows Ctrl-Break evidence comes from egress_contract.py and intake_watch_contract.py"
-else
 	python3 -B scripts/rust-port/test_signal_process_contract.py
 	$(CARGO) build -p symvault-cli --bin symvault --locked
 	python3 -B scripts/rust-port/signal_process_contract.py \
 		--rust "$(RUST_BINARY)" \
 		--receipt "$(CARGO_TARGET_DIR)/native-signals.json" $(SIGNAL_PROCESS_ARGS)
-endif
 
 .PHONY: mcp-copy-clipboard-fixtures-check mcp-copy-clipboard-differential mcp-clipboard-signals-differential
 mcp-clipboard-signals-differential:
-ifeq ($(OS),Windows_NT)
-	@echo "SKIP Unix clipboard signal contract: native Windows signal behavior remains unverified"
-else
 	$(CARGO) test -p symvault-platform --lib --locked -- approval::tests::stdio_clipboard_signal_router_process_contract --exact
-endif
 
 mcp-copy-clipboard-fixtures-check: mcp-ordered-fixtures-check
 
