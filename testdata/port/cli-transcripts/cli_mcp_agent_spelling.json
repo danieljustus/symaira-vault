@@ -1,0 +1,1116 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "ce2390d748818a4beb413e97183b7795efa99411",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
+  "tests": {
+    "mcp_agent_spelling_matches_go_in_an_empty_sandbox": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "582d261e0064854629b9592be1bf1e7aa6f58e99e56f4f46b3e6f803a8d481a5",
+          "request": {
+            "args": [
+              "mcp",
+              "agent"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+            },
+            "exit_code": 3,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "4ad19d67c69a0a53c8baf44c938ba516628e858b833ac039c3babd449fd2e026",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+            },
+            "exit_code": 3,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "c6a4e6f5532b3887fc7aa998707a1f44c62e2a17639056de5e7f3097bcf3200d",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "install"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+            },
+            "exit_code": 3,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "52360ac950512935c14d55a314369f4e76256e5d238647b707256a8df1d76ad1",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "list",
+              "x",
+              "y"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+            },
+            "exit_code": 3,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b0a87f7f8a159fb960d85f6bf40cffc10c7a9c6863c5ec2d70eb4b4680261e8b",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "bogus"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+            },
+            "exit_code": 3,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ea277cd38174420e1774148ab1194bcb9d697182277433db9559ee07a77bd659",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "list",
+              "--quiet"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+            },
+            "exit_code": 3,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "fc9494c1c078eb35b4faf91d35da1708d2bfeb817e380e325ace40e833722b31",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "list",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: output format \"json\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+            },
+            "exit_code": 9,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "60cbda110688577c9ddff67d352779748fe32577e87da1fb3455e1e44538e606",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "install",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: output format \"json\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+            },
+            "exit_code": 9,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ab9ea9dffd768365ae28e599901ff0ebc26b9b2a2f476c59b10e37aae2848f2c",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "list",
+              "--output",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: output format \"json\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+            },
+            "exit_code": 9,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "1b75a24bfc8c7e712a0357b8add9c1759328b27af5fbeed3e0aba5da3f31adb3",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "list",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: output format \"yaml\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"yaml\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+            },
+            "exit_code": 9,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "aedaf6e363816454eccfe27e863c877bdc92621613e833f87b05e0fd68f37994",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "list",
+              "--output",
+              "xml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: output format \"xml\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"xml\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+            },
+            "exit_code": 9,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "6dcf3293ad53d9f93ade347fb5baad117828fa4c9f1f4222afc387efc2652cd3",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "install",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: output format \"yaml\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"yaml\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+            },
+            "exit_code": 9,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "6f5e5bd1e3a3de8113c305e38f0ec7c04032739e262abdb4153952537e71edf5",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "list",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Start an MCP server that exposes vault operations to AI agents.\n\nEach agent must be configured in the agents section of the config file\n(default: <ROOT:0>/root/config/symaira-vault/config.yaml; existing installs may use the legacy\n~/.symvault/config.yaml) with specific permissions and scope restrictions.\n\nThe server can run in stdio mode or HTTP mode.\n\nUsage:\n  symvault mcp [flags]\n  symvault mcp [command]\n\nExamples:\n  # stdio mode for a single agent (called by MCP clients directly, canonical)\n  symvault mcp --stdio --agent claude-code\n\n  # HTTP mode bound to localhost:<PORT:0>\n  symvault mcp --bind 127.0.0.1 --port <PORT:0>\n\n  # Install as a system service (macOS launchd or systemd)\n  symvault mcp install\n\nAvailable Commands:\n  install     Install MCP server as a background service\n  status      Show MCP server service status\n  uninstall   Remove the MCP server background service\n\nFlags:\n      --agent string      Agent name (required for --stdio; HTTP mode resolves agents per-request via X-Symaira-Agent header)\n      --allow-locked      Allow the MCP server to start even when the vault is locked (stdio mode only)\n      --bind string       Bind address for HTTP server (default \"127.0.0.1\")\n  -h, --help              help for mcp\n      --port int          Server port (default <PORT:0>)\n      --stdio             Enable stdio transport (for MCP)\n      --tls-ca string     CA certificate file path for mTLS client verification (enables mTLS)\n      --tls-cert string   TLS certificate file path (overrides config)\n      --tls-key string    TLS key file path (overrides config)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault mcp [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "70faeedeffb34aa5b59a1097ae56bb0847ee460ab1b50d1db0c669b2a626e68a",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "install",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Start an MCP server that exposes vault operations to AI agents.\n\nEach agent must be configured in the agents section of the config file\n(default: <ROOT:0>/root/config/symaira-vault/config.yaml; existing installs may use the legacy\n~/.symvault/config.yaml) with specific permissions and scope restrictions.\n\nThe server can run in stdio mode or HTTP mode.\n\nUsage:\n  symvault mcp [flags]\n  symvault mcp [command]\n\nExamples:\n  # stdio mode for a single agent (called by MCP clients directly, canonical)\n  symvault mcp --stdio --agent claude-code\n\n  # HTTP mode bound to localhost:<PORT:0>\n  symvault mcp --bind 127.0.0.1 --port <PORT:0>\n\n  # Install as a system service (macOS launchd or systemd)\n  symvault mcp install\n\nAvailable Commands:\n  install     Install MCP server as a background service\n  status      Show MCP server service status\n  uninstall   Remove the MCP server background service\n\nFlags:\n      --agent string      Agent name (required for --stdio; HTTP mode resolves agents per-request via X-Symaira-Agent header)\n      --allow-locked      Allow the MCP server to start even when the vault is locked (stdio mode only)\n      --bind string       Bind address for HTTP server (default \"127.0.0.1\")\n  -h, --help              help for mcp\n      --port int          Server port (default <PORT:0>)\n      --stdio             Enable stdio transport (for MCP)\n      --tls-ca string     CA certificate file path for mTLS client verification (enables mTLS)\n      --tls-cert string   TLS certificate file path (overrides config)\n      --tls-key string    TLS key file path (overrides config)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault mcp [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "3cc4060d57b8a48e3646fef0505b26c539fd643e666ce20f0a6b51b85f221bb0",
+          "request": {
+            "args": [
+              "mcp",
+              "--output",
+              "yaml",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: output format \"yaml\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"yaml\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+            },
+            "exit_code": 9,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "950c23679c4f97d54c0411a5ec4956ac36b7f95dc41a519cb4c5f4c9a58a828d",
+          "request": {
+            "args": [
+              "--output",
+              "yaml",
+              "mcp",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: output format \"yaml\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"yaml\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+            },
+            "exit_code": 9,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "3cbcdbf5edd56686106d535aab78d56c944d5e19f22beca76a07f832922ce662",
+          "request": {
+            "args": [
+              "--json",
+              "mcp",
+              "agent",
+              "install"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: output format \"json\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+            },
+            "exit_code": 9,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "mcp_agent_spelling_matches_go_in_an_initialized_vault": {
+      "seeds": [
+        {
+          "name": "init",
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n\tignorecase = true\n\tprecomposeunicode = true\n[user]\n\tname = Symaira Vault\n\temail = symvault@example.com\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/description",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "Unnamed repository; edit this file 'description' to name the repository.\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/info/exclude",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n# For a project mostly in C, the following would be a good set of\n# exclude patterns (uncomment them if you want to use them):\n# *.[oa]\n# *~\n/.symvault-rust\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.gitignore",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault-rust",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"schema\": 1,\n  \"kind\": \"rust-created\",\n  \"created_at\": \"2026-11-09T01:23:17.4169Z\",\n  \"vault_id\": \"af7898c469b18018973e13e041179893639be0617112ad32c6bfc7b49e0439c4\"\n}\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: false\nvaultDir: <ROOT:0>/root\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDdRakc4TDZPSHlPa2o3cHdqZzdoaXcgdD0zLG09NjU1MzYscD00CmJ1MGFUdVZMeWxlTW1KdU5NcTlwWFEwcVptUmNCMzJuQXdKUjRNUy8zWUwxMjFPMFVrazd1VzJoRXJNCi0+IF08WC1ncmVhc2UgOX43WCEKSWhGUVlmeTBJdwotLS0gNXBmY1R2L2tCWHNEd1g2WTRHWGc0Tmg5QTdCUktKZUNhaXZtY2JJL0VTUQo2eefiEVXuLtajjc4OV1UfFTIskoPVl9U264qaL51Z57vncGOtc+ZHPEBcetK0Em6mRZb3CJq/go6OiAgvxVzGhGgwilXWcK6LN2mJ7j7EyTEzkPUBe7T5JatestRniz7btADW9dfIvhJR"
+              }
+            }
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1quztanelf9gk6w8mjd3vpwyel6wehnvh0un8a00uassx722d8gvssdts8l\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
+        }
+      ],
+      "calls": [
+        {
+          "key": "89208cdc978ab1de867134ee4d0d23beaa561114b3f21db0b5e6847aca635813",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "list",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: output format \"json\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+            },
+            "exit_code": 9,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "c5e3bd6f7c26b28dc8a54cdff2467f960cba9140fd576269c47cc1bedfba35a8",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "install",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: output format \"yaml\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"yaml\" is not supported by 'symvault mcp' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+            },
+            "exit_code": 9,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b735d25d577a76c984143cf1ead2937a664992e127e18da6245435ce79fb1d09",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "list",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Start an MCP server that exposes vault operations to AI agents.\n\nEach agent must be configured in the agents section of the config file\n(default: <ROOT:1>/root/config/symaira-vault/config.yaml; existing installs may use the legacy\n~/.symvault/config.yaml) with specific permissions and scope restrictions.\n\nThe server can run in stdio mode or HTTP mode.\n\nUsage:\n  symvault mcp [flags]\n  symvault mcp [command]\n\nExamples:\n  # stdio mode for a single agent (called by MCP clients directly, canonical)\n  symvault mcp --stdio --agent claude-code\n\n  # HTTP mode bound to localhost:<PORT:0>\n  symvault mcp --bind 127.0.0.1 --port <PORT:0>\n\n  # Install as a system service (macOS launchd or systemd)\n  symvault mcp install\n\nAvailable Commands:\n  install     Install MCP server as a background service\n  status      Show MCP server service status\n  uninstall   Remove the MCP server background service\n\nFlags:\n      --agent string      Agent name (required for --stdio; HTTP mode resolves agents per-request via X-Symaira-Agent header)\n      --allow-locked      Allow the MCP server to start even when the vault is locked (stdio mode only)\n      --bind string       Bind address for HTTP server (default \"127.0.0.1\")\n  -h, --help              help for mcp\n      --port int          Server port (default <PORT:0>)\n      --stdio             Enable stdio transport (for MCP)\n      --tls-ca string     CA certificate file path for mTLS client verification (enables mTLS)\n      --tls-cert string   TLS certificate file path (overrides config)\n      --tls-key string    TLS key file path (overrides config)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault mcp [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f10356e17f6e0f9ced7bc60bde2c163fa6150afd710f94947f71be9182a4f82c",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "list",
+              "--stdio"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: --agent is required in --stdio mode\nError: --agent is required in --stdio mode\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "c39ecd3cd10308e0584773132e303f04ea62478ab1aef7337e49f3fb09fc45bb",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "install",
+              "--stdio"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: --agent is required in --stdio mode\nError: --agent is required in --stdio mode\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "422693b8303249e799425635726dd02f7198c2c9270c1c1d9003f2459bf92e76",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "list",
+              "--stdio",
+              "--agent",
+              "nosuch"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: stdio server: failed to create MCP server: agent \"nosuch\" not found\nError: stdio server: failed to create MCP server: agent \"nosuch\" not found\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/root\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBQK3g5K3RTUDIyak1waHpmU0drYW9ObHhwakFkeStXUjZvd2Z3U1NxOVVvCmxaeWJqc08rOUVhZ3lhb1g5dzZQbzBRMkJycWsyUGdCMGU4dm1zc0NFeVEKLS0tIDhwU0JjejJKSXF5T3hDbUR4UUI4NytZbzRlakdZNElLL0hhRGZiVEtZM00KwKTIssS1u/P/gtSCP3isax8nV1Eaaksff+jStdOE4dJAlwVLlM+NqBPLviYA17KdAnVT+52RBnV8cy0qTdJKRIEYkXEUYmaKZ8J3X3G/ZrK4KxtmRuXvp8EfawVL+jcgaSVQHAdaj6ZIOWT9dzhhJ6ZwuhKRsEoBb8TilAKgTqWM8k1195GN2S6L5EYDaD0deCuOSimKBtXC"
+              }
+            }
+          ]
+        },
+        {
+          "key": "aca739db3edfe9f6a5374256ebd5f5c1ae6e922d742d7b752c09597763dbeaa5",
+          "request": {
+            "args": [
+              "mcp",
+              "agent",
+              "--stdio",
+              "--agent",
+              "nosuch",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "LANG": "C",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-r5-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "TZ": "UTC",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: stdio server: failed to create MCP server: agent \"nosuch\" not found\nError: stdio server: failed to create MCP server: agent \"nosuch\" not found\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

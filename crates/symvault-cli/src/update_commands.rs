@@ -846,7 +846,12 @@ fn apply_stable_update(info: &InstallInfo, force: bool, want_json: bool) -> Exit
             return ExitCode::from(1);
         };
         if let Err(error) = update_apply::apply(release, &binary_path) {
-            let _ = writeln!(std::io::stderr(), "Error: apply update: {error}");
+            // Go wraps twice: `internal/update.Apply` ("apply update: %w") and
+            // the command ("apply update: %w").
+            let _ = writeln!(
+                std::io::stderr(),
+                "Error: apply update: apply update: {error}"
+            );
             return ExitCode::from(1);
         }
     }

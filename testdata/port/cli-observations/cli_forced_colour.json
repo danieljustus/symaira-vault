@@ -1,0 +1,497 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "ce2390d748818a4beb413e97183b7795efa99411",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "tests": {
+    "doctor_and_status_forced_colour_match_go_modulo_the_declared_difference": {
+      "auth-status-256color": {
+        "check_lines": {},
+        "escape_written": false,
+        "exit_code": 0,
+        "hint_styles": [],
+        "plain_check_lines": [],
+        "stdout_bytes_with_escape": false
+      },
+      "auth-status-forced": {
+        "check_lines": {},
+        "escape_written": false,
+        "exit_code": 0,
+        "hint_styles": [],
+        "plain_check_lines": [],
+        "stdout_bytes_with_escape": false
+      },
+      "clicolor-force": {
+        "check_lines": {
+          "Auth method": "\u001b[92m",
+          "File permissions": "\u001b[92m",
+          "Identity encrypted": "\u001b[92m",
+          "Vault config parses": "\u001b[92m",
+          "Vault config validates": "\u001b[92m",
+          "Vault initialized": "\u001b[92m"
+        },
+        "escape_written": true,
+        "exit_code": 0,
+        "hint_styles": [
+          "\u001b[90m"
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ✓  File permissions                         entries/=0700, identity.age=0600",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "clicolor-force-in-ci": {
+        "check_lines": {
+          "Auth method": "\u001b[92m",
+          "File permissions": "\u001b[92m",
+          "Identity encrypted": "\u001b[92m",
+          "Vault config parses": "\u001b[92m",
+          "Vault config validates": "\u001b[92m",
+          "Vault initialized": "\u001b[92m"
+        },
+        "escape_written": true,
+        "exit_code": 0,
+        "hint_styles": [
+          "\u001b[90m"
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ✓  File permissions                         entries/=0700, identity.age=0600",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "clicolor-force-no-color": {
+        "check_lines": {
+          "Auth method": "",
+          "File permissions": "",
+          "Identity encrypted": "",
+          "Vault config parses": "",
+          "Vault config validates": "",
+          "Vault initialized": ""
+        },
+        "escape_written": false,
+        "exit_code": 0,
+        "hint_styles": [
+          ""
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ✓  File permissions                         entries/=0700, identity.age=0600",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "clicolor-force-stdout-pipe": {
+        "check_lines": {
+          "Auth method": "\u001b[92m",
+          "File permissions": "\u001b[92m",
+          "Identity encrypted": "\u001b[92m",
+          "Vault config parses": "\u001b[92m",
+          "Vault config validates": "\u001b[92m",
+          "Vault initialized": "\u001b[92m"
+        },
+        "escape_written": true,
+        "exit_code": 0,
+        "hint_styles": [
+          "\u001b[90m"
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ✓  File permissions                         entries/=0700, identity.age=0600",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "clicolor-force-zero": {
+        "check_lines": {
+          "Auth method": "",
+          "File permissions": "",
+          "Identity encrypted": "",
+          "Vault config parses": "",
+          "Vault config validates": "",
+          "Vault initialized": ""
+        },
+        "escape_written": false,
+        "exit_code": 0,
+        "hint_styles": [
+          ""
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ✓  File permissions                         entries/=0700, identity.age=0600",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "clicolor-zero": {
+        "check_lines": {
+          "Auth method": "",
+          "File permissions": "",
+          "Identity encrypted": "",
+          "Vault config parses": "",
+          "Vault config validates": "",
+          "Vault initialized": ""
+        },
+        "escape_written": false,
+        "exit_code": 0,
+        "hint_styles": [
+          ""
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ✓  File permissions                         entries/=0700, identity.age=0600",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "failing-check-256color": {
+        "check_lines": {
+          "Auth method": "\u001b[38;5;82m",
+          "File permissions": "\u001b[38;5;220m",
+          "Identity encrypted": "\u001b[38;5;82m",
+          "Vault config parses": "\u001b[38;5;82m",
+          "Vault config validates": "\u001b[38;5;82m",
+          "Vault initialized": "\u001b[38;5;82m"
+        },
+        "escape_written": true,
+        "exit_code": 0,
+        "hint_styles": [
+          "\u001b[38;5;245m"
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ⚠  File permissions                         identity.age has mode 644 (expected 0600) (fixable — run with --fix)",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "failing-check-forced": {
+        "check_lines": {
+          "Auth method": "\u001b[92m",
+          "File permissions": "\u001b[93m",
+          "Identity encrypted": "\u001b[92m",
+          "Vault config parses": "\u001b[92m",
+          "Vault config validates": "\u001b[92m",
+          "Vault initialized": "\u001b[92m"
+        },
+        "escape_written": true,
+        "exit_code": 0,
+        "hint_styles": [
+          "\u001b[90m"
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ⚠  File permissions                         identity.age has mode 644 (expected 0600) (fixable — run with --fix)",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "flag-always": {
+        "check_lines": {
+          "Auth method": "",
+          "File permissions": "",
+          "Identity encrypted": "",
+          "Vault config parses": "",
+          "Vault config validates": "",
+          "Vault initialized": ""
+        },
+        "escape_written": false,
+        "exit_code": 0,
+        "hint_styles": [
+          ""
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ✓  File permissions                         entries/=0700, identity.age=0600",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "flag-always-with-force": {
+        "check_lines": {
+          "Auth method": "\u001b[92m",
+          "File permissions": "\u001b[92m",
+          "Identity encrypted": "\u001b[92m",
+          "Vault config parses": "\u001b[92m",
+          "Vault config validates": "\u001b[92m",
+          "Vault initialized": "\u001b[92m"
+        },
+        "escape_written": true,
+        "exit_code": 0,
+        "hint_styles": [
+          "\u001b[90m"
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ✓  File permissions                         entries/=0700, identity.age=0600",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "flag-never-with-force": {
+        "check_lines": {
+          "Auth method": "\u001b[92m",
+          "File permissions": "\u001b[92m",
+          "Identity encrypted": "\u001b[92m",
+          "Vault config parses": "\u001b[92m",
+          "Vault config validates": "\u001b[92m",
+          "Vault initialized": "\u001b[92m"
+        },
+        "escape_written": true,
+        "exit_code": 0,
+        "hint_styles": [
+          "\u001b[90m"
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ✓  File permissions                         entries/=0700, identity.age=0600",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "pipe-out-term-256color": {
+        "check_lines": {
+          "Auth method": "",
+          "File permissions": "",
+          "Identity encrypted": "",
+          "Vault config parses": "",
+          "Vault config validates": "",
+          "Vault initialized": ""
+        },
+        "escape_written": false,
+        "exit_code": 0,
+        "hint_styles": [
+          ""
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ✓  File permissions                         entries/=0700, identity.age=0600",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "term-256color-in-ci": {
+        "check_lines": {
+          "Auth method": "",
+          "File permissions": "",
+          "Identity encrypted": "",
+          "Vault config parses": "",
+          "Vault config validates": "",
+          "Vault initialized": ""
+        },
+        "escape_written": false,
+        "exit_code": 0,
+        "hint_styles": [
+          ""
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ✓  File permissions                         entries/=0700, identity.age=0600",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "tty-force-color-3": {
+        "check_lines": {
+          "Auth method": "\u001b[38;5;82m",
+          "File permissions": "\u001b[38;5;82m",
+          "Identity encrypted": "\u001b[38;5;82m",
+          "Vault config parses": "\u001b[38;5;82m",
+          "Vault config validates": "\u001b[38;5;82m",
+          "Vault initialized": "\u001b[38;5;82m"
+        },
+        "escape_written": true,
+        "exit_code": 0,
+        "hint_styles": [
+          "\u001b[38;5;245m"
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ✓  File permissions                         entries/=0700, identity.age=0600",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "tty-no-term": {
+        "check_lines": {
+          "Auth method": "",
+          "File permissions": "",
+          "Identity encrypted": "",
+          "Vault config parses": "",
+          "Vault config validates": "",
+          "Vault initialized": ""
+        },
+        "escape_written": false,
+        "exit_code": 0,
+        "hint_styles": [
+          ""
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ✓  File permissions                         entries/=0700, identity.age=0600",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "tty-term-256color": {
+        "check_lines": {
+          "Auth method": "\u001b[38;5;82m",
+          "File permissions": "\u001b[38;5;82m",
+          "Identity encrypted": "\u001b[38;5;82m",
+          "Vault config parses": "\u001b[38;5;82m",
+          "Vault config validates": "\u001b[38;5;82m",
+          "Vault initialized": "\u001b[38;5;82m"
+        },
+        "escape_written": true,
+        "exit_code": 0,
+        "hint_styles": [
+          "\u001b[38;5;245m"
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ✓  File permissions                         entries/=0700, identity.age=0600",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "tty-term-dumb": {
+        "check_lines": {
+          "Auth method": "",
+          "File permissions": "",
+          "Identity encrypted": "",
+          "Vault config parses": "",
+          "Vault config validates": "",
+          "Vault initialized": ""
+        },
+        "escape_written": false,
+        "exit_code": 0,
+        "hint_styles": [
+          ""
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ✓  File permissions                         entries/=0700, identity.age=0600",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "tty-term-xterm": {
+        "check_lines": {
+          "Auth method": "\u001b[92m",
+          "File permissions": "\u001b[92m",
+          "Identity encrypted": "\u001b[92m",
+          "Vault config parses": "\u001b[92m",
+          "Vault config validates": "\u001b[92m",
+          "Vault initialized": "\u001b[92m"
+        },
+        "escape_written": true,
+        "exit_code": 0,
+        "hint_styles": [
+          "\u001b[90m"
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ✓  File permissions                         entries/=0700, identity.age=0600",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      },
+      "tty-truecolor": {
+        "check_lines": {
+          "Auth method": "\u001b[38;5;82m",
+          "File permissions": "\u001b[38;5;82m",
+          "Identity encrypted": "\u001b[38;5;82m",
+          "Vault config parses": "\u001b[38;5;82m",
+          "Vault config validates": "\u001b[38;5;82m",
+          "Vault initialized": "\u001b[38;5;82m"
+        },
+        "escape_written": true,
+        "exit_code": 0,
+        "hint_styles": [
+          "\u001b[38;5;245m"
+        ],
+        "plain_check_lines": [
+          " ✓  Vault initialized                        config.yaml and identity.age present",
+          " ✓  Vault config parses                      config.yaml loads without errors",
+          " ✓  Vault config validates                   config.yaml passes validation",
+          " ✓  Identity encrypted                       identity.age is age-encrypted",
+          " ✓  File permissions                         entries/=0700, identity.age=0600",
+          " ✓  Auth method                              auth method: passphrase"
+        ],
+        "stdout_bytes_with_escape": false
+      }
+    },
+    "tui_forced_colour_is_recorded_as_go_evidence": {
+      "go-tui-sgr": {
+        "enters_alternate_screen": true,
+        "sgr_sequences": [
+          "ESC[0m",
+          "ESC[1;38;5;212m",
+          "ESC[38;5;220m",
+          "ESC[38;5;240m"
+        ]
+      }
+    }
+  }
+}

@@ -1699,6 +1699,63 @@ fn bare_dashes_before(tokens: &[String], flags: Flags<'_>, lenient: bool) -> Vec
     found
 }
 
+/// Subcommand words of the `mcp`/`serve` server command.
+const SERVER_GROUP_WORDS: [&str; 4] = ["install", "status", "uninstall", "token"];
+
+/// cobra's `Find` looks at the first positional only: `mcp agent install` resolves to
+/// `mcp` with the positionals `agent install` (ADR 0037 R5). clap keeps scanning and
+/// would still pick `install` as the subcommand of `mcp`, which for `install` would
+/// write a launchd/systemd unit. Every later positional that names a subcommand is
+/// replaced by a lone `-`: the server handler never reads its positionals.
+fn demote_server_group_words(
+    args: Vec<std::ffi::OsString>,
+    strings: &[String],
+    resolution: &Resolution<'_>,
+    root: &Command,
+) -> Vec<std::ffi::OsString> {
+    let node = &resolution.current;
+    let is_server = matches!(node.path.as_slice(), [word] if word == "mcp" || word == "serve");
+    let (Some(command), Some(word), true) = (node.command, resolution.last_word, is_server) else {
+        return args;
+    };
+    if !matches!(resolution.stop, Stop::Resolved) {
+        return args;
+    }
+    let flags = Flags { command, root };
+    let mut rewritten = args;
+    let mut index = word + 1;
+    let mut seen_positional = false;
+    while index < strings.len() {
+        let token = &strings[index];
+        if token == "--" {
+            break;
+        }
+        let takes_value = if let Some(name) = token.strip_prefix("--") {
+            !token.contains('=') && flags.long(name).is_some_and(eats_next)
+        } else if token.starts_with('-') && token.len() == 2 && !token.contains('=') {
+            token
+                .chars()
+                .nth(1)
+                .and_then(|c| flags.short(c))
+                .is_some_and(eats_next)
+        } else {
+            false
+        };
+        if takes_value {
+            index += 2;
+            continue;
+        }
+        if !token.starts_with('-') || token == "-" {
+            if seen_positional && SERVER_GROUP_WORDS.contains(&token.as_str()) {
+                rewritten[index + 1] = std::ffi::OsString::from("-");
+            }
+            seen_positional = true;
+        }
+        index += 1;
+    }
+    rewritten
+}
+
 /// The arguments clap should parse. cobra skips a lone `-` while it resolves the command
 /// and hands it to the resolved command as a positional (`- list`, `share - list`), but
 /// clap reads it as the first positional of the parent and never reaches the subcommand.
@@ -1713,12 +1770,21 @@ pub fn clap_arguments(args: Vec<std::ffi::OsString>, mut root: Command) -> Vec<s
     else {
         return args;
     };
-    if !strings.iter().any(|token| token == "-") {
+    let has_dash = strings.iter().any(|token| token == "-");
+    if !has_dash
+        && !strings
+            .iter()
+            .any(|token| SERVER_GROUP_WORDS.contains(&token.as_str()))
+    {
         return args;
     }
     root.build();
     let resolution = resolve(&strings, &root);
     if matches!(resolution.stop, Stop::Unknown(_)) {
+        return args;
+    }
+    let args = demote_server_group_words(args, &strings, &resolution, &root);
+    if !has_dash {
         return args;
     }
     let Some(word) = resolution.last_word else {
@@ -3139,6 +3205,41 @@ mod tests {
             .skip(1)
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect()
+    }
+
+    /// ADR 0037 R5: cobra resolves `mcp agent install` to `mcp` with the
+    /// positionals `agent install`; clap must not see `install` as a subcommand.
+    #[test]
+    fn mcp_positionals_that_name_subcommands_stay_positionals() {
+        // A subcommand as the first positional is still the subcommand.
+        assert_eq!(clap_args(&["mcp", "install"]), ["mcp", "install"]);
+        assert_eq!(
+            clap_args(&["mcp", "--bind", "x", "status"]),
+            ["mcp", "--bind", "x", "status"]
+        );
+        // Later words are positionals (flag values are not positionals).
+        assert_eq!(
+            clap_args(&["mcp", "agent", "install"]),
+            ["mcp", "agent", "-"]
+        );
+        assert_eq!(
+            clap_args(&["serve", "x", "--agent", "install", "status", "token"]),
+            ["serve", "x", "--agent", "install", "-", "-"]
+        );
+        assert_eq!(
+            clap_args(&["mcp", "agent", "uninstall", "--stdio"]),
+            ["mcp", "agent", "-", "--stdio"]
+        );
+        // After `--` clap already reads positionals.
+        assert_eq!(
+            clap_args(&["mcp", "x", "--", "install"]),
+            ["mcp", "x", "--", "install"]
+        );
+        // Other groups keep their words.
+        assert_eq!(
+            clap_args(&["agent", "x", "install"]),
+            ["agent", "x", "install"]
+        );
     }
 
     #[test]

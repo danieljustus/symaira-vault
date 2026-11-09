@@ -438,9 +438,9 @@ maintainer accepts it as a gap in a later ADR.
 | R1 | CLI-005 | **Closed 2026-11-09.** Suggestion order for inputs with two or more suggestions. Recorded from `legacy/go-oracle` (`ce2390d7`): 1967 inputs (every 1-edit typo of every command name that suggests two or more commands, all one- and two-letter words, 44 two-edit witnesses covering every pair of commands a word can reach) in `suggestion_order_matches_go_for_every_colliding_input`, `testdata/port/cli-transcripts/cli_error_residuals.json`. The 1967 answers fit one total order, which is cobra's registration order (`version`, the `admin`, `auth`, `crud`, `file`, `intakecmd`, `mcp` groups, the commands of `cmd/root.go`, then `completion`); 273 ordered pairs are observed. The old Rust table was a partial order measured from an older oracle and differed from Go in 4 of the 1601 first inputs (`ait`, `auit`, `int`, `seth`). **Rust fix:** `SUGGESTION_ORDER` in `cobra_usage.rs` is now the registration order. Nested groups and `help` suggest nothing in Go (10 recorded shapes) | finite command set |
 | R2 | CLI-005 | **Closed 2026-11-09.** `get -` and `get - x` against a vault the oracle initialized: `bare_dash_get_matches_go_in_the_go_initialized_vault`, `testdata/port/cli-transcripts/cli_error_residuals.json` (22 calls in three frozen Go-made vaults: several matches, one match, none; `get -`, `get - x`, `get x -`, `get -- -`, `--json`/`--output yaml` forms, `- get -`). Rust matched Go in all 22; no Rust change | two scenarios |
 | R3 | CLI-005 | **Closed 2026-11-09.** The not-initialized shape for every runnable path of `command-tree.json` (90 of 116 paths run, 26 excluded with a reason in `EXCLUDED`) plus 45 approval/file/device/auth variants in an empty sandbox: `not_initialized_shapes_match_go_for_every_runnable_command`, `testdata/port/cli-transcripts/cli_error_residuals.json` (135 calls, 61 of them `vault not initialized`). Rust differed in three places, all fixed: `approval decide` without exactly one of `--approve`/`--deny` and `file get` without (or with an empty) `--out` reached the vault check first (Go: exit 1 / exit 9 before it), and ten paths with a missing `config.yaml` or policy file worded the cause as Rust I/O text (`agent doctor|profile export|profile show|uninstall|upgrade`, `agent profile edit` also asked for the config before the editor, `profile use`, `policy apply|validate`). **New residual R21** (below): four paths in a sandbox without the vault directory | finite command list |
-| R4 | CLI-006 | `update apply/check/info` live-release and network branches (hermetic fake release server) | three commands |
-| R5 | CLI-006 | the `mcp agent …` spelling, where Go resolves `mcp agent list` to `mcp` with positionals | one family; check the 116 gate rows first |
-| R6 | CLI-006 | forced-colour output of `doctor`, `status` and the TUI (else ratify as cosmetic) | finite commands |
+| R4 | CLI-006 | `update apply/check/info` live-release and network branches (hermetic fake release server) | **CLOSED** (see "Closed R items"). three commands |
+| R5 | CLI-006 | the `mcp agent …` spelling, where Go resolves `mcp agent list` to `mcp` with positionals | **CLOSED**. one family; check the 116 gate rows first |
+| R6 | CLI-006 | forced-colour output of `doctor`, `status` and the TUI (else ratify as cosmetic) | **CLOSED** (colour ratification candidate). finite commands |
 | R7 | PLATFORM-001 | Linux clipboard `signal: <name>` text with fake tools that die by signal | one path |
 | R8 | PLATFORM-001 | spawn-error text for non-ENOENT failures (EACCES, ENOEXEC) | two errnos |
 | R9 | PLATFORM-001 | scripted y/n answers to `resolveConfig` prompts of the remaining vault-opening commands | finite command list |
@@ -448,14 +448,63 @@ maintainer accepts it as a gap in a later ADR.
 | R11 | IO-002 | gzip first-member `FNAME`/`FEXTRA`/`FCOMMENT`/`FHCRC` headers | four header flags |
 | R12 | IO-002 | the 1 MiB cap for the other tar special headers (`g`, `K`) | two header types |
 | R13 | MCP-003 | `autotype` and `run_command` handler texts (hand-written expectations today) | two tools |
-| R14 | CLI-003 | printed `broker --passthrough` list and `intake watch` interval text for unusual literals, from signal-ended runs | two commands |
-| R15 | CLI-003 | effective `unlock --ttl` against a persistent session cache | one flag |
+| R14 | CLI-003 | printed `broker --passthrough` list and `intake watch` interval text for unusual literals, from signal-ended runs | **CLOSED**. two commands |
+| R15 | CLI-003 | effective `unlock --ttl` against a persistent session cache | **CLOSED**. one flag |
 | R16 | HTTP-003 | remaining OAuth expiry boundaries (code, access, refresh, DCR client) | four boundaries |
 | R17 | HTTP-004 | combinations of configured header, body, idle and write budgets | finite budgets |
 | R18 | HTTP-004 | TLS server identity rotation, client revocation and expiration | three cases |
 | R19 | BROKER-002 | prompt/biometry diagnostics and tool-name context of `execute_api_request`; whether the template-open check is race-proof in Go | unmeasured, bounded |
 | R20 | CLI-005 | **Closed 2026-11-09.** Alias after a redefined anchor: `alias_after_a_redefined_anchor_matches_go`, `testdata/port/cli-transcripts/cli_error_residuals.json` (10 configs x 4 commands). Go resolves to the definition in force at the alias; Rust (last definition) agrees whenever the alias stands after the last definition, which is the case this item asked for. The earlier-alias divergence stays ADR 0034 item 5; see the section above | one case |
 | R21 | CLI-005 | new, from the R3 sweep: in a sandbox without the vault directory `agent token new`, `agent token rotate`, `agent token revoke` and `share revoke` fail in Rust with `failed to read <dir>: No such file or directory (os error 2)`; Go reads the registry as empty (`token "x" not found or already revoked`, `share grant x not found`) or fails at the write of `mcp-tokens.json.tmp-<random>`. Pinned by `OPEN` in `cli_error_residuals.rs`; the test fails when one starts to match. Not fixed here: the store opens its root capability before the registry | four commands |
+
+### Closed R items (local/r-cli006, oracle `ce2390d7`)
+
+Each item below is recorded from the archived Go oracle and replayed against
+the native binary; every recording is in the `FROZEN.sha256` set and passes
+`recordings_have_no_operator_paths`. Rows stay below `PASS (local)` only for
+the declared differences named here.
+
+| # | Test (`crates/symvault-cli/tests/`) | Recording | Result |
+|---|---|---|---|
+| R4 | `cli_update_live_release.rs::update_live_release_matches_go` | `testdata/port/cli-observations/cli_update_live_release.json` | 44 cases; text and JSON modes; 2 Rust fixes; 2 declared differences (below) |
+| R5 | `cli_mcp_agent_spelling.rs::mcp_agent_spelling_matches_go_in_an_empty_sandbox`, `..._in_an_initialized_vault` | `testdata/port/cli-transcripts/cli_mcp_agent_spelling.json` | 24 calls; 1 Rust fix (cobra `Find` for `mcp` subcommand words) |
+| R6 | `cli_forced_colour.rs::doctor_and_status_forced_colour_match_go_modulo_the_declared_difference`, `tui_forced_colour_is_recorded_as_go_evidence` | `testdata/port/cli-observations/cli_forced_colour.json` | 21 doctor/`auth status` cases; 1 declared difference (colour) |
+| R14 | `cli_signal_literals.rs::broker_passthrough_literals_match_go`, `intake_watch_interval_literals_match_go` | `testdata/port/cli-observations/cli_signal_literals.json` | 54 signal-ended runs, all equal; no Rust change |
+| R15 | `cli_unlock_ttl.rs::unlock_ttl_matches_go_against_the_keychain` | `testdata/port/cli-observations/cli_unlock_ttl.json` | 33 cases; 4 Rust fixes |
+
+Differences left open, for the maintainer's decision:
+
+- **R4, transport wording (recommend R, cosmetic).** A failed fetch prints the
+  HTTP stack's own text after the product prefix (`Get "<url>": dial tcp:
+  lookup ...: no such host` in Go, `error sending request for url (<url>)` in
+  Rust). The test reduces both to `<TRANSPORT>`; prefix, step name, exit code
+  and streams are compared exactly.
+- **R4, first asset URL host check (recommend R, security-motivated).** Go
+  checks the host and scheme of *redirects* of a release asset only; a cached
+  release record that points the first request at `http://127.0.0.1:...` or
+  `https://example.invalid/...` is fetched. Rust refuses any asset URL that is
+  not HTTPS on a GitHub host before any request:
+  `Error: apply update: apply update: updateapply: release asset URL must use
+  HTTPS on a GitHub host`. Seven cases (`DECLARED_HOST_CHECK`) pin Go's text as
+  different and Rust's text exactly; the test fails if Rust starts matching Go.
+- **R4, not reachable hermetically.** The release endpoint is a hard-coded
+  `https://api.github.com` URL and Go's client ignores `HTTPS_PROXY`; the
+  HTTP-status and decode branches of its answer sit behind TLS and stay with
+  `update_commands.rs::http_tests` (Rust, loopback) and Go's own unit tests.
+  The test therefore runs every case under a `sandbox-exec` profile that
+  denies non-loopback network access and is macOS-only; it builds a
+  `SYMVAULT_VERSION=1.0.0` binary into `CARGO_TARGET_TMPDIR` (about 30 s on a
+  warm cache; `SYMVAULT_STABLE_BINARY` names a prebuilt one).
+- **R6, colour (recommend R, cosmetic).** Go colours `doctor` lines when stderr
+  is a terminal and stdout's lipgloss profile is not Ascii (`CLICOLOR_FORCE`
+  not `0`, or `TERM`/`COLORTERM`; `CI`, `NO_COLOR`, `CLICOLOR=0`, `TERM=dumb`
+  switch it off); `--color` is parsed but never reaches `cliout`. The native
+  `doctor` never emits ANSI: 11 forced-colour cases are pinned as
+  `DECLARED_UNCOLOURED` (identical text and exit status, no escape byte), and
+  the test fails when the native output starts to colour. The TUI's SGR set is
+  Go evidence only: the native TUI needs a terminal that answers
+  cursor-position requests and its layout is pinned by `tui-harness-check`, so
+  no deterministic Go-versus-Rust colour comparison exists for it.
 
 ## Implement items (not ratified)
 
