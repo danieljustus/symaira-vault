@@ -1,0 +1,1344 @@
+{
+  "adr": "0037 R17 / HTTP-004",
+  "elapsed": "rounded to the nearest 500ms; the client observes the first EOF/reset; a probe that is still open at max_ms ends with terminal=cap",
+  "idle_timeout": "constant 120s (http.go IdleTimeout), not configurable; persistent-connection probe shows configured budgets do not bound idleness",
+  "oracle_commit": "ce2390d748818a4beb413e97183b7795efa99411",
+  "profiles": [
+    {
+      "id": "h1000-r3000-w2000",
+      "read_header_timeout_ms": 1000,
+      "read_timeout_ms": 3000,
+      "write_timeout_ms": 2000,
+      "probes": [
+        {
+          "id": "normal",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 1500
+        },
+        {
+          "id": "idle-persistent",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            },
+            {
+              "at_ms": 2500,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 4500
+        },
+        {
+          "id": "header-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "body-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 4096\r\n\r\n"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": " ",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-500ms-then-body-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: x\r\n"
+            },
+            {
+              "at_ms": 500,
+              "data": "Content-Type: application/json\r\nContent-Length: 4096\r\n\r\n"
+            }
+          ],
+          "dribble": {
+            "from_ms": 550,
+            "byte": " ",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-ends-after-read-budget-body-together",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            },
+            {
+              "at_ms": 3500,
+              "data": "\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50,
+            "until_ms": 3450
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-ends-after-read-budget-body-100ms-later",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            },
+            {
+              "at_ms": 3500,
+              "data": "\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n"
+            },
+            {
+              "at_ms": 3600,
+              "data": "                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50,
+            "until_ms": 3450
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "body-completes-after-write-budget",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    "
+            },
+            {
+              "at_ms": 2500,
+              "data": "{\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 7000
+        }
+      ],
+      "results": {
+        "body-completes-after-write-budget": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 2500,
+          "responses": null
+        },
+        "body-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 3000,
+          "responses": null
+        },
+        "header-500ms-then-body-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 3000,
+          "responses": null
+        },
+        "header-ends-after-read-budget-body-100ms-later": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 1000,
+          "responses": null
+        },
+        "header-ends-after-read-budget-body-together": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 1000,
+          "responses": null
+        },
+        "header-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 1000,
+          "responses": null
+        },
+        "idle-persistent": {
+          "terminal": "cap",
+          "elapsed_bucket_ms": 4500,
+          "responses": [
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e",
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e"
+          ]
+        },
+        "normal": {
+          "terminal": "cap",
+          "elapsed_bucket_ms": 1500,
+          "responses": [
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e"
+          ]
+        }
+      }
+    },
+    {
+      "id": "h1000-r2000-w3000",
+      "read_header_timeout_ms": 1000,
+      "read_timeout_ms": 2000,
+      "write_timeout_ms": 3000,
+      "probes": [
+        {
+          "id": "normal",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 1500
+        },
+        {
+          "id": "idle-persistent",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            },
+            {
+              "at_ms": 2500,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 4500
+        },
+        {
+          "id": "header-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "body-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 4096\r\n\r\n"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": " ",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-500ms-then-body-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: x\r\n"
+            },
+            {
+              "at_ms": 500,
+              "data": "Content-Type: application/json\r\nContent-Length: 4096\r\n\r\n"
+            }
+          ],
+          "dribble": {
+            "from_ms": 550,
+            "byte": " ",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-ends-after-read-budget-body-together",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            },
+            {
+              "at_ms": 2500,
+              "data": "\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50,
+            "until_ms": 2450
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-ends-after-read-budget-body-100ms-later",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            },
+            {
+              "at_ms": 2500,
+              "data": "\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n"
+            },
+            {
+              "at_ms": 2600,
+              "data": "                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50,
+            "until_ms": 2450
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "body-completes-after-write-budget",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    "
+            },
+            {
+              "at_ms": 3500,
+              "data": "{\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 7000
+        }
+      ],
+      "results": {
+        "body-completes-after-write-budget": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 2000,
+          "responses": [
+            "HTTP/1.1 400 Bad Request | {\"error\":\"invalid_client_metadata\"}"
+          ]
+        },
+        "body-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 2000,
+          "responses": [
+            "HTTP/1.1 400 Bad Request | {\"error\":\"invalid_client_metadata\"}"
+          ]
+        },
+        "header-500ms-then-body-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 2000,
+          "responses": [
+            "HTTP/1.1 400 Bad Request | {\"error\":\"invalid_client_metadata\"}"
+          ]
+        },
+        "header-ends-after-read-budget-body-100ms-later": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 1000,
+          "responses": null
+        },
+        "header-ends-after-read-budget-body-together": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 1000,
+          "responses": null
+        },
+        "header-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 1000,
+          "responses": null
+        },
+        "idle-persistent": {
+          "terminal": "cap",
+          "elapsed_bucket_ms": 4500,
+          "responses": [
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e",
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e"
+          ]
+        },
+        "normal": {
+          "terminal": "cap",
+          "elapsed_bucket_ms": 1500,
+          "responses": [
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e"
+          ]
+        }
+      }
+    },
+    {
+      "id": "h2000-r1000-w3000",
+      "read_header_timeout_ms": 2000,
+      "read_timeout_ms": 1000,
+      "write_timeout_ms": 3000,
+      "probes": [
+        {
+          "id": "normal",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 1500
+        },
+        {
+          "id": "idle-persistent",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            },
+            {
+              "at_ms": 2500,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 4500
+        },
+        {
+          "id": "header-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "body-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 4096\r\n\r\n"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": " ",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-500ms-then-body-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: x\r\n"
+            },
+            {
+              "at_ms": 500,
+              "data": "Content-Type: application/json\r\nContent-Length: 4096\r\n\r\n"
+            }
+          ],
+          "dribble": {
+            "from_ms": 550,
+            "byte": " ",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-ends-after-read-budget-body-together",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            },
+            {
+              "at_ms": 1500,
+              "data": "\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50,
+            "until_ms": 1450
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-ends-after-read-budget-body-100ms-later",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            },
+            {
+              "at_ms": 1500,
+              "data": "\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n"
+            },
+            {
+              "at_ms": 1600,
+              "data": "                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50,
+            "until_ms": 1450
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "body-completes-after-write-budget",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    "
+            },
+            {
+              "at_ms": 3500,
+              "data": "{\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 7000
+        }
+      ],
+      "results": {
+        "body-completes-after-write-budget": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 1000,
+          "responses": [
+            "HTTP/1.1 400 Bad Request | {\"error\":\"invalid_client_metadata\"}"
+          ]
+        },
+        "body-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 1000,
+          "responses": [
+            "HTTP/1.1 400 Bad Request | {\"error\":\"invalid_client_metadata\"}"
+          ]
+        },
+        "header-500ms-then-body-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 1000,
+          "responses": [
+            "HTTP/1.1 400 Bad Request | {\"error\":\"invalid_client_metadata\"}"
+          ]
+        },
+        "header-ends-after-read-budget-body-100ms-later": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 1500,
+          "responses": [
+            "HTTP/1.1 400 Bad Request | {\"error\":\"invalid_client_metadata\"}"
+          ]
+        },
+        "header-ends-after-read-budget-body-together": {
+          "terminal": "cap",
+          "elapsed_bucket_ms": 7000,
+          "responses": [
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e"
+          ]
+        },
+        "header-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 2000,
+          "responses": null
+        },
+        "idle-persistent": {
+          "terminal": "cap",
+          "elapsed_bucket_ms": 4500,
+          "responses": [
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e",
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e"
+          ]
+        },
+        "normal": {
+          "terminal": "cap",
+          "elapsed_bucket_ms": 1500,
+          "responses": [
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e"
+          ]
+        }
+      }
+    },
+    {
+      "id": "h2000-r3000-w1000",
+      "read_header_timeout_ms": 2000,
+      "read_timeout_ms": 3000,
+      "write_timeout_ms": 1000,
+      "probes": [
+        {
+          "id": "normal",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 1500
+        },
+        {
+          "id": "idle-persistent",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            },
+            {
+              "at_ms": 2500,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 4500
+        },
+        {
+          "id": "header-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "body-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 4096\r\n\r\n"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": " ",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-500ms-then-body-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: x\r\n"
+            },
+            {
+              "at_ms": 500,
+              "data": "Content-Type: application/json\r\nContent-Length: 4096\r\n\r\n"
+            }
+          ],
+          "dribble": {
+            "from_ms": 550,
+            "byte": " ",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-ends-after-read-budget-body-together",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            },
+            {
+              "at_ms": 3500,
+              "data": "\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50,
+            "until_ms": 3450
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-ends-after-read-budget-body-100ms-later",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            },
+            {
+              "at_ms": 3500,
+              "data": "\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n"
+            },
+            {
+              "at_ms": 3600,
+              "data": "                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50,
+            "until_ms": 3450
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "body-completes-after-write-budget",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    "
+            },
+            {
+              "at_ms": 1500,
+              "data": "{\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 7000
+        }
+      ],
+      "results": {
+        "body-completes-after-write-budget": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 1500,
+          "responses": null
+        },
+        "body-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 3000,
+          "responses": null
+        },
+        "header-500ms-then-body-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 3000,
+          "responses": null
+        },
+        "header-ends-after-read-budget-body-100ms-later": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 2000,
+          "responses": null
+        },
+        "header-ends-after-read-budget-body-together": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 2000,
+          "responses": null
+        },
+        "header-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 2000,
+          "responses": null
+        },
+        "idle-persistent": {
+          "terminal": "cap",
+          "elapsed_bucket_ms": 4500,
+          "responses": [
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e",
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e"
+          ]
+        },
+        "normal": {
+          "terminal": "cap",
+          "elapsed_bucket_ms": 1500,
+          "responses": [
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e"
+          ]
+        }
+      }
+    },
+    {
+      "id": "h3000-r1000-w2000",
+      "read_header_timeout_ms": 3000,
+      "read_timeout_ms": 1000,
+      "write_timeout_ms": 2000,
+      "probes": [
+        {
+          "id": "normal",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 1500
+        },
+        {
+          "id": "idle-persistent",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            },
+            {
+              "at_ms": 2500,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 4500
+        },
+        {
+          "id": "header-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "body-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 4096\r\n\r\n"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": " ",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-500ms-then-body-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: x\r\n"
+            },
+            {
+              "at_ms": 500,
+              "data": "Content-Type: application/json\r\nContent-Length: 4096\r\n\r\n"
+            }
+          ],
+          "dribble": {
+            "from_ms": 550,
+            "byte": " ",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-ends-after-read-budget-body-together",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            },
+            {
+              "at_ms": 1500,
+              "data": "\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50,
+            "until_ms": 1450
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-ends-after-read-budget-body-100ms-later",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            },
+            {
+              "at_ms": 1500,
+              "data": "\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n"
+            },
+            {
+              "at_ms": 1600,
+              "data": "                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50,
+            "until_ms": 1450
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "body-completes-after-write-budget",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    "
+            },
+            {
+              "at_ms": 2500,
+              "data": "{\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 7000
+        }
+      ],
+      "results": {
+        "body-completes-after-write-budget": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 1000,
+          "responses": [
+            "HTTP/1.1 400 Bad Request | {\"error\":\"invalid_client_metadata\"}"
+          ]
+        },
+        "body-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 1000,
+          "responses": [
+            "HTTP/1.1 400 Bad Request | {\"error\":\"invalid_client_metadata\"}"
+          ]
+        },
+        "header-500ms-then-body-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 1000,
+          "responses": [
+            "HTTP/1.1 400 Bad Request | {\"error\":\"invalid_client_metadata\"}"
+          ]
+        },
+        "header-ends-after-read-budget-body-100ms-later": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 1500,
+          "responses": [
+            "HTTP/1.1 400 Bad Request | {\"error\":\"invalid_client_metadata\"}"
+          ]
+        },
+        "header-ends-after-read-budget-body-together": {
+          "terminal": "cap",
+          "elapsed_bucket_ms": 7000,
+          "responses": [
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e"
+          ]
+        },
+        "header-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 3000,
+          "responses": null
+        },
+        "idle-persistent": {
+          "terminal": "cap",
+          "elapsed_bucket_ms": 4500,
+          "responses": [
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e",
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e"
+          ]
+        },
+        "normal": {
+          "terminal": "cap",
+          "elapsed_bucket_ms": 1500,
+          "responses": [
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e"
+          ]
+        }
+      }
+    },
+    {
+      "id": "h3000-r2000-w1000",
+      "read_header_timeout_ms": 3000,
+      "read_timeout_ms": 2000,
+      "write_timeout_ms": 1000,
+      "probes": [
+        {
+          "id": "normal",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 1500
+        },
+        {
+          "id": "idle-persistent",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            },
+            {
+              "at_ms": 2500,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 4500
+        },
+        {
+          "id": "header-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "body-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 4096\r\n\r\n"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": " ",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-500ms-then-body-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: x\r\n"
+            },
+            {
+              "at_ms": 500,
+              "data": "Content-Type: application/json\r\nContent-Length: 4096\r\n\r\n"
+            }
+          ],
+          "dribble": {
+            "from_ms": 550,
+            "byte": " ",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-ends-after-read-budget-body-together",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            },
+            {
+              "at_ms": 2500,
+              "data": "\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50,
+            "until_ms": 2450
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-ends-after-read-budget-body-100ms-later",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            },
+            {
+              "at_ms": 2500,
+              "data": "\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n"
+            },
+            {
+              "at_ms": 2600,
+              "data": "                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50,
+            "until_ms": 2450
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "body-completes-after-write-budget",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    "
+            },
+            {
+              "at_ms": 1500,
+              "data": "{\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 7000
+        }
+      ],
+      "results": {
+        "body-completes-after-write-budget": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 1500,
+          "responses": null
+        },
+        "body-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 2000,
+          "responses": null
+        },
+        "header-500ms-then-body-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 2000,
+          "responses": null
+        },
+        "header-ends-after-read-budget-body-100ms-later": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 2500,
+          "responses": [
+            "HTTP/1.1 400 Bad Request | {\"error\":\"invalid_client_metadata\"}"
+          ]
+        },
+        "header-ends-after-read-budget-body-together": {
+          "terminal": "cap",
+          "elapsed_bucket_ms": 7000,
+          "responses": [
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e"
+          ]
+        },
+        "header-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 3000,
+          "responses": null
+        },
+        "idle-persistent": {
+          "terminal": "cap",
+          "elapsed_bucket_ms": 4500,
+          "responses": [
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e",
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e"
+          ]
+        },
+        "normal": {
+          "terminal": "cap",
+          "elapsed_bucket_ms": 1500,
+          "responses": [
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e"
+          ]
+        }
+      }
+    },
+    {
+      "id": "h2000-r2000-w2000",
+      "read_header_timeout_ms": 2000,
+      "read_timeout_ms": 2000,
+      "write_timeout_ms": 2000,
+      "probes": [
+        {
+          "id": "normal",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 1500
+        },
+        {
+          "id": "idle-persistent",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            },
+            {
+              "at_ms": 2500,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 4500
+        },
+        {
+          "id": "header-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "body-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 4096\r\n\r\n"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": " ",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-500ms-then-body-slow-forever",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: x\r\n"
+            },
+            {
+              "at_ms": 500,
+              "data": "Content-Type: application/json\r\nContent-Length: 4096\r\n\r\n"
+            }
+          ],
+          "dribble": {
+            "from_ms": 550,
+            "byte": " ",
+            "interval_ms": 50
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-ends-after-read-budget-body-together",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            },
+            {
+              "at_ms": 2500,
+              "data": "\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50,
+            "until_ms": 2450
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "header-ends-after-read-budget-body-100ms-later",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+            },
+            {
+              "at_ms": 2500,
+              "data": "\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n"
+            },
+            {
+              "at_ms": 2600,
+              "data": "                    {\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "dribble": {
+            "from_ms": 50,
+            "byte": "x",
+            "interval_ms": 50,
+            "until_ms": 2450
+          },
+          "max_ms": 7000
+        },
+        {
+          "id": "body-completes-after-write-budget",
+          "steps": [
+            {
+              "at_ms": 0,
+              "data": "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 61\r\n\r\n                    "
+            },
+            {
+              "at_ms": 2500,
+              "data": "{\"redirect_uris\":[\"http://localhost/cb\"]}"
+            }
+          ],
+          "max_ms": 7000
+        }
+      ],
+      "results": {
+        "body-completes-after-write-budget": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 2000,
+          "responses": null
+        },
+        "body-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 2000,
+          "responses": null
+        },
+        "header-500ms-then-body-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 2000,
+          "responses": [
+            "HTTP/1.1 400 Bad Request | {\"error\":\"invalid_client_metadata\"}"
+          ]
+        },
+        "header-ends-after-read-budget-body-100ms-later": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 2000,
+          "responses": null
+        },
+        "header-ends-after-read-budget-body-together": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 2000,
+          "responses": null
+        },
+        "header-slow-forever": {
+          "terminal": "closed",
+          "elapsed_bucket_ms": 2000,
+          "responses": null
+        },
+        "idle-persistent": {
+          "terminal": "cap",
+          "elapsed_bucket_ms": 4500,
+          "responses": [
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e",
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e"
+          ]
+        },
+        "normal": {
+          "terminal": "cap",
+          "elapsed_bucket_ms": 1500,
+          "responses": [
+            "HTTP/1.1 201 Created | \u003cclient registration\u003e"
+          ]
+        }
+      }
+    }
+  ],
+  "schema": "symvault.port.http-budget-combinations/1",
+  "source": "legacy/go-oracle internal/mcp/serverbootstrap/http.go (RunHTTPServerOnListener), http_setup.go (resolveServerTimeouts)"
+}

@@ -1861,9 +1861,12 @@ fn read_wire_request(
         reader
             .get_mut()
             .set_read_timeout(Some(timeouts.initial_read))?;
-        reader.get_mut().set_read_deadline(
-            request_started.checked_add(timeouts.initial_read.min(timeouts.request_read)),
-        );
+        // Go (net/http `readRequest`): the header deadline is ReadHeaderTimeout
+        // alone, even when it exceeds ReadTimeout; the whole-request deadline
+        // only replaces it once the headers are complete (ADR 0037 R17).
+        reader
+            .get_mut()
+            .set_read_deadline(request_started.checked_add(timeouts.initial_read));
     }
     let Some(first) = read_bounded_line(reader, MAX_HTTP_REQUEST_LINE)? else {
         return Ok(None);
