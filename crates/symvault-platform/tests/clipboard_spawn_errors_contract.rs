@@ -128,6 +128,21 @@ fn run_scenario(obs: &Observation) -> (Option<String>, Option<String>, String) {
     )
 }
 
+/// The Go recording ran where the kernel wrote no core (the gate container).
+/// Where a core is written (hosted runners pipe cores to apport), WCOREDUMP is
+/// set and Go's `ProcessState.String` and Rust both append " (core dumped)"
+/// (ADR 0037 item 22). Accept exactly that suffix on top of the recorded text,
+/// nothing else; `RLIMIT_CORE` cannot pin it because piped core patterns
+/// ignore the limit.
+fn strip_core_dumped(actual: Option<String>, recorded: &Option<String>) -> Option<String> {
+    match (&actual, recorded) {
+        (Some(text), Some(go)) if text.strip_suffix(" (core dumped)") == Some(go.as_str()) => {
+            recorded.clone()
+        }
+        _ => actual,
+    }
+}
+
 fn replay(group: &str, expected_cases: usize) {
     let document = document();
     assert_eq!(document.oracle.go_version, "go1.26.6");
@@ -154,6 +169,10 @@ fn replay(group: &str, expected_cases: usize) {
     let mut differences = Vec::new();
     for obs in &run.observations {
         let (copy, read, value) = run_scenario(obs);
+        let (copy, read) = (
+            strip_core_dumped(copy, &obs.result.copy_error),
+            strip_core_dumped(read, &obs.result.read_error),
+        );
         if copy != obs.result.copy_error {
             differences.push(format!(
                 "{}: copy {:?} != Go {:?}",
@@ -195,4 +214,16 @@ fn clipboard_tool_ended_by_signal_matches_go() {
 #[test]
 fn clipboard_tool_spawn_failure_matches_go() {
     replay("spawn", if cfg!(target_os = "linux") { 8 } else { 6 });
+}
+
+#[test]
+fn core_dumped_suffix_is_the_only_tolerated_extra() {
+    let go = Some("signal: segmentation fault".to_owned());
+    let with_core = Some("signal: segmentation fault (core dumped)".to_owned());
+    assert_eq!(strip_core_dumped(with_core, &go), go);
+    let other = Some("signal: segmentation fault (dumped)".to_owned());
+    assert_eq!(strip_core_dumped(other.clone(), &go), other);
+    let unrelated = Some("signal: aborted (core dumped)".to_owned());
+    assert_eq!(strip_core_dumped(unrelated.clone(), &go), unrelated);
+    assert_eq!(strip_core_dumped(None, &go), None);
 }
