@@ -542,6 +542,17 @@ replay: `e2e-csv-many-rows` failing with `failed to read .git/objects/<xx>: No s
 from the store (valid paths, not touched by this slice; reran green 20+ times, also with the pre-change
 binary) - treat as a pre-existing store/Git race if it recurs.
 
+Resolved (#1568, diagnosed 2026-11-09): the store scanned the vault root with `rooted::walk_root` and
+descended into `.git`. A detached `git gc --auto` (the assumed trigger: git runs it after a commit and it outlives
+the git command; not observed directly) packs loose objects and removes `.git/objects/<xx>`, so a directory reported by `readdir` was gone
+before `openat`/`getdents` (`StoreError::Read`, ENOENT). Go's legacy scan never enters `.git`
+(`filepath.SkipDir`). Commit `33d8aad0` (after the 2026-10-31 observation at `fbc2a4b1`) already prunes `.git`
+outside `entries/` in `walk_vault_root_with_limits` (entry candidates, layout detection). New regression
+`vault_root_walk_survives_git_object_directories_vanishing` churns `.git/objects/<xx>` against 2000 scans; with
+the prune disabled it fails at once with the exact `failed to read .../.git/objects/27: No such file or
+directory`. `Store::files()` (full manifest, not used by the CLI/MCP paths) still walks `.git`; it is a
+diagnostic API, so its semantics are unchanged.
+
 ## IO-001 pass importer against real gpg, 2026-10-31
 
 `passgpggen` (new, oracle `fca3f894`, sources `internal/importer/{importer,pass,totp}.go`,

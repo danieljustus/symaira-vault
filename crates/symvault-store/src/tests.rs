@@ -2367,6 +2367,52 @@ fn vault_root_walk_skips_git_like_go_legacy_scan() {
     );
 }
 
+/// Issue #1568: `git gc --auto` (detached, so it outlives the git command that
+/// started it) packs loose objects and removes `.git/objects/<xx>` while the
+/// vault root is scanned. A scan that descended into `.git` saw `readdir`
+/// report a directory that had vanished before it was opened and failed with
+/// `failed to read .git/objects/<xx>: No such file or directory`. Churn the
+/// object directories the way gc does and require every vault-root scan to
+/// succeed.
+#[cfg(unix)]
+#[test]
+fn vault_root_walk_survives_git_object_directories_vanishing() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let temp = tempfile::tempdir().unwrap();
+    let objects = temp.path().join(".git/objects");
+    fs::create_dir_all(&objects).unwrap();
+    fs::create_dir_all(temp.path().join("entries")).unwrap();
+    fs::write(temp.path().join("entries/a.age"), b"1").unwrap();
+    for index in 0..64 {
+        fs::create_dir_all(objects.join(format!("{index:02x}"))).unwrap();
+    }
+    let stop = Arc::new(AtomicBool::new(false));
+    let churn = {
+        let objects = objects.clone();
+        let stop = Arc::clone(&stop);
+        thread::spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                for index in 0..64 {
+                    let directory = objects.join(format!("{index:02x}"));
+                    let _ = fs::remove_dir(&directory);
+                    let _ = fs::create_dir(&directory);
+                }
+            }
+        })
+    };
+    let root = fs::File::open(temp.path()).unwrap();
+    let mut failure = None;
+    for _ in 0..2000 {
+        if let Err(error) = rooted::walk_vault_root_with_limits(&root, temp.path(), None, None) {
+            failure = Some(error.to_string());
+            break;
+        }
+    }
+    stop.store(true, Ordering::Relaxed);
+    churn.join().unwrap();
+    assert_eq!(failure, None);
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 struct Store004Fixture {
     schema_version: u32,
