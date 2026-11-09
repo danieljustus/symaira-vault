@@ -196,6 +196,8 @@ enum Command {
         broker_strict: bool,
         #[arg(long, allow_hyphen_values = true)]
         broker_passthrough: Vec<String>,
+        #[arg(long, allow_hyphen_values = true)]
+        broker_templates: Vec<String>,
         #[arg(required = true, num_args = 1..)]
         command: Vec<String>,
     },
@@ -209,6 +211,8 @@ enum Command {
         strict: bool,
         #[arg(long, allow_hyphen_values = true)]
         passthrough: Vec<String>,
+        #[arg(long, allow_hyphen_values = true)]
+        templates: Vec<String>,
         #[arg(hide = true)]
         _args: Vec<String>,
     },
@@ -1814,9 +1818,12 @@ fn run_cli() -> ExitCode {
             broker,
             broker_strict,
             broker_passthrough,
+            broker_templates,
             command,
         }) => {
             let result = (|| {
+                let broker_templates =
+                    broker_commands::parse_templates("--broker-templates", &broker_templates)?;
                 let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                 require_initialized(&root)?;
                 let identity = device::unlock_vault(&root)?;
@@ -1862,6 +1869,7 @@ fn run_cli() -> ExitCode {
                         &identity,
                         broker_strict,
                         &cobra_usage::string_slice_flag(&broker_passthrough, &[]),
+                        broker_templates,
                         execute,
                     )?
                 } else {
@@ -1897,9 +1905,11 @@ fn run_cli() -> ExitCode {
             addr,
             strict,
             passthrough,
+            templates,
             ..
         }) => {
             let result = (|| {
+                let templates = broker_commands::parse_templates("--templates", &templates)?;
                 let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                 require_initialized(&root)?;
                 let identity = device::unlock_vault(&root)?;
@@ -1912,6 +1922,7 @@ fn run_cli() -> ExitCode {
                     &addr,
                     strict,
                     &cobra_usage::string_slice_flag(&passthrough, &[]),
+                    templates,
                 )
             })();
             if let Err(error) = &result

@@ -1328,6 +1328,22 @@ finding is resolved in the current candidate.
 
 The current help walk found no Rust-only path at depth 3.
 
+## Rust-only flags
+
+Two local flags exist only in the Rust CLI (danieljustus/symaira-vault#1554):
+`run --broker-templates name[,name]` and `broker --templates name[,name]`, which
+limit the egress broker to the named API templates. The frozen Go artifacts
+(`testdata/port/cli/artifacts.json`, `command-tree.json`) are not edited. The
+overlay `RUST_ONLY_FLAGS` in `crates/symvault-cli/src/cli_artifacts.rs` adds the
+flag to the flag inventory (`--help` parsing, `__complete`), to the `--help`
+page and to the generated manual page. Every Go-parity comparison declares the
+exact text it adds and still fails on any other difference:
+`cli_generate_manpages.rs` (`DECLARED_ADDITIONS`), `completions.rs`
+(`DECLARED_ADDITIONS`), `scripts/rust-port/cli_artifacts_contract.py`
+(`RUST_ONLY_*`) and `crates/symvault-cli/tests/broker_templates.rs`, which pins
+the lines against the frozen pages. `cligap.py` reports no flag gap and no
+Rust-only path for them (it only looks for Go flags missing in Rust).
+
 ## Deliberate non-claims
 
 - Argument-count probes from the oracle tree are not replayed. Clap and Cobra

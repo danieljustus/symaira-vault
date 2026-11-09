@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `symvault run --broker --broker-templates name[,name]` and `symvault broker
+  --templates name[,name]` restrict the egress broker to the named API templates
+  (built-in or vault-local). Hosts of any other template are treated as hosts
+  without a template: 403 with `--strict`, otherwise forwarded without
+  credential injection. Unknown or empty names are refused before the broker
+  listens (#1554).
+
 ### Removed
 - Go implementation, Go CI/release jobs; Rust-only. CI, release, packaging and
   developer tooling no longer need a Go toolchain: the `setup-go`, golangci-lint,

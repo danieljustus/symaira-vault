@@ -186,6 +186,50 @@ for kind, args in [('int', ['add', '--length']),
         PARSER_REQUESTS.append((f'{kind}-quoted-{name}', words))
 
 
+# Rust-only local flags (#1554) the frozen Go artifacts predate. The Rust CLI
+# documents them in `--help` and in the manual pages (overlay
+# `RUST_ONLY_FLAGS` in crates/symvault-cli/src/cli_artifacts.rs); the exact text
+# it adds is declared here and removed before the byte comparison, so any other
+# difference from the Go artifacts still fails. Pinned from the Rust side by
+# crates/symvault-cli/tests/broker_templates.rs.
+RUN_TEMPLATES_USAGE = ('With --broker: inject credentials only for these templates (comma-separated, '
+                       'built-in or vault-local names); other template hosts are treated as hosts without a template')
+BROKER_TEMPLATES_USAGE = ('Inject credentials only for these templates (comma-separated, built-in or '
+                          'vault-local names); other template hosts are treated as hosts without a template')
+RUST_ONLY_HELP = {
+    'symvault run': f'      --broker-templates strings     {RUN_TEMPLATES_USAGE}\n',
+    'symvault broker': f'      --templates strings     {BROKER_TEMPLATES_USAGE}\n',
+}
+# Each manual entry sits in OPTIONS between two `.PP` separators (or at the end).
+RUST_ONLY_COMPLETION = {  # case name -> the candidate line added to its flag listing
+    'symvault run/-': f'--broker-templates\t{RUN_TEMPLATES_USAGE}\n',
+    'symvault broker/-': f'--templates\t{BROKER_TEMPLATES_USAGE}\n',
+}
+RUST_ONLY_MAN = {
+    'symvault-run.1': (f'\\fB--broker-templates\\fP=[]\n\t{RUN_TEMPLATES_USAGE}', 'inner'),
+    'symvault-broker.1': (f'\\fB--templates\\fP=[]\n\t{BROKER_TEMPLATES_USAGE}', 'last'),
+}
+
+
+def without_rust_only_help(path, text):
+    line = RUST_ONLY_HELP.get(path)
+    if line is None:
+        return text
+    assert text.count(line) == 1, ('declared Rust-only help line missing', path)
+    return text.replace(line, '')
+
+
+def without_rust_only_man(name, text):
+    declared = RUST_ONLY_MAN.get(name)
+    if declared is None:
+        return text
+    entry, where = declared
+    # An entry inside OPTIONS is followed by its separator; the last one is preceded by it.
+    block = entry + '\n\n.PP\n' if where == 'inner' else '\n\n.PP\n' + entry
+    assert text.count(block) == 1, ('declared Rust-only manual entry missing', name)
+    return text.replace(block, '')
+
+
 def validate_observations(observations, commands):
     declared = requests(commands)
     assert len(observations) == len(declared), 'missing or extra Go completion observation'
@@ -200,7 +244,8 @@ def verify_rust(binary, artifact, base, env):
     config_path = str(Path(env['XDG_CONFIG_HOME'])/'symaira-vault/config.yaml')
     for path, expected in artifact['help'].items():
         result = execute([binary, *path.split()[1:], '--help'], base, env)
-        assert result.stdout.decode().replace(config_path,'__CONFIG_PATH__') == expected and not result.stderr, ('help', path)
+        actual = without_rust_only_help(path, result.stdout.decode().replace(config_path,'__CONFIG_PATH__'))
+        assert actual == expected and not result.stderr, ('help', path)
     counts['help_pages'] = len(artifact['help'])
     for key, expected in artifact['completions'].items():
         shell, mode = key.split('/')
@@ -212,7 +257,7 @@ def verify_rust(binary, artifact, base, env):
     man = base / 'rust-man'
     result = execute([binary, 'generate', 'manpages', man], base, env)
     assert not result.stderr
-    actual = {p.name: normalized_man(p,config_path) for p in sorted(man.glob('*.1'))}
+    actual = {p.name: without_rust_only_man(p.name, normalized_man(p,config_path)) for p in sorted(man.glob('*.1'))}
     assert actual == artifact['manpages'], 'all manual filenames and bytes must match real Go'
     counts['manuals'] = len(actual)
     queries = validate_observations(artifact['entry_completions'], artifact['commands'])
@@ -220,7 +265,12 @@ def verify_rust(binary, artifact, base, env):
     for case in queries:
         result = execute([binary, '--vault', 'absent-vault', '__complete', *case['args']], base, env)
         assert result.returncode == 0, ('protocol exit', case['name'], result.returncode)
-        assert result.stdout.decode() == case['stdout'], ('protocol', case['name'], result.stdout)
+        stdout = result.stdout.decode()
+        extra = RUST_ONLY_COMPLETION.get(case['name'])
+        if extra is not None:
+            assert stdout.count(extra) == 1, ('declared Rust-only completion missing', case['name'])
+            stdout = stdout.replace(extra, '')
+        assert stdout == case['stdout'], ('protocol', case['name'], result.stdout)
         assert result.stderr.decode() == case['stderr'], ('protocol stderr', case['name'])
         executed.append(case['name'])
     assert executed == [c['name'] for c in queries], 'completion execution inventory changed'

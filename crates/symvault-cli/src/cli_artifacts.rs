@@ -47,6 +47,146 @@ pub static DATA: LazyLock<Artifacts> = LazyLock::new(|| {
         .expect("verified Go CLI artifact schema")
 });
 
+/// A local flag the Rust CLI has and the frozen Go artifacts (`artifacts.json`,
+/// which must stay byte-identical) do not. The overlay adds it to the flag
+/// inventory (help parsing, shell completion), to the `--help` page and to the
+/// generated manual page, so the public surface documents it.
+/// `crates/symvault-cli/tests/rust_only_flags.rs` pins the exact lines it adds,
+/// and the Go parity checks (`cli_generate_manpages`, `cli_artifacts_contract.py`)
+/// declare the same additions.
+pub struct RustOnlyFlag {
+    pub path: &'static str,
+    pub name: &'static str,
+    /// pflag type name shown in help (`strings`, `string`, ...).
+    pub help_type: &'static str,
+    /// pflag type recorded in the flag inventory (`stringSlice`, ...).
+    pub kind: &'static str,
+    /// Default shown by the manual page (`[]`, `\"\"`, ...).
+    pub man_default: &'static str,
+    pub usage: &'static str,
+}
+
+pub const RUST_ONLY_FLAGS: &[RustOnlyFlag] = &[
+    RustOnlyFlag {
+        path: "symvault run",
+        name: "broker-templates",
+        help_type: "strings",
+        kind: "stringSlice",
+        man_default: "=[]",
+        usage: "With --broker: inject credentials only for these templates (comma-separated, built-in or vault-local names); other template hosts are treated as hosts without a template",
+    },
+    RustOnlyFlag {
+        path: "symvault broker",
+        name: "templates",
+        help_type: "strings",
+        kind: "stringSlice",
+        man_default: "=[]",
+        usage: "Inject credentials only for these templates (comma-separated, built-in or vault-local names); other template hosts are treated as hosts without a template",
+    },
+];
+
+static RUST_ONLY_INVENTORY: LazyLock<Vec<(&'static str, Flag)>> = LazyLock::new(|| {
+    RUST_ONLY_FLAGS
+        .iter()
+        .map(|extra| {
+            (
+                extra.path,
+                Flag {
+                    name: extra.name.to_owned(),
+                    shorthand: String::new(),
+                    usage: extra.usage.to_owned(),
+                    kind: extra.kind.to_owned(),
+                    no_opt_default: String::new(),
+                    hidden: false,
+                    deprecated: String::new(),
+                    annotations: None,
+                },
+            )
+        })
+        .collect()
+});
+
+/// The `--help` page of `path`: the frozen Go page plus the Rust-only flags.
+pub fn help_page(path: &str) -> Option<std::borrow::Cow<'static, str>> {
+    let page = DATA.help.get(path)?;
+    let extras: Vec<_> = RUST_ONLY_FLAGS.iter().filter(|f| f.path == path).collect();
+    if extras.is_empty() {
+        return Some(std::borrow::Cow::Borrowed(page));
+    }
+    let mut lines: Vec<String> = page.split_inclusive('\n').map(str::to_owned).collect();
+    let start = lines.iter().position(|l| l == "Flags:\n")? + 1;
+    let end = start + lines[start..].iter().position(|l| l == "\n")?;
+    // cobra aligns every usage text at one column; `help for` is always there.
+    let column = lines[start..end]
+        .iter()
+        .find_map(|line| line.find("help for "))?;
+    for extra in extras {
+        let label = format!("--{} {}", extra.name, extra.help_type);
+        assert!(
+            label.len() + 9 <= column,
+            "{label} overflows the help column"
+        );
+        let line = format!("      {label:<width$}{}\n", extra.usage, width = column - 6);
+        let end = start + lines[start..].iter().position(|l| l == "\n")?;
+        let at = lines[start..end]
+            .iter()
+            .position(|existing| help_flag_name(existing).is_some_and(|name| name > extra.name))
+            .map_or(end, |offset| start + offset);
+        lines.insert(at, line);
+    }
+    Some(std::borrow::Cow::Owned(lines.concat()))
+}
+
+/// Long name of one `Flags:` line (`  -e, --env stringArray   ...`).
+fn help_flag_name(line: &str) -> Option<&str> {
+    let rest = line.trim_start().strip_prefix("-")?;
+    let rest = if rest.starts_with('-') {
+        rest
+    } else {
+        rest.split_once(", ")?.1.strip_prefix('-')?
+    };
+    rest.strip_prefix('-')?.split(' ').next()
+}
+
+/// The manual page `name` (`symvault-run.1`): the frozen Go page plus the
+/// Rust-only flags in its `OPTIONS` section, in cobra's alphabetical order.
+pub fn manpage(name: &str, page: &str) -> String {
+    let path = name
+        .strip_suffix(".1")
+        .map(|stem| stem.replace('-', " "))
+        .unwrap_or_default();
+    let mut page = page.to_owned();
+    for extra in RUST_ONLY_FLAGS.iter().filter(|f| f.path == path) {
+        let Some(head) = page.find("\n.SH OPTIONS\n") else {
+            continue;
+        };
+        let body_start = head + "\n.SH OPTIONS\n".len();
+        let body_end = body_start + page[body_start..].find("\n\n\n.SH ").unwrap_or(0);
+        let entry = format!(
+            "\\fB--{}\\fP{}\n\t{}",
+            extra.name, extra.man_default, extra.usage
+        );
+        let mut entries: Vec<String> = page[body_start..body_end]
+            .split("\n\n.PP\n")
+            .map(str::to_owned)
+            .collect();
+        let at = entries
+            .iter()
+            .position(|existing| man_flag_name(existing).is_some_and(|n| n > extra.name))
+            .unwrap_or(entries.len());
+        entries.insert(at, entry);
+        page.replace_range(body_start..body_end, &entries.join("\n\n.PP\n"));
+    }
+    page
+}
+
+/// Long name of one manual `OPTIONS` entry (`\fB-e\fP, \fB--env\fP=[]`).
+fn man_flag_name(entry: &str) -> Option<&str> {
+    let first = entry.lines().next()?;
+    let (_, rest) = first.split_once("\\fB--")?;
+    rest.split("\\fP").next()
+}
+
 /// The generated description advertises the actual resolved config location.
 /// Keep the environment-derived path live rather than embedding capture HOME.
 pub fn render(text: &str) -> std::borrow::Cow<'_, str> {
@@ -140,7 +280,16 @@ pub fn flags(command: &'static Command) -> Vec<&'static Flag> {
         scope.push_str(part);
     }
     let mut local = BTreeMap::new();
-    for flag in command.persistent_flags.iter().chain(&command.local_flags) {
+    let extras = RUST_ONLY_INVENTORY
+        .iter()
+        .filter(|(path, _)| *path == command.path)
+        .map(|(_, flag)| flag);
+    for flag in command
+        .persistent_flags
+        .iter()
+        .chain(&command.local_flags)
+        .chain(extras)
+    {
         inherited.remove(flag.name.as_str());
         local.insert(flag.name.as_str(), flag);
     }

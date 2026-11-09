@@ -37,6 +37,9 @@ to each outbound request.
   values) before being returned to the agent.
 - **Unmatched hosts** (no template covers the host) are forwarded untouched
   by default. In `--strict` mode they are rejected with **403**.
+- **Template selection** (`--templates` / `--broker-templates`) narrows which
+  templates may release a credential at all; every other template's host is
+  then an unmatched host (see below).
 - **Passthrough hosts** (`--passthrough`) are tunneled without any TLS
   interception — the escape hatch for clients that pin certificates.
 
@@ -54,6 +57,10 @@ symvault broker --passthrough corporate.internal,legacy.example.com
 
 # One-shot: run a child command with the broker in-process
 symvault run --broker -- gh pr create
+
+# Release only the credentials this run needs: GitHub's, nothing else
+symvault run --broker --broker-strict --broker-templates github -- gh pr create
+symvault broker --strict --templates github,corp
 ```
 
 At startup the broker prints the environment to export into the agent's
@@ -92,6 +99,44 @@ allowed_methods: [ GET, POST ]
 
 Hosts not covered by any template are forwarded without injection (or
 rejected in strict mode).
+
+### Restricting the release to named templates
+
+By default every template in the catalog — all built-ins (`github`, `openai`,
+`anthropic`, `openrouter`, `gemini`, …) and everything in `<vault>/templates/`
+— can have its credential attached, so `--strict` alone only rejects hosts that
+have *no* template. A caller that needs one API can say so:
+
+| Command | Flag |
+| --- | --- |
+| `symvault run --broker` | `--broker-templates name[,name]` |
+| `symvault broker` | `--templates name[,name]` |
+
+The value is a comma-separated list of template names (a built-in name or the
+file name of `<vault>/templates/<name>.yaml` without `.yaml`); the flag may be
+repeated. When it is set, **only these templates are matched**. A request to the
+host of any other template is treated exactly like a request to a host without
+a template:
+
+| Request host | `--strict` | without `--strict` |
+| --- | --- | --- |
+| host of a selected template | credential injected | credential injected |
+| host of another template | **403**, upstream never contacted | forwarded **without** credential |
+| host without any template | **403** | forwarded without credential |
+
+Selecting a template changes nothing else about it: its allowed methods,
+endpoints and HTTPS requirement still apply. A name that is not in the catalog,
+an empty name or an empty list is an error, not a silently empty selection: the
+command exits with status 1 before it listens or starts the child, and
+names the offender and the available templates.
+
+```text
+$ symvault run --broker --broker-strict --broker-templates githb -- gh pr list
+Error: start broker: unknown broker template "githb" (available: anthropic, gemini, github, ...)
+```
+
+`symvault broker` prints the active restriction in its startup banner.
+Without the flag nothing changes: all templates are matched.
 
 ## Honest limitation — same-machine guarantee only
 

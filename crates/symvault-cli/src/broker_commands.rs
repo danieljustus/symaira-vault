@@ -19,6 +19,30 @@ struct PreparedBroker<'a> {
     ca_directory: tempfile::TempDir,
 }
 
+/// Reads the repeatable, comma-separated template selection of `--templates` /
+/// `--broker-templates`. `None` means the flag was not given (every template
+/// applies). Names are plain identifiers, so there is no CSV quoting; an empty
+/// element is an error rather than a silently ignored one.
+pub(crate) fn parse_templates(
+    flag: &str,
+    occurrences: &[String],
+) -> Result<Option<Vec<String>>, String> {
+    if occurrences.is_empty() {
+        return Ok(None);
+    }
+    let mut names = Vec::new();
+    for name in occurrences.iter().flat_map(|value| value.split(',')) {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(format!("{flag}: template names must not be empty"));
+        }
+        if !names.iter().any(|known| known == name) {
+            names.push(name.to_owned());
+        }
+    }
+    Ok(Some(names))
+}
+
 fn prepare<'a>(
     root: &'a Path,
     store: &'a Store,
@@ -26,6 +50,7 @@ fn prepare<'a>(
     addr: &str,
     strict: bool,
     passthrough: &[String],
+    templates: Option<Vec<String>>,
 ) -> Result<PreparedBroker<'a>, String> {
     let broker = EgressBroker::new(
         root,
@@ -34,6 +59,7 @@ fn prepare<'a>(
         EgressOptions {
             strict,
             passthrough: passthrough.to_vec(),
+            templates,
             ..EgressOptions::default()
         },
     )?;
@@ -109,6 +135,7 @@ pub(crate) fn with_broker<T: Send>(
     identity: &Identity,
     strict: bool,
     passthrough: &[String],
+    templates: Option<Vec<String>>,
     action: impl FnOnce(BTreeMap<String, String>) -> Result<T, String>,
 ) -> Result<T, String> {
     let PreparedBroker {
@@ -116,8 +143,16 @@ pub(crate) fn with_broker<T: Send>(
         listener,
         environment,
         ca_directory,
-    } = prepare(root, store, identity, "127.0.0.1:0", strict, passthrough)
-        .map_err(|error| format!("start broker: {error}"))?;
+    } = prepare(
+        root,
+        store,
+        identity,
+        "127.0.0.1:0",
+        strict,
+        passthrough,
+        templates,
+    )
+    .map_err(|error| format!("start broker: {error}"))?;
     // Go subscribes nothing here, so a signal ends `run --broker` by the signal;
     // only the per-instance CA directory must not outlive that death.
     crate::process_signals::install(Some(ca_directory.path().to_path_buf()), None)
@@ -135,13 +170,22 @@ pub(crate) fn run(
     addr: &str,
     strict: bool,
     passthrough: &[String],
+    templates: Option<Vec<String>>,
 ) -> Result<(), String> {
     let PreparedBroker {
         broker,
         listener,
         environment,
         ca_directory,
-    } = prepare(root, store, identity, addr, strict, passthrough)?;
+    } = prepare(
+        root,
+        store,
+        identity,
+        addr,
+        strict,
+        passthrough,
+        templates.clone(),
+    )?;
     let hosts = passthrough;
     let (sender, receiver) = mpsc::channel();
     let stop = broker.shutdown();
@@ -171,6 +215,12 @@ pub(crate) fn run(
     }
     if strict {
         println!("Strict mode: requests to hosts without a template are rejected with 403.");
+    }
+    if let Some(templates) = &templates {
+        println!(
+            "Template restriction: credentials are injected only for [{}]; other template hosts are treated as hosts without a template.",
+            templates.join(" ")
+        );
     }
     if !hosts.is_empty() {
         println!(

@@ -414,19 +414,42 @@ fn page_set_comparison_rejects_missing_and_extra_pages() {
 
 /// Pages on which the port is ahead of the pinned Go oracle, with the exact lines
 /// the port adds (see the comment at the use site).
-const DECLARED_ADDITIONS: [(&str, &[&str]); 1] = [(
-    "symvault-migrate-kdf.1",
-    &[
-        ".PP",
-        "Older Argon2 budgets require --allow-legacy-kdf. This local migration retains",
-        "identity/config backups and rewrites the same identity with current defaults.",
-        "",
-        "\\fB--allow-legacy-kdf\\fP[=false]",
-        "\tAllow one exclusive historical-budget read for local Argon2 policy migration",
-        "",
-        ".PP",
-    ],
-)];
+const DECLARED_ADDITIONS: [(&str, &[&str]); 3] = [
+    // `run --broker-templates` and `broker --templates` (#1554) are Rust-only
+    // local flags: the frozen Go pages predate them. They are added by the
+    // `cli_artifacts::RUST_ONLY_FLAGS` overlay, never by editing the recording.
+    (
+        "symvault-run.1",
+        &[
+            "\\fB--broker-templates\\fP=[]",
+            "\tWith --broker: inject credentials only for these templates (comma-separated, built-in or vault-local names); other template hosts are treated as hosts without a template",
+            "",
+            ".PP",
+        ],
+    ),
+    (
+        "symvault-broker.1",
+        &[
+            ".PP",
+            "\\fB--templates\\fP=[]",
+            "\tInject credentials only for these templates (comma-separated, built-in or vault-local names); other template hosts are treated as hosts without a template",
+            "",
+        ],
+    ),
+    (
+        "symvault-migrate-kdf.1",
+        &[
+            ".PP",
+            "Older Argon2 budgets require --allow-legacy-kdf. This local migration retains",
+            "identity/config backups and rewrites the same identity with current defaults.",
+            "",
+            "\\fB--allow-legacy-kdf\\fP[=false]",
+            "\tAllow one exclusive historical-budget read for local Argon2 policy migration",
+            "",
+            ".PP",
+        ],
+    ),
+];
 
 /// The lines of `rust` that remain after greedily matching every line of `go`
 /// in order; `None` when `go` is not a subsequence of `rust`.

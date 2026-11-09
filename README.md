@@ -280,9 +280,12 @@ symvault broker --addr 127.0.0.1:8080 --strict
 
 # Passthrough for certificate-pinning clients
 symvault broker --passthrough corporate.internal,legacy.example.com
+
+# Release only the credentials this run needs (other templates' hosts get 403 in strict mode)
+symvault run --broker --broker-strict --broker-templates github -- gh pr create
 ```
 
-Strict mode rejects requests for hosts without a matching API template; passthrough hosts are tunneled without TLS interception. Every brokered request produces a tamper-evident audit record. See [docs/egress-broker.md](docs/egress-broker.md) for details.
+Strict mode rejects requests for hosts without a matching API template; passthrough hosts are tunneled without TLS interception; `--broker-templates` (`broker --templates`) limits injection to the named templates. Every brokered request produces a tamper-evident audit record. See [docs/egress-broker.md](docs/egress-broker.md) for details.
 
 ## Ecosystem
 

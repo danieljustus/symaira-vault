@@ -40,6 +40,7 @@ fn main() -> Result<(), String> {
             passthrough: value("--passthrough")
                 .map(|v| vec![v.to_owned()])
                 .unwrap_or_default(),
+            templates: None,
             upstream_ca_pem: value("--upstream-ca")
                 .map(fs::read)
                 .transpose()

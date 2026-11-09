@@ -131,6 +131,21 @@ fn bare_completion_and_no_descriptions_follow_go_command_behavior() {
     assert!(!String::from_utf8_lossy(&plain.stdout).contains("Add a new password entry"));
 }
 
+/// Rust-only local flags (#1554) the recorded Go completions predate: the exact
+/// candidate line the Rust CLI adds to the flag listing of the named case. It is
+/// removed (and must be present) before the byte comparison, so any other
+/// difference still fails. The same flags are pinned in `broker_templates.rs`.
+const DECLARED_ADDITIONS: [(&str, &str); 2] = [
+    (
+        "symvault run/-",
+        "--broker-templates\tWith --broker: inject credentials only for these templates (comma-separated, built-in or vault-local names); other template hosts are treated as hosts without a template\n",
+    ),
+    (
+        "symvault broker/-",
+        "--templates\tInject credentials only for these templates (comma-separated, built-in or vault-local names); other template hosts are treated as hosts without a template\n",
+    ),
+];
+
 #[test]
 fn complete_actual_go_inventory_matches_public_rust_stdout_stderr_and_exit() {
     let artifact: Value =
@@ -148,6 +163,7 @@ fn complete_actual_go_inventory_matches_public_rust_stdout_stderr_and_exit() {
     );
     let home = tempfile::tempdir().unwrap();
     let mut executed = std::collections::BTreeSet::new();
+    let mut declared_seen = 0;
     for case in absent {
         let args: Vec<_> = case["args"]
             .as_array()
@@ -174,12 +190,16 @@ fn complete_actual_go_inventory_matches_public_rust_stdout_stderr_and_exit() {
             .output()
             .unwrap();
         assert_eq!(result.status.code(), Some(0), "{}", case["name"]);
-        assert_eq!(
-            result.stdout,
-            case["stdout"].as_str().unwrap().as_bytes(),
-            "{}",
-            case["name"]
-        );
+        let mut stdout = String::from_utf8(result.stdout).unwrap();
+        if let Some((_, line)) = DECLARED_ADDITIONS
+            .iter()
+            .find(|(name, _)| *name == case["name"].as_str().unwrap())
+        {
+            assert_eq!(stdout.matches(line).count(), 1, "{}", case["name"]);
+            stdout = stdout.replace(line, "");
+            declared_seen += 1;
+        }
+        assert_eq!(stdout, case["stdout"].as_str().unwrap(), "{}", case["name"]);
         assert_eq!(
             result.stderr,
             case["stderr"].as_str().unwrap().as_bytes(),
@@ -189,5 +209,6 @@ fn complete_actual_go_inventory_matches_public_rust_stdout_stderr_and_exit() {
         assert!(executed.insert(case["name"].as_str().unwrap()));
     }
     assert_eq!(executed.len(), 503);
+    assert_eq!(declared_seen, DECLARED_ADDITIONS.len());
     assert!(!home.path().join("absent-vault").exists());
 }

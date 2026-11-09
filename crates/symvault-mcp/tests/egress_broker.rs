@@ -441,3 +441,184 @@ fn egress_stop_cancels_owned_upstream_request_without_waiting_for_network_timeou
     });
     assert!(started.elapsed() < Duration::from_secs(2));
 }
+
+/// One upstream peer: answers a single request with 200 and returns its raw
+/// header block, so a test can see exactly which credential (if any) arrived.
+fn serve_headers_once(listener: TcpListener) -> thread::JoinHandle<String> {
+    thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(30)))
+            .unwrap();
+        let mut bytes = Vec::new();
+        while !bytes.ends_with(b"\r\n\r\n") {
+            let mut byte = [0];
+            stream.read_exact(&mut byte).unwrap();
+            bytes.push(byte[0]);
+        }
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+            .unwrap();
+        String::from_utf8(bytes).unwrap().to_ascii_lowercase()
+    })
+}
+
+/// `--broker-templates` (#1554): two templates exist in the vault, only the
+/// named one may receive its credential. The other host is "without template":
+/// 403 in strict mode, a request without any injected credential otherwise.
+#[test]
+fn egress_template_selection_limits_injection_to_the_named_templates() {
+    let root = tempfile::tempdir().unwrap();
+    let (identity, store) = vault(root.path());
+    for (name, token) in [("alpha", "alpha-token-value"), ("beta", "beta-token-value")] {
+        store
+            .write_entry(
+                name,
+                &Entry {
+                    data: BTreeMap::from([("credential".into(), json!(token))]),
+                    ..Entry::default()
+                },
+                &identity,
+            )
+            .unwrap();
+    }
+    // Distinct template hosts that both resolve to this machine's loopback.
+    let hosts = [("alpha", "127.0.0.1"), ("beta", "localhost")];
+    let write_templates = |ports: [u16; 2]| {
+        for ((name, host), port) in hosts.iter().zip(ports) {
+            fs::write(
+                root.path().join(format!("templates/{name}.yaml")),
+                format!(
+                    "base_url: http://{host}:{port}\nauth_type: bearer\nentry_ref: {name}\nallowed_methods: [GET]\nallowed_endpoints: [/v1/*]\n"
+                ),
+            )
+            .unwrap();
+        }
+    };
+    let scenarios: [(Option<&[&str]>, bool); 4] = [
+        (None, true),
+        (Some(&["alpha"]), true),
+        (Some(&["alpha"]), false),
+        (Some(&["beta"]), true),
+    ];
+    for (selection, strict) in scenarios {
+        let upstreams = [
+            TcpListener::bind("127.0.0.1:0").unwrap(),
+            TcpListener::bind("127.0.0.1:0").unwrap(),
+        ];
+        let ports = [
+            upstreams[0].local_addr().unwrap().port(),
+            upstreams[1].local_addr().unwrap().port(),
+        ];
+        write_templates(ports);
+        let [alpha_listener, beta_listener] = upstreams;
+        let broker = EgressBroker::new(
+            root.path(),
+            &store,
+            &identity,
+            EgressOptions {
+                strict,
+                allow_private: true,
+                templates: selection.map(|names| names.iter().map(|n| (*n).to_owned()).collect()),
+                ..EgressOptions::default()
+            },
+        )
+        .unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let label = format!("selection {selection:?}, strict {strict}");
+        broker
+            .with_running(listener, || {
+                for ((name, host), (port, upstream)) in
+                    hosts.iter().zip([(ports[0], alpha_listener), (ports[1], beta_listener)])
+                {
+                    // Whether this host's template is among the selected ones.
+                    let selected = selection.is_none_or(|names| names.contains(name));
+                    let expect_reject = strict && !selected;
+                    let peer = (!expect_reject).then(|| {
+                        serve_headers_once(upstream.try_clone().unwrap())
+                    });
+                    let response = raw_request(
+                        address,
+                        &format!(
+                            "GET http://{host}:{port}/v1/ping HTTP/1.1\r\nHost: {host}:{port}\r\n\r\n"
+                        ),
+                    );
+                    let text = String::from_utf8_lossy(&response).into_owned();
+                    match peer {
+                        None => {
+                            assert!(text.starts_with("HTTP/1.1 403"), "{label}, {name}: {text}");
+                            assert!(
+                                text.contains("no template for host"),
+                                "{label}, {name}: {text}"
+                            );
+                            // Rejected before any dial: nothing was ever accepted.
+                            upstream.set_nonblocking(true).unwrap();
+                            assert_eq!(
+                                upstream.accept().unwrap_err().kind(),
+                                std::io::ErrorKind::WouldBlock,
+                                "{label}, {name}: upstream was contacted"
+                            );
+                        }
+                        Some(peer) => {
+                            assert!(text.starts_with("HTTP/1.1 200"), "{label}, {name}: {text}");
+                            let headers = peer.join().unwrap();
+                            let expected = format!("authorization: bearer {name}-token-value");
+                            if selected {
+                                assert!(headers.contains(&expected), "{label}, {name}: {headers}");
+                            } else {
+                                // Treated as a host without template: forwarded
+                                // untouched, never with a template credential.
+                                assert!(
+                                    !headers.contains("authorization"),
+                                    "{label}, {name}: {headers}"
+                                );
+                            }
+                        }
+                    }
+                }
+                Ok(())
+            })
+            .unwrap();
+    }
+}
+
+#[test]
+fn egress_template_selection_rejects_unknown_and_empty_names() {
+    let root = tempfile::tempdir().unwrap();
+    let (identity, store) = vault(root.path());
+    fs::write(
+        root.path().join("templates/alpha.yaml"),
+        "base_url: https://alpha.example.test\nauth_type: bearer\nentry_ref: fixture\n",
+    )
+    .unwrap();
+    let build = |names: &[&str]| {
+        EgressBroker::new(
+            root.path(),
+            &store,
+            &identity,
+            EgressOptions {
+                templates: Some(names.iter().map(|n| (*n).to_owned()).collect()),
+                ..EgressOptions::default()
+            },
+        )
+        .err()
+    };
+    let unknown = build(&["alpha", "alhpa"]).expect("unknown template is refused");
+    assert!(
+        unknown.starts_with("unknown broker template \"alhpa\""),
+        "{unknown}"
+    );
+    assert!(
+        unknown.contains("alpha") && unknown.contains("github"),
+        "{unknown}"
+    );
+    // Built-in names are valid selections without any vault-local file.
+    assert!(build(&["github", "alpha"]).is_none());
+    for names in [&[][..], &[""][..]] {
+        assert_eq!(
+            build(names).as_deref(),
+            Some("broker templates must name at least one template")
+        );
+    }
+}

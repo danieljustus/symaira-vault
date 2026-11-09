@@ -55,6 +55,12 @@ const BUILTINS: [&str; 17] = [
 pub struct EgressOptions {
     pub strict: bool,
     pub passthrough: Vec<String>,
+    /// Restricts credential injection to the named templates (built-in or
+    /// vault-local). `None` matches every template. Hosts of any other
+    /// template are treated as hosts without a template: rejected with 403 in
+    /// strict mode, forwarded without injection otherwise. Unknown names are
+    /// refused by [`EgressBroker::new`].
+    pub templates: Option<Vec<String>>,
     /// Explicit in-process fixture/application seam. The shipped CLI keeps false.
     pub allow_private: bool,
     /// Adds only a fixture trust root to this runtime, never to installed trust.
@@ -83,7 +89,10 @@ impl<'a> EgressBroker<'a> {
         if options.passthrough.len() > 256 || options.passthrough.iter().any(|h| h.len() > 1024) {
             return Err("broker passthrough exceeds its 256-host/1024-byte limits".into());
         }
-        let templates = load_catalog(root)?;
+        let mut templates = load_catalog(root)?;
+        if let Some(selected) = &options.templates {
+            restrict_catalog(&mut templates, selected)?;
+        }
         let now = time::OffsetDateTime::now_utc();
         let mut params =
             CertificateParams::new(Vec::<String>::new()).map_err(|_| "prepare broker CA")?;
@@ -722,6 +731,28 @@ fn load_catalog(root: &Path) -> Result<BTreeMap<String, String>, String> {
         }
     }
     Ok(catalog)
+}
+
+/// Keeps only the selected templates. An empty selection or an unknown name is
+/// an error, so a typo can never silently turn the restriction into "match
+/// nothing" (or, worse, be mistaken for the unrestricted catalog).
+fn restrict_catalog(
+    catalog: &mut BTreeMap<String, String>,
+    selected: &[String],
+) -> Result<(), String> {
+    if selected.is_empty() || selected.iter().any(String::is_empty) {
+        return Err("broker templates must name at least one template".into());
+    }
+    if let Some(unknown) = selected.iter().find(|n| !catalog.values().any(|c| c == *n)) {
+        let mut known = catalog.values().map(String::as_str).collect::<Vec<_>>();
+        known.sort_unstable();
+        return Err(format!(
+            "unknown broker template {unknown:?} (available: {})",
+            known.join(", ")
+        ));
+    }
+    catalog.retain(|_, name| selected.contains(name));
+    Ok(())
 }
 
 fn validate_definition(definition: &super::ApiTemplateDefinition) -> Result<(), String> {

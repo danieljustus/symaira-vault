@@ -32,7 +32,7 @@ fn write_pages(output_dir: &Path, date: &str, history_date: &str) -> io::Result<
     // text after Markdown rendering. Help still uses the unescaped path.
     let config_path = literal_roff_text(&default_config_path().to_string_lossy());
     for (name, page) in &crate::cli_artifacts::DATA.manpages {
-        let rendered = page
+        let rendered = crate::cli_artifacts::manpage(name, page)
             .replace("__CONFIG_PATH__", &config_path)
             .replacen("\"Jan 1970\"", &format!("\"{date}\""), 1)
             .replace(

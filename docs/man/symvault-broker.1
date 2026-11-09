@@ -48,6 +48,10 @@ to /broker-ca.pem.
 \fB--strict\fP[=false]
 	Reject requests to hosts without a matching template with 403
 
+.PP
+\fB--templates\fP=[]
+	Inject credentials only for these templates (comma-separated, built-in or vault-local names); other template hosts are treated as hosts without a template
+
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
 \fB--color\fP="auto"
