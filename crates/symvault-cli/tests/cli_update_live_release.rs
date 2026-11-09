@@ -29,9 +29,9 @@
 //! tests cover them in the Go tree.
 //!
 //! Recorded from the Go oracle (`legacy/go-oracle`, `ce2390d7`) into
-//! `testdata/port/cli-observations/cli_update_live_release.json`. Recapture:
-//! `SYMVAULT_ORACLE=capture SYMVAULT_GO_BINARY=<oracle stamped 1.0.0> cargo test
-//! -p symvault-cli --test cli_update_live_release --locked`.
+//! `testdata/port/cli-observations/cli_update_live_release.json`. Recapture: see
+//! docs/rust-port/go-oracle-archive.md ("Recapture"); the oracle binary must be
+//! stamped `main.version=1.0.0`.
 //!
 //! Normalisation (both sides): the sandbox dir becomes `<HOME>`, the server port
 //! `<PORT>`, and a transport failure (Go `Get "<url>": dial tcp: lookup ...: no

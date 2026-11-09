@@ -11,9 +11,8 @@
 //!
 //! Recorded from the Go oracle (`legacy/go-oracle`, `ce2390d7`) into
 //! `testdata/port/cli-observations/cli_signal_literals.json`; the closure of
-//! each `observe` documents how. Recapture: `SYMVAULT_ORACLE=capture
-//! SYMVAULT_GO_BINARY=<oracle> cargo test -p symvault-cli --test
-//! cli_signal_literals`.
+//! each `observe` documents how. Recapture: see
+//! docs/rust-port/go-oracle-archive.md ("Recapture").
 //!
 //! Normalisation (all in [`normalise`], applied to both sides): the sandbox
 //! directory becomes `<HOME>`, the ephemeral loopback port `<PORT>` and the

@@ -147,7 +147,8 @@ fn openpty() -> (OwnedFd, OwnedFd) {
             &mut slave,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
-            &mut size,
+            // `*mut` on darwin, `*const` on Linux: a raw pointer fits both.
+            std::ptr::addr_of_mut!(size),
         )
     };
     assert_eq!(rc, 0, "openpty");

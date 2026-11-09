@@ -15,9 +15,8 @@
 //! `identity` (`go-keyring-base64:` JSON; timestamps and ciphertext only as
 //! presence), plus `unlock --check` afterwards. Recorded from the Go oracle
 //! (`legacy/go-oracle`, `ce2390d7`) into
-//! `testdata/port/cli-observations/cli_unlock_ttl.json`. Recapture:
-//! `SYMVAULT_ORACLE=capture SYMVAULT_GO_BINARY=<oracle> cargo test -p
-//! symvault-cli --test cli_unlock_ttl`.
+//! `testdata/port/cli-observations/cli_unlock_ttl.json`. Recapture: see
+//! docs/rust-port/go-oracle-archive.md ("Recapture").
 
 #[path = "common/go_oracle_ext.rs"]
 mod go_oracle_ext;

@@ -12,10 +12,9 @@
 //! (initialized vault, no `--stdio`) are not recorded: they bind a port and
 //! mint random token ids.
 //!
-//! Recapture (docs/rust-port/go-oracle-archive.md): `SYMVAULT_ORACLE=capture
-//! SYMVAULT_GO_BINARY=<oracle> cargo test -p symvault-cli --test
-//! cli_mcp_agent_spelling`; the oracle binary is a plain `go build` of the tag
-//! `legacy/go-oracle` (`main.version` unset).
+//! Recapture: see docs/rust-port/go-oracle-archive.md ("Recapture"); the
+//! oracle binary is a plain build of the tag `legacy/go-oracle` with
+//! `main.version` unset.
 
 #[path = "common/go_oracle.rs"]
 mod go_oracle;
