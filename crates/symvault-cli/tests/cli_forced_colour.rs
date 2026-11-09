@@ -585,6 +585,5 @@ fn tui_session(binary: &Path, sandbox: &Sandbox) -> Vec<u8> {
     }
     let _ = child.wait();
     let _ = reader.join();
-    let bytes = collected.lock().unwrap().clone();
-    bytes
+    collected.lock().unwrap().clone()
 }
