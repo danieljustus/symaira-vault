@@ -1,0 +1,970 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "ce2390d748818a4beb413e97183b7795efa99411",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "tests": {
+    "unlock_ttl_matches_go_against_the_keychain": {
+      "above-max-lifetime": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 32400000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 32400000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 9h0m0s)\n",
+          "stdout": ""
+        }
+      },
+      "check-only": {
+        "check_after": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": null,
+        "session": null,
+        "unlock": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        }
+      },
+      "compound": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 3723500000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 3723500000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 1h2m3.5s)\n",
+          "stdout": ""
+        }
+      },
+      "config-both": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 7200000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 1200000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 7200000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 1200000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 20m0s)\n",
+          "stdout": ""
+        }
+      },
+      "config-max-lifetime": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 3600000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 600000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 3600000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 600000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 10m0s)\n",
+          "stdout": ""
+        }
+      },
+      "config-max-lifetime-below-ttl": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 300000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 600000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 300000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 600000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 10m0s)\n",
+          "stdout": ""
+        }
+      },
+      "config-timeout": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 7200000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 7200000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 2h0m0s)\n",
+          "stdout": ""
+        }
+      },
+      "config-timeout-flag-wins": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 180000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 180000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 3m0s)\n",
+          "stdout": ""
+        }
+      },
+      "config-timeout-fraction": {
+        "check_after": null,
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 1500000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 1500000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 1.5s)\n",
+          "stdout": ""
+        }
+      },
+      "config-timeout-zero-flag": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 7200000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 7200000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 2h0m0s)\n",
+          "stdout": ""
+        }
+      },
+      "days": {
+        "check_after": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": null,
+        "session": null,
+        "unlock": {
+          "exit_code": 1,
+          "stderr": "Error: invalid argument \"1d\" for \"--ttl\" flag: time: unknown unit \"d\" in duration \"1d\"\nError: invalid argument \"1d\" for \"--ttl\" flag: time: unknown unit \"d\" in duration \"1d\"\n",
+          "stdout": ""
+        }
+      },
+      "default": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 900000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 900000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 15m0s)\n",
+          "stdout": ""
+        }
+      },
+      "empty": {
+        "check_after": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": null,
+        "session": null,
+        "unlock": {
+          "exit_code": 1,
+          "stderr": "Error: invalid argument \"\" for \"--ttl\" flag: time: invalid duration \"\"\nError: invalid argument \"\" for \"--ttl\" flag: time: invalid duration \"\"\n",
+          "stdout": ""
+        }
+      },
+      "equals-form": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 2700000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 2700000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 45m0s)\n",
+          "stdout": ""
+        }
+      },
+      "exponent": {
+        "check_after": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": null,
+        "session": null,
+        "unlock": {
+          "exit_code": 1,
+          "stderr": "Error: invalid argument \"1e3s\" for \"--ttl\" flag: time: unknown unit \"e\" in duration \"1e3s\"\nError: invalid argument \"1e3s\" for \"--ttl\" flag: time: unknown unit \"e\" in duration \"1e3s\"\n",
+          "stdout": ""
+        }
+      },
+      "fraction": {
+        "check_after": null,
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 1500000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 1500000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 1.5s)\n",
+          "stdout": ""
+        }
+      },
+      "huge": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 360000000000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 360000000000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 100000h0m0s)\n",
+          "stdout": ""
+        }
+      },
+      "max-hours": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 9223369200000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 9223369200000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 2562047h0m0s)\n",
+          "stdout": ""
+        }
+      },
+      "max-nanos": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 9223372036854775807
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 9223372036854775807
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 2562047h47m16.854775807s)\n",
+          "stdout": ""
+        }
+      },
+      "minutes": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 420000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 420000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 7m0s)\n",
+          "stdout": ""
+        }
+      },
+      "nanosecond": {
+        "check_after": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 1
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 1
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 1ns)\n",
+          "stdout": ""
+        }
+      },
+      "negative": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 900000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 900000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 15m0s)\n",
+          "stdout": ""
+        }
+      },
+      "negative-nano": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 900000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 900000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 15m0s)\n",
+          "stdout": ""
+        }
+      },
+      "ninety-seconds": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 90000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 90000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 1m30s)\n",
+          "stdout": ""
+        }
+      },
+      "one-second": {
+        "check_after": null,
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 1000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 1000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 1s)\n",
+          "stdout": ""
+        }
+      },
+      "overflow": {
+        "check_after": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": null,
+        "session": null,
+        "unlock": {
+          "exit_code": 1,
+          "stderr": "Error: invalid argument \"2562048h\" for \"--ttl\" flag: time: invalid duration \"2562048h\"\nError: invalid argument \"2562048h\" for \"--ttl\" flag: time: invalid duration \"2562048h\"\n",
+          "stdout": ""
+        }
+      },
+      "quiet": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 420000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 420000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "Vault unlocked (session TTL: 7m0s)\n",
+          "stdout": ""
+        }
+      },
+      "repeated-last-wins": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 120000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 120000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 2m0s)\n",
+          "stdout": ""
+        }
+      },
+      "sub-second": {
+        "check_after": null,
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 999000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 999000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 999ms)\n",
+          "stdout": ""
+        }
+      },
+      "unitless": {
+        "check_after": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": null,
+        "session": null,
+        "unlock": {
+          "exit_code": 1,
+          "stderr": "Error: invalid argument \"5\" for \"--ttl\" flag: time: missing unit in duration \"5\"\nError: invalid argument \"5\" for \"--ttl\" flag: time: missing unit in duration \"5\"\n",
+          "stdout": ""
+        }
+      },
+      "zero-bare": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 900000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 900000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 15m0s)\n",
+          "stdout": ""
+        }
+      },
+      "zero-seconds": {
+        "check_after": {
+          "exit_code": 0,
+          "stderr": "Session active\n",
+          "stdout": ""
+        },
+        "check_before": {
+          "exit_code": 4,
+          "stderr": "Error: no active session: vault locked\nError: no active session: vault locked\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+          "stdout": ""
+        },
+        "identity": {
+          "encrypted_identity": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 900000000000
+        },
+        "session": {
+          "encrypted_passphrase": "<string>",
+          "last_access": "<string>",
+          "max_lifetime_ns": 28800000000000,
+          "nonce": "<string>",
+          "saved_at": "<string>",
+          "ttl_ns": 900000000000
+        },
+        "unlock": {
+          "exit_code": 0,
+          "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nVault unlocked (session TTL: 15m0s)\n",
+          "stdout": ""
+        }
+      }
+    }
+  }
+}

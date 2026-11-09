@@ -614,7 +614,13 @@ enum Command {
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "check")]
         check: bool,
         /// Session duration override (for example, 30m or 1h).
-        #[arg(long, value_name = "DURATION", allow_hyphen_values = true)]
+        // pflag keeps the last of repeated duration flags (`--ttl 1m --ttl 2m`).
+        #[arg(
+            long,
+            value_name = "DURATION",
+            allow_hyphen_values = true,
+            overrides_with = "ttl"
+        )]
         ttl: Option<String>,
         #[command(flatten)]
         _ignored: IgnoredPositionals,
@@ -2633,7 +2639,6 @@ fn run_cli() -> ExitCode {
             cli._profile.as_deref(),
             check,
             ttl.as_deref(),
-            cli.quiet,
         ),
         Some(Command::Auth { command }) => match command {
             AuthCommand::Status { .. } => run_auth_status(
@@ -5629,7 +5634,6 @@ fn run_unlock(
     profile: Option<&str>,
     check: bool,
     ttl_override: Option<&str>,
-    quiet: bool,
 ) -> ExitCode {
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
@@ -5643,9 +5647,9 @@ fn run_unlock(
             .flatten();
         if check {
             session_commands::check(&runtime.manager, &vault)?;
-            if !quiet {
-                eprintln!("Session active");
-            }
+            // Go writes this with `fmt.Fprintln(os.Stderr, ...)`: `--quiet` does not
+            // silence it (ADR 0037 R15 recording).
+            eprintln!("Session active");
             return Ok::<(), String>(());
         }
         // `UnlockVaultForSession` resolves the configuration first, like every open.
@@ -5695,9 +5699,15 @@ fn run_unlock(
                 "session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support".to_owned(),
             );
         }
-        if !quiet {
-            eprintln!("Vault unlocked (session TTL: {})", format_duration(ttl));
-        }
+        // Go prints `time.Duration.String()` through `cliout.Hintf`, which the
+        // `--quiet` flag does not reach: sub-second TTLs keep their fraction
+        // (`1.5s`, `999ms`, `1ns`) and the line stays under `--quiet`.
+        eprintln!(
+            "Vault unlocked (session TTL: {})",
+            symvault_core::config::go_duration_string(
+                i128::try_from(ttl.as_nanos()).unwrap_or(i128::MAX)
+            )
+        );
         Ok::<(), String>(())
     })();
     finish_session_result(result, true, 3)
@@ -5846,6 +5856,8 @@ fn run_auth_status(
     finish_session_result(result, false, 1)
 }
 
+const UNLOCK_LOCKED_HINT: &str = "Enable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.";
+
 fn finish_session_result(
     result: Result<(), String>,
     locked_error: bool,
@@ -5865,10 +5877,14 @@ fn finish_session_result(
                 // Cobra reports the ExitLocked error, then `ExecuteRoot` does and
                 // adds the `unlock` flavour of the locked hint.
                 print_error_like_go(&error);
-                let _ = writeln!(
-                    io::stderr(),
-                    "Enable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored."
-                );
+                let _ = writeln!(io::stderr(), "{UNLOCK_LOCKED_HINT}");
+                return ExitCode::from(4);
+            }
+            if locked_error && error == "no active session" {
+                // `unlock --check` without a session: the same ExitLocked CLIError,
+                // wrapping `ErrVaultLocked` (ADR 0037 R15 recording).
+                print_error_like_go("no active session: vault locked");
+                let _ = writeln!(io::stderr(), "{UNLOCK_LOCKED_HINT}");
                 return ExitCode::from(4);
             }
             if locked_error && error.starts_with("open vault: ") {
@@ -6086,20 +6102,6 @@ fn touch_id_available() -> bool {
     #[cfg(not(target_os = "macos"))]
     {
         false
-    }
-}
-
-fn format_duration(duration: std::time::Duration) -> String {
-    let seconds = duration.as_secs();
-    let hours = seconds / 3600;
-    let minutes = (seconds % 3600) / 60;
-    let seconds = seconds % 60;
-    if hours > 0 {
-        format!("{hours}h{minutes}m{seconds}s")
-    } else if minutes > 0 {
-        format!("{minutes}m{seconds}s")
-    } else {
-        format!("{seconds}s")
     }
 }
 
