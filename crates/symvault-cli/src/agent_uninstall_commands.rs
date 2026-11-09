@@ -63,7 +63,8 @@ fn confirm(agent: &str) -> bool {
 
 pub(crate) fn uninstall(vault: &Path, agent: &str, options: &Options) -> Result<(), String> {
     let config_path = vault.join("config.yaml");
-    let mut config = Config::load(&config_path).map_err(|error| format!("load config: {error}"))?;
+    let mut config = Config::load(&config_path)
+        .map_err(|error| crate::config::go_load_config_error(&config_path, &error))?;
     let Some(profile) = config.agents.get(agent).cloned() else {
         return Err(format!("agent {agent:?} not found in config"));
     };

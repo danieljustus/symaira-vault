@@ -29,8 +29,9 @@ pub(crate) fn doctor(
     version: &str,
     output: &mut impl Write,
 ) -> Result<(), String> {
-    let config =
-        Config::load(vault.join("config.yaml")).map_err(|error| format!("load config: {error}"))?;
+    let config_path = vault.join("config.yaml");
+    let config = Config::load(&config_path)
+        .map_err(|error| crate::config::go_load_config_error(&config_path, &error))?;
     let Some(profile) = config.agents.get(agent) else {
         writeln!(output, "❌ No profile found for agent {agent:?}").map_err(io_error)?;
         writeln!(output, "   Run: symvault agent install {agent}").map_err(io_error)?;

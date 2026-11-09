@@ -1110,8 +1110,9 @@ enum FileCommand {
         query: String,
         #[arg(long)]
         field: Option<String>,
+        /// Kept as text so `--out ""` reaches Go's "`--out` is required" check.
         #[arg(long)]
-        out: Option<PathBuf>,
+        out: Option<String>,
     },
     /// Run a command with an attachment materialized to a private temporary file.
     #[command(args_override_self = true)]
@@ -1971,6 +1972,12 @@ fn run_cli() -> ExitCode {
         }
         Some(Command::Approval { command }) => {
             let result = (|| {
+                // Go (`cmd/approval.go`, `newApprovalDecideCmd`) checks the flags before the vault.
+                if let ApprovalCommand::Decide { approve, deny, .. } = &command
+                    && approve == deny
+                {
+                    return Err("exactly one of --approve or --deny is required".to_owned());
+                }
                 let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                 require_initialized(&root)?;
                 let format = if cli.json {
@@ -3583,6 +3590,11 @@ fn run_file(
             ),
             _ => None,
         };
+        // Go (`cmd/file/get.go`, `runFileGet`) demands a non-empty `--out` before the vault.
+        if matches!(&command, FileCommand::Get { out, .. } if out.as_deref().is_none_or(str::is_empty))
+        {
+            return Err(reported(9, "--out is required", None));
+        }
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
@@ -3619,7 +3631,7 @@ fn run_file(
                 }
             }
             FileCommand::Get { query, field, out } => {
-                let output = out.ok_or_else(|| "--out is required".to_owned())?;
+                let output = PathBuf::from(out.ok_or_else(|| "--out is required".to_owned())?);
                 let result = file_commands::get(
                     &vault,
                     &identity,

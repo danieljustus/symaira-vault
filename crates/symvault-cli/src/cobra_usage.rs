@@ -29,10 +29,7 @@
 //! `typed_flag_tables_cover_every_typed_flag_of_the_command_tree` fails when the tree
 //! has a typed flag no table names.
 //!
-//! Known limits: a
-//! flag that exists only in Go is not reported as unknown by Rust's tree; and the
-//! suggestion order of `SUGGESTION_ORDER` is the strict partial order measured
-//! from the oracle, not Go's registration order.
+//! Known limit: a flag that exists only in Go is not reported as unknown by Rust's tree.
 
 use clap::{Arg, Command};
 
@@ -140,49 +137,56 @@ fn hand_parsed_bool(path: &str, name: &str) -> bool {
         .any(|(command, flags)| *command == path && flags.contains(&name))
 }
 
+/// Cobra's `SuggestionsFor` walks `c.commands` once, so the suggestions come out in
+/// registration order: `version` (`cli.NewRootCmd`), then `cmd.NewRootCmd`'s `admin`,
+/// `auth`, `crud`, `file`, `intakecmd` and `mcp` groups in the order their
+/// `NewCommands` list them (the hidden `mcp-config`, `mcp-token-rotate` and `serve`
+/// are never suggested), the top-level commands of `cmd/root.go`, and last the
+/// `completion` command that cobra adds when it executes. Recorded from
+/// `legacy/go-oracle` by `cli_error_residuals::suggestion_order_matches_go_for_every_colliding_input`.
 const SUGGESTION_ORDER: &[&str] = &[
+    "version",
     "audit",
-    "auth",
     "backup",
-    "broker",
+    "restore",
     "config",
     "doctor",
     "export",
     "import",
     "init",
-    "add",
-    "delete",
-    "device",
-    "dynamic",
-    "edit",
-    "find",
-    "intake",
-    "lock",
     "migrate",
-    "restore",
     "setup",
     "startup-profile",
+    "update",
+    "verify",
+    "auth",
+    "lock",
+    "unlock",
+    "add",
+    "delete",
+    "edit",
+    "find",
     "get",
     "list",
     "set",
-    "agent",
     "file",
-    "generate",
-    "recipients",
-    "remote",
-    "share",
-    "update",
+    "intake",
+    "agent",
     "mcp",
     "approval",
+    "broker",
+    "device",
+    "dynamic",
+    "generate",
     "git",
     "policy",
     "profile",
-    "template",
-    "unlock",
+    "recipients",
+    "remote",
     "run",
+    "share",
     "sync",
-    "version",
-    "verify",
+    "template",
     "ui",
     "completion",
 ];

@@ -410,8 +410,16 @@ definition, where "first" and "in force at the alias" coincide.
 
 Resolution of the wording, applying to both ADRs:
 
-- **Go:** an alias resolves to the definition in force at the alias. The case
-  with an alias after the redefinition is not recorded (see "To be recorded").
+- **Go:** an alias resolves to the definition in force at the alias. Recorded
+  2026-11-09 from `legacy/go-oracle` (R20, `alias_after_a_redefined_anchor_matches_go`,
+  `testdata/port/cli-transcripts/cli_error_residuals.json`): with `a: &x abc`, `b: &x 5m`,
+  `sessionTimeout: *x` Go loads the file (`5m`, the second definition), with
+  `a: &x 5m`, `b: &x abc` it rejects it (`abc`), so "Go takes the first" is wrong
+  as a general rule. With the alias after the last definition Go and Rust agree
+  byte for byte (`config validate`, `--json`, `config get`, `config list`; 12 of 40
+  recorded calls); they differ only for an alias that stands before a redefinition
+  whose value differs in validity (`config validate` exit 0 in Go, 6 in Rust, or
+  the reverse), which is the ADR 0034 item 5 divergence.
 - **Rust:** an alias resolves to the **last** definition of the anchor in the
   document, wherever the alias stands. This is the same in both ADRs and is the
   contract.
@@ -427,9 +435,9 @@ maintainer accepts it as a gap in a later ADR.
 
 | # | Row | Observation | Why bounded |
 |---|---|---|---|
-| R1 | CLI-005 | suggestion order for inputs with two or more suggestions (`crates/symvault-cli/src/cobra_usage.rs` uses a fixed table, not Go's registration order) | finite command set |
-| R2 | CLI-005 | `get -` and `get - x` against the Go-initialized vault (only `list` variants exist initialized) | two scenarios |
-| R3 | CLI-005 | the not-initialized shape for approval and file commands outside the 29 recorded cases | finite command list |
+| R1 | CLI-005 | **Closed 2026-11-09.** Suggestion order for inputs with two or more suggestions. Recorded from `legacy/go-oracle` (`ce2390d7`): 1967 inputs (every 1-edit typo of every command name that suggests two or more commands, all one- and two-letter words, 44 two-edit witnesses covering every pair of commands a word can reach) in `suggestion_order_matches_go_for_every_colliding_input`, `testdata/port/cli-transcripts/cli_error_residuals.json`. The 1967 answers fit one total order, which is cobra's registration order (`version`, the `admin`, `auth`, `crud`, `file`, `intakecmd`, `mcp` groups, the commands of `cmd/root.go`, then `completion`); 273 ordered pairs are observed. The old Rust table was a partial order measured from an older oracle and differed from Go in 4 of the 1601 first inputs (`ait`, `auit`, `int`, `seth`). **Rust fix:** `SUGGESTION_ORDER` in `cobra_usage.rs` is now the registration order. Nested groups and `help` suggest nothing in Go (10 recorded shapes) | finite command set |
+| R2 | CLI-005 | **Closed 2026-11-09.** `get -` and `get - x` against a vault the oracle initialized: `bare_dash_get_matches_go_in_the_go_initialized_vault`, `testdata/port/cli-transcripts/cli_error_residuals.json` (22 calls in three frozen Go-made vaults: several matches, one match, none; `get -`, `get - x`, `get x -`, `get -- -`, `--json`/`--output yaml` forms, `- get -`). Rust matched Go in all 22; no Rust change | two scenarios |
+| R3 | CLI-005 | **Closed 2026-11-09.** The not-initialized shape for every runnable path of `command-tree.json` (90 of 116 paths run, 26 excluded with a reason in `EXCLUDED`) plus 45 approval/file/device/auth variants in an empty sandbox: `not_initialized_shapes_match_go_for_every_runnable_command`, `testdata/port/cli-transcripts/cli_error_residuals.json` (135 calls, 61 of them `vault not initialized`). Rust differed in three places, all fixed: `approval decide` without exactly one of `--approve`/`--deny` and `file get` without (or with an empty) `--out` reached the vault check first (Go: exit 1 / exit 9 before it), and ten paths with a missing `config.yaml` or policy file worded the cause as Rust I/O text (`agent doctor|profile export|profile show|uninstall|upgrade`, `agent profile edit` also asked for the config before the editor, `profile use`, `policy apply|validate`). **New residual R21** (below): four paths in a sandbox without the vault directory | finite command list |
 | R4 | CLI-006 | `update apply/check/info` live-release and network branches (hermetic fake release server) | three commands |
 | R5 | CLI-006 | the `mcp agent …` spelling, where Go resolves `mcp agent list` to `mcp` with positionals | one family; check the 116 gate rows first |
 | R6 | CLI-006 | forced-colour output of `doctor`, `status` and the TUI (else ratify as cosmetic) | finite commands |
@@ -446,7 +454,8 @@ maintainer accepts it as a gap in a later ADR.
 | R17 | HTTP-004 | combinations of configured header, body, idle and write budgets | finite budgets |
 | R18 | HTTP-004 | TLS server identity rotation, client revocation and expiration | three cases |
 | R19 | BROKER-002 | prompt/biometry diagnostics and tool-name context of `execute_api_request`; whether the template-open check is race-proof in Go | unmeasured, bounded |
-| R20 | CLI-005 | alias after a redefined anchor (see the section above) | one case |
+| R20 | CLI-005 | **Closed 2026-11-09.** Alias after a redefined anchor: `alias_after_a_redefined_anchor_matches_go`, `testdata/port/cli-transcripts/cli_error_residuals.json` (10 configs x 4 commands). Go resolves to the definition in force at the alias; Rust (last definition) agrees whenever the alias stands after the last definition, which is the case this item asked for. The earlier-alias divergence stays ADR 0034 item 5; see the section above | one case |
+| R21 | CLI-005 | new, from the R3 sweep: in a sandbox without the vault directory `agent token new`, `agent token rotate`, `agent token revoke` and `share revoke` fail in Rust with `failed to read <dir>: No such file or directory (os error 2)`; Go reads the registry as empty (`token "x" not found or already revoked`, `share grant x not found`) or fails at the write of `mcp-tokens.json.tmp-<random>`. Pinned by `OPEN` in `cli_error_residuals.rs`; the test fails when one starts to match. Not fixed here: the store opens its root capability before the registry | four commands |
 
 ## Implement items (not ratified)
 
