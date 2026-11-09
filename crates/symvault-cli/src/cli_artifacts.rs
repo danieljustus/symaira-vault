@@ -179,6 +179,7 @@ pub fn flag_help(args: &[std::ffi::OsString]) -> Option<&'static str> {
     // cobra's `Find` never sees a bare `-h` / `--help` as the help flag: it takes the
     // next word as its value, so that word names no command.
     let mut swallow_next = false;
+    let mut resolved = false;
     let mut i = 1;
     while let Some(word) = args.get(i) {
         let word = word.to_str()?;
@@ -213,8 +214,14 @@ pub fn flag_help(args: &[std::ffi::OsString]) -> Option<&'static str> {
                 symvault_core::config::parse_go_duration(value).ok()?;
             }
             seen.push(f.name.as_str());
-        } else if !swallowed && let Some(next) = child(selected, word) {
-            selected = next;
+        } else if !swallowed && !resolved {
+            // cobra's `Find` stops at the first positional that names no child:
+            // `mcp agent install --help` is the help of `mcp` (ADR 0037 R5), the
+            // later `install` is only an argument of it. The empty word is no word.
+            match child(selected, word) {
+                Some(next) => selected = next,
+                None => resolved = !word.is_empty(),
+            }
         }
         i += 1;
     }
