@@ -15,6 +15,12 @@ import tempfile
 import go_observations_common as observations
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def target_dir():
+    """Cargo's target dir; a worktree's `target` may be a host symlink that dangles in the gate container."""
+    configured = os.environ.get('CARGO_TARGET_DIR')
+    return Path(configured) if configured else ROOT / 'target'
 # CLI manuals intentionally correct Markdown interpretation of dynamic paths.
 # The earlier oracle's diagnostic (manual_path_probe.py) lives at tag legacy/go-oracle.
 PIN = "5cf3da06f1750afad974f2b722734af52ce87362"
@@ -65,7 +71,7 @@ def execute(args, cwd, env, data=None, timeout=120):
     capture_dir = env.get('CLI_ARTIFACTS_EXECUTION_DIR')
     record = None
     if capture_dir or returncode != 0:
-        directory = Path(capture_dir) if capture_dir else ROOT / 'target/cli-artifacts-failures'
+        directory = Path(capture_dir) if capture_dir else target_dir() / 'cli-artifacts-failures'
         directory.mkdir(parents=True, exist_ok=True)
         record = Path(tempfile.mkdtemp(prefix='execution-', dir=directory))
         (record / 'stdout.bin').write_bytes(result.stdout or b'')
@@ -445,7 +451,7 @@ def main():
                    XDG_DATA_HOME=str(home / "data"), XDG_CACHE_HOME=str(home / "cache"),
                    SYMVAULT_TEST_KEYRING="memory", TZ="UTC", SOURCE_DATE_EPOCH="0")
         if 'CLI_ARTIFACTS_EXECUTION_DIR' not in env:
-            directory = ROOT / 'target/cli-artifacts-captures'
+            directory = target_dir() / 'cli-artifacts-captures'
             directory.mkdir(parents=True, exist_ok=True)
             env['CLI_ARTIFACTS_EXECUTION_DIR'] = tempfile.mkdtemp(prefix='capture-', dir=directory)
         from manual_path_contract import verify_manual_paths
