@@ -380,6 +380,13 @@
    "ref": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
    "value": "6db442c8271aa31ebb1f3a7e94645fa842bbdf5d6eafbec4caa92faa871381ae"
   },
+  "testdata/port/cli/config-prompts.json#/oracle#program_sha256": {
+   "kind": "other",
+   "class": "recorded",
+   "algo": "claimed",
+   "ref": null,
+   "value": "5b747e023d3da55e3e6961f24554899a41b952019b88f688a7a5ed5f6d2685b4"
+  },
   "testdata/port/cli/config-yaml-syntax.json#/oracle#generator_digest": {
    "kind": "generator",
    "class": "recorded",
@@ -869,6 +876,13 @@
    "algo": "claimed",
    "ref": null,
    "value": "2f0eb79be70febfa74544200a22d75adda2ea78aa74ca0391272d311314c008a"
+  },
+  "testdata/port/mcp/autotype-run-command.json#/oracle#program_sha256": {
+   "kind": "other",
+   "class": "recorded",
+   "algo": "claimed",
+   "ref": null,
+   "value": "813b385d37619fdbd27acedacd0601b9e7788a04aa009d5bccfe2be7814cf141"
   },
   "testdata/port/mcp/clipboard-auto-clear.json#/oracle#generator_hash": {
    "kind": "generator",
@@ -1444,6 +1458,13 @@
    "ref": "861ad93813e3ee43c4ec989f45940d14b05b6eaf",
    "value": "4d1fdfc355dcbd719f9c4a7c02777b42d090d15dc620a59128090ffe7482d407"
   },
+  "testdata/port/platform/clipboard_spawn_errors.json#/oracle#program_sha256": {
+   "kind": "other",
+   "class": "recorded",
+   "algo": "claimed",
+   "ref": null,
+   "value": "fbe1078d958ffc8f32d8bd56e442d4964fba0616a15e307e600d98aa26d13416"
+  },
   "testdata/port/platform/contract.json#/oracle#generator_digest": {
    "kind": "generator",
    "class": "recorded",
@@ -1738,6 +1759,13 @@
    "ref": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
    "value": "124ef8368fb3f41ad7267ce3a7ed87f5b79a75e07f18819fb15e5a3db9e17a75"
   },
+  "testdata/port/sync/pass-gpg-invalid-names.json#/oracle#program_sha256": {
+   "kind": "other",
+   "class": "recorded",
+   "algo": "claimed",
+   "ref": null,
+   "value": "eef240aa467c5a0674d0e2048ae98ed29c049b9c8e8d89eb8132ac18018f7f51"
+  },
   "testdata/port/sync/pass-gpg.json#/oracle#generator_digest": {
    "kind": "generator",
    "class": "recorded",
@@ -1780,6 +1808,13 @@
    "ref": "861ad93813e3ee43c4ec989f45940d14b05b6eaf",
    "value": "85d61017b7a7bfb1d3dedc2cb6dd30bc33075c9497ef145398164d98dca26599"
   },
+  "testdata/port/sync/restore-gzip-header-flags.json#/oracle#program_sha256": {
+   "kind": "other",
+   "class": "recorded",
+   "algo": "claimed",
+   "ref": null,
+   "value": "685cb5e0311eddf0d4844745a5a05aa5059a8572ec825f499669f22a36a71d53"
+  },
   "testdata/port/sync/restore-gzip-multistream.json#/#generator_digest": {
    "kind": "generator",
    "class": "recorded",
@@ -1793,6 +1828,13 @@
    "algo": "provenance",
    "ref": "861ad93813e3ee43c4ec989f45940d14b05b6eaf",
    "value": "85d61017b7a7bfb1d3dedc2cb6dd30bc33075c9497ef145398164d98dca26599"
+  },
+  "testdata/port/sync/restore-tar-special-caps.json#/oracle#program_sha256": {
+   "kind": "other",
+   "class": "recorded",
+   "algo": "claimed",
+   "ref": null,
+   "value": "685cb5e0311eddf0d4844745a5a05aa5059a8572ec825f499669f22a36a71d53"
   },
   "testdata/port/sync/sync.json#/oracle#generator_digest": {
    "kind": "generator",

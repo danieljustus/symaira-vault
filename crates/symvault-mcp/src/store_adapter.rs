@@ -1161,7 +1161,8 @@ impl StoreReadOnlyRuntime {
                 Ok(value) => value,
                 Err(error) => {
                     return Ok(ToolCallResult::error(format!(
-                        "cannot resolve secret ref {reference:?}: {error}"
+                        "cannot resolve secret ref {reference:?}: {}",
+                        go_secret_ref_detail(&error)
                     )));
                 }
             };
@@ -1223,7 +1224,8 @@ impl StoreReadOnlyRuntime {
             .map_err(|error| format!("embed command output: {error}"))?;
         if execution.timed_out {
             return Ok(ToolCallResult::error(format!(
-                "command timed out after {timeout_seconds}s\nExit code: {}\nStdout: {stdout}\nStderr: {stderr}",
+                "command timed out after {}\nExit code: {}\nStdout: {stdout}\nStderr: {stderr}",
+                go_timeout(timeout_seconds),
                 execution.exit_code
             )));
         }
@@ -1582,7 +1584,8 @@ impl StoreReadOnlyRuntime {
             .map_err(|error| format!("embed command output: {error}"))?;
         if execution.timed_out {
             return Ok(ToolCallResult::error(format!(
-                "command timed out after {timeout_seconds}s\nExit code: {}\nStdout: {stdout}\nStderr: {stderr}",
+                "command timed out after {}\nExit code: {}\nStdout: {stdout}\nStderr: {stderr}",
+                go_timeout(timeout_seconds),
                 execution.exit_code
             )));
         }
@@ -2042,7 +2045,10 @@ impl StoreReadOnlyRuntime {
             self.authorize_run_secret_path(&path)?;
             let source =
                 StoreReadOnlyAdapter::ref_at_path(reader, &reference, &path).map_err(|error| {
-                    RunFilesError::Tool(format!("cannot resolve secret ref {reference:?}: {error}"))
+                    RunFilesError::Tool(format!(
+                        "cannot resolve secret ref {reference:?}: {}",
+                        go_secret_ref_detail(&error)
+                    ))
                 })?;
             let content = if encoding == "base64" {
                 BASE64_STANDARD.decode(source.as_bytes()).map_err(|_| {
@@ -4232,6 +4238,21 @@ pub fn read_only_tool_names() -> Vec<String> {
     .collect()
 }
 
+/// Go `resolveMCPSecretRefAtPath` reports a missing entry as
+/// `secret ref not found: <path>`; the store layer says `entry not found: `.
+fn go_secret_ref_detail(error: &str) -> String {
+    error.strip_prefix("entry not found: ").map_or_else(
+        || error.to_owned(),
+        |path| format!("secret ref not found: {path}"),
+    )
+}
+
+/// Go renders the timeout as a `time.Duration` (`secrets.RunCommand`:
+/// `command timed out after %s`), so 60 seconds read `1m0s`.
+fn go_timeout(seconds: u64) -> String {
+    symvault_core::config::go_duration_string(i128::from(seconds) * 1_000_000_000)
+}
+
 fn parse_command_timeout(value: Option<&Value>) -> Result<u64, String> {
     let Some(value) = value else {
         return Ok(30);
@@ -6197,14 +6218,29 @@ mod tests {
         .expect("runtime")
         .with_command_executor(Arc::new(FakeCommandExecutor));
 
+        // Expected texts come from the Go recording (ADR 0037 R13).
+        let recorded: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../testdata/port/mcp/autotype-run-command.json"
+        ))
+        .expect("Go recording");
+        let recorded_text = |name: &str| -> String {
+            recorded["cases"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|case| case["name"] == name)
+                .and_then(|case| case["output"]["text"].as_str())
+                .unwrap_or_else(|| panic!("recorded case {name}"))
+                .to_owned()
+        };
         for (arguments, expected) in [
             (
                 json!({"command":["sh", "-c", "echo ok"], "files":"not an object"}),
-                "argument \"files\" must be an object",
+                recorded_text("run_files_not_object"),
             ),
             (
                 json!({"command":["sh", "-c", "echo ok"], "working_dir":true}),
-                "argument \"working_dir\" must be a string",
+                recorded_text("run_working_dir_not_string"),
             ),
         ] {
             runtime

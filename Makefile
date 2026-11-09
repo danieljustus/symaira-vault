@@ -857,7 +857,9 @@ AREA_KDF_MIGRATION_TESTS := 10
 # 449 from local/impl-residuals (+1: http.rs unit test
 # head_to_an_unrouted_path_returns_404_with_a_suppressed_body; measured at the
 # 95419793 gate: 449 passed, 0 failed).
-AREA_MCP_TEST_COUNT := 449
+# 451 from local/r-platform (+2: autotype_run_command_contract replays the Go
+# autotype and run_command handler recording, ADR 0037 R13; measured below).
+AREA_MCP_TEST_COUNT := 451
 
 # `make -s print-<VARIABLE>` prints a variable's value, for the workflows that must
 # not repeat the constants above.

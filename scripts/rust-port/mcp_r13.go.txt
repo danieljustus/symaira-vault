@@ -1,0 +1,279 @@
+package server
+
+// ADR 0037 R13 (MCP-003). Detached oracle program, never committed to the
+// Go tree: run from a worktree of tag legacy/go-oracle with
+//
+//	R13_OUT=<observation.json> go test ./internal/mcp/server -run TestR13AutotypeRunCommandObservation
+//
+// It drives the production handleAutotype and handleRunCommand (Go source
+// internal/mcp/server/tools_autotype.go, tools_run.go, internal/secrets/
+// runner.go) over a synthetic vault and writes the tool-result text of every
+// success, denied and error branch. autotype uses a fake backend installed via
+// autotype.SetAutotype so no keystroke ever reaches the desktop. run_command
+// has no injection seam in Go, so the "backend" is a real, fully
+// deterministic child process; the generator asserts that what Go actually
+// observed (exit code, stdout, stderr, timeout) equals the scripted backend
+// recorded next to the case, which is what the Rust replay feeds its fake
+// executor.
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"regexp"
+	"strings"
+	"testing"
+
+	"github.com/danieljustus/symaira-vault/internal/autotype"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+)
+
+type r13Backend struct {
+	Stdout   string `json:"stdout"`
+	Stderr   string `json:"stderr"`
+	ExitCode int    `json:"exit_code"`
+	TimedOut bool   `json:"timed_out"`
+	// SpawnError is the Go error text of a command that could not start.
+	SpawnError string `json:"spawn_error,omitempty"`
+}
+
+type r13Case struct {
+	Name    string          `json:"name"`
+	Tool    string          `json:"tool"`
+	Profile r13Profile      `json:"profile"`
+	Input   json.RawMessage `json:"input"`
+	// Typing is the autotype backend: what it should do on Type.
+	TypeError string     `json:"type_error,omitempty"`
+	Backend   *r13Backend `json:"backend,omitempty"`
+	Output    struct {
+		Text    string `json:"text"`
+		IsError bool   `json:"is_error"`
+		Error   string `json:"error,omitempty"`
+	} `json:"output"`
+	Typed *string `json:"typed,omitempty"`
+}
+
+type r13Profile struct {
+	CanUseAutotype     bool     `json:"can_use_autotype"`
+	CanRunCommands     bool     `json:"can_run_commands"`
+	ApprovalMode       string   `json:"approval_mode"`
+	AllowedPaths       []string `json:"allowed_paths"`
+	AllowedExecutables []string `json:"allowed_executables,omitempty"`
+}
+
+type r13Typer struct {
+	got *string
+	err string
+}
+
+func (t *r13Typer) Type(text string) error {
+	s := text
+	t.got = &s
+	if t.err != "" {
+		return errors.New(t.err)
+	}
+	return nil
+}
+
+var r13Marker = regexp.MustCompile(`DATA_[0-9a-f]+`)
+var r13Duration = regexp.MustCompile(`"duration_ms":\d+`)
+
+func r13Normalize(s string) string {
+	s = r13Marker.ReplaceAllString(s, "DATA_MARKER")
+	return r13Duration.ReplaceAllString(s, `"duration_ms":0`)
+}
+
+func TestR13AutotypeRunCommandObservation(t *testing.T) {
+	out := os.Getenv("R13_OUT")
+	if out == "" {
+		t.Skip("R13_OUT not set")
+	}
+	defer autotype.SetAutotype(nil)
+
+	const sh = "sh"
+	cases := []r13Case{}
+	add := func(c r13Case) { cases = append(cases, c) }
+	prof := func(p r13Profile) r13Profile {
+		if p.ApprovalMode == "" {
+			p.ApprovalMode = "none"
+		}
+		if p.AllowedPaths == nil {
+			p.AllowedPaths = []string{"*"}
+		}
+		return p
+	}
+	raw := func(v any) json.RawMessage {
+		b, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	at := prof(r13Profile{CanUseAutotype: true})
+	rc := prof(r13Profile{CanRunCommands: true})
+
+	// autotype
+	add(r13Case{Name: "autotype_success_default_field", Tool: "autotype", Profile: at, Input: raw(map[string]any{"path": "github"})})
+	add(r13Case{Name: "autotype_success_custom_field", Tool: "autotype", Profile: at, Input: raw(map[string]any{"path": "github", "field": "username"})})
+	add(r13Case{Name: "autotype_capability_denied", Tool: "autotype", Profile: prof(r13Profile{}), Input: raw(map[string]any{"path": "github"})})
+	add(r13Case{Name: "autotype_missing_path", Tool: "autotype", Profile: at, Input: raw(map[string]any{})})
+	add(r13Case{Name: "autotype_scope_denied", Tool: "autotype", Profile: prof(r13Profile{CanUseAutotype: true, AllowedPaths: []string{"allowed"}}), Input: raw(map[string]any{"path": "github"})})
+	add(r13Case{Name: "autotype_approval_prompt", Tool: "autotype", Profile: prof(r13Profile{CanUseAutotype: true, ApprovalMode: "prompt"}), Input: raw(map[string]any{"path": "github"})})
+	add(r13Case{Name: "autotype_approval_deny", Tool: "autotype", Profile: prof(r13Profile{CanUseAutotype: true, ApprovalMode: "deny"}), Input: raw(map[string]any{"path": "github"})})
+	add(r13Case{Name: "autotype_entry_not_found", Tool: "autotype", Profile: at, Input: raw(map[string]any{"path": "missing"})})
+	add(r13Case{Name: "autotype_field_not_found", Tool: "autotype", Profile: at, Input: raw(map[string]any{"path": "github", "field": "nope"})})
+	add(r13Case{Name: "autotype_field_not_string", Tool: "autotype", Profile: at, Input: raw(map[string]any{"path": "github", "field": "attempts"})})
+	add(r13Case{Name: "autotype_backend_error", Tool: "autotype", Profile: at, Input: raw(map[string]any{"path": "github"}), TypeError: "no focused window"})
+
+	// run_command
+	ok := &r13Backend{Stdout: "out-text", Stderr: "err-text", ExitCode: 0}
+	cmdSh := func(script string) []any { return []any{sh, "-c", script} }
+	add(r13Case{Name: "run_success", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("printf out-text; printf err-text >&2")}), Backend: ok})
+	add(r13Case{Name: "run_success_empty_output", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("exit 0")}), Backend: &r13Backend{}})
+	add(r13Case{Name: "run_nonzero_exit_is_a_success_result", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("printf bad >&2; exit 3")}), Backend: &r13Backend{Stderr: "bad", ExitCode: 3}})
+	add(r13Case{Name: "run_env_secret_masked", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("printf %s \"$TOKEN\"; printf %s \"$TOKEN\" >&2"), "env": map[string]any{"TOKEN": "github.password"}}), Backend: &r13Backend{Stdout: "testpass123", Stderr: "testpass123"}})
+	add(r13Case{Name: "run_timeout", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("printf partial; sleep 5"), "timeout": 1}), Backend: &r13Backend{Stdout: "partial", ExitCode: -1, TimedOut: true}})
+	add(r13Case{Name: "run_timeout_60s_renders_as_a_go_duration", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("sleep 65"), "timeout": 60}), Backend: &r13Backend{ExitCode: -1, TimedOut: true}})
+	add(r13Case{Name: "run_spawn_error", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": []any{"r13-no-such-executable"}}), Backend: &r13Backend{SpawnError: "?"}})
+	add(r13Case{Name: "run_capability_denied", Tool: "run_command", Profile: prof(r13Profile{}), Input: raw(map[string]any{"command": []any{"echo"}})})
+	add(r13Case{Name: "run_missing_command", Tool: "run_command", Profile: rc, Input: raw(map[string]any{})})
+	add(r13Case{Name: "run_command_not_array", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": "echo"})})
+	add(r13Case{Name: "run_command_empty", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": []any{}})})
+	add(r13Case{Name: "run_command_element_not_string", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": []any{sh, 3}})})
+	add(r13Case{Name: "run_executable_denied", Tool: "run_command", Profile: prof(r13Profile{CanRunCommands: true, AllowedExecutables: []string{"echo"}}), Input: raw(map[string]any{"command": cmdSh("true")})})
+	add(r13Case{Name: "run_timeout_not_numeric", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("true"), "timeout": "abc"})})
+	add(r13Case{Name: "run_timeout_fractional", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("true"), "timeout": 1.5})})
+	add(r13Case{Name: "run_timeout_out_of_range", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("true"), "timeout": 301})})
+	add(r13Case{Name: "run_env_not_object", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("true"), "env": "x"})})
+	add(r13Case{Name: "run_env_value_not_string", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("true"), "env": map[string]any{"TOKEN": 4}})})
+	add(r13Case{Name: "run_env_scope_denied", Tool: "run_command", Profile: prof(r13Profile{CanRunCommands: true, AllowedPaths: []string{"allowed"}}), Input: raw(map[string]any{"command": cmdSh("true"), "env": map[string]any{"TOKEN": "github.password"}})})
+	add(r13Case{Name: "run_env_ref_missing", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("true"), "env": map[string]any{"TOKEN": "absent.password"}})})
+	add(r13Case{Name: "run_env_denied_key", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("true"), "env": map[string]any{"LD_PRELOAD": "github.password"}})})
+	add(r13Case{Name: "run_files_not_object", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("true"), "files": "x"})})
+	add(r13Case{Name: "run_files_ref_missing", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("true"), "files": map[string]any{"CERT": "absent.password"}})})
+	add(r13Case{Name: "run_files_unsupported_encoding", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("true"), "files": map[string]any{"CERT": map[string]any{"ref": "github.password", "encoding": "rot13"}}})})
+	add(r13Case{Name: "run_files_bad_base64", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("true"), "files": map[string]any{"CERT": map[string]any{"ref": "github.password", "encoding": "base64"}}})})
+	add(r13Case{Name: "run_working_dir_not_string", Tool: "run_command", Profile: rc, Input: raw(map[string]any{"command": cmdSh("true"), "working_dir": true})})
+	add(r13Case{Name: "run_approval_prompt", Tool: "run_command", Profile: prof(r13Profile{CanRunCommands: true, ApprovalMode: "prompt"}), Input: raw(map[string]any{"command": cmdSh("true")})})
+	add(r13Case{Name: "run_approval_deny", Tool: "run_command", Profile: prof(r13Profile{CanRunCommands: true, ApprovalMode: "deny"}), Input: raw(map[string]any{"command": cmdSh("true")})})
+
+	for i := range cases {
+		c := &cases[i]
+		dir, identity := mockVaultWithEntry(t, "github", map[string]any{
+			"password": "testpass123", "username": "octocat", "attempts": 3,
+		})
+		profile := config.AgentProfile{
+			Name:           "fixture",
+			AllowedPaths:   c.Profile.AllowedPaths,
+			ApprovalMode:   config.StrPtr(c.Profile.ApprovalMode),
+			CanUseAutotype: config.BoolPtr(c.Profile.CanUseAutotype),
+			CanRunCommands: config.BoolPtr(c.Profile.CanRunCommands),
+		}
+		if len(c.Profile.AllowedExecutables) > 0 {
+			profile.AllowedExecutables = c.Profile.AllowedExecutables
+		}
+		srv := newTestServerWithVault(t, profile, "stdio", dir)
+		srv.vault.Identity = identity
+
+		var args map[string]any
+		if err := json.Unmarshal(c.Input, &args); err != nil {
+			t.Fatalf("%s input: %v", c.Name, err)
+		}
+		req := mcp.CallToolRequest{Arguments: args}
+		var res *mcp.CallToolResult
+		var err error
+		switch c.Tool {
+		case "autotype":
+			typer := &r13Typer{err: c.TypeError}
+			autotype.SetAutotype(typer)
+			res, err = srv.handleAutotype(context.Background(), req)
+			autotype.SetAutotype(nil)
+			c.Typed = typer.got
+		case "run_command":
+			res, err = srv.handleRunCommand(context.Background(), req)
+		}
+		if err != nil {
+			c.Output.Error = err.Error()
+		} else {
+			c.Output.Text = r13Normalize(res.Text)
+			c.Output.IsError = res.IsError
+		}
+
+		// The scripted run_command backend must be what Go really saw.
+		if c.Backend != nil {
+			switch c.Name {
+			case "run_spawn_error":
+				prefix := "failed to run command: "
+				if !strings.HasPrefix(c.Output.Text, prefix) || !c.Output.IsError {
+					t.Fatalf("%s: unexpected %q", c.Name, c.Output.Text)
+				}
+				c.Backend.SpawnError = strings.TrimPrefix(c.Output.Text, prefix)
+			case "run_timeout", "run_timeout_60s_renders_as_a_go_duration":
+				if !strings.HasPrefix(c.Output.Text, "command timed out after 1s\nExit code: -1\n") && !strings.HasPrefix(c.Output.Text, "command timed out after 1m0s\nExit code: -1\n") {
+					t.Fatalf("%s: unexpected %q", c.Name, c.Output.Text)
+				}
+			default:
+				if c.Output.IsError {
+					t.Fatalf("%s: unexpected error %q", c.Name, c.Output.Text)
+				}
+				var got struct {
+					ExitCode int    `json:"exit_code"`
+					Stdout   string `json:"stdout"`
+					Stderr   string `json:"stderr"`
+				}
+				if err := json.Unmarshal([]byte(c.Output.Text), &got); err != nil {
+					t.Fatalf("%s: %v", c.Name, err)
+				}
+				if got.ExitCode != c.Backend.ExitCode {
+					t.Fatalf("%s: exit %d, scripted %d", c.Name, got.ExitCode, c.Backend.ExitCode)
+				}
+				unwrap := func(v string) string {
+					v = r13Marker.ReplaceAllString(v, "DATA_MARKER")
+					const pre = "<!-- DATA_MARKER label=command_output -->"
+					const suf = "<!-- /DATA_MARKER -->"
+					if !strings.HasPrefix(v, pre) || !strings.HasSuffix(v, suf) {
+						t.Fatalf("%s: output %q is not embedded data", c.Name, v)
+					}
+					return strings.TrimSuffix(strings.TrimPrefix(v, pre), suf)
+				}
+				wantOut, wantErr := c.Backend.Stdout, c.Backend.Stderr
+				if c.Name == "run_env_secret_masked" {
+					wantOut = strings.ReplaceAll(wantOut, "testpass123", "***")
+					wantErr = strings.ReplaceAll(wantErr, "testpass123", "***")
+				}
+				if unwrap(got.Stdout) != wantOut || unwrap(got.Stderr) != wantErr {
+					t.Fatalf("%s: Go saw stdout=%q stderr=%q, scripted %q/%q", c.Name, unwrap(got.Stdout), unwrap(got.Stderr), wantOut, wantErr)
+				}
+			}
+		}
+	}
+
+	doc := map[string]any{
+		"schema_version": 1,
+		"oracle": map[string]any{
+			"commit":       os.Getenv("R13_ORACLE_COMMIT"),
+			"source_files": []string{"internal/mcp/server/tools_autotype.go", "internal/mcp/server/tools_run.go", "internal/secrets/runner.go", "internal/mcp/server/command_policy.go", "internal/mcp/server/server_authorize.go"},
+			"generator":    "internal/mcp/server/r13_autotype_run_command_observation_test.go (detached, see scripts/rust-port/mcp_r13.go.txt)",
+		},
+		"vault": map[string]any{
+			"entry": "github",
+			"data":  map[string]any{"password": "testpass123", "username": "octocat", "attempts": 3},
+		},
+		"normalizations": []string{
+			"DATA_<hex> markers (EmbedAsData random marker) -> DATA_MARKER",
+			"duration_ms -> 0",
+		},
+		"cases": cases,
+	}
+	b, err := json.MarshalIndent(doc, "", " ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(out, append(b, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println("wrote", out, len(cases), "cases")
+}

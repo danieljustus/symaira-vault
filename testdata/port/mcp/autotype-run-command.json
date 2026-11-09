@@ -1,0 +1,968 @@
+{
+ "cases": [
+  {
+   "name": "autotype_success_default_field",
+   "tool": "autotype",
+   "profile": {
+    "can_use_autotype": true,
+    "can_run_commands": false,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "path": "github"
+   },
+   "output": {
+    "text": "{\"success\": true}",
+    "is_error": false
+   },
+   "typed": "testpass123"
+  },
+  {
+   "name": "autotype_success_custom_field",
+   "tool": "autotype",
+   "profile": {
+    "can_use_autotype": true,
+    "can_run_commands": false,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "field": "username",
+    "path": "github"
+   },
+   "output": {
+    "text": "{\"success\": true}",
+    "is_error": false
+   },
+   "typed": "octocat"
+  },
+  {
+   "name": "autotype_capability_denied",
+   "tool": "autotype",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": false,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "path": "github"
+   },
+   "output": {
+    "text": "",
+    "is_error": false,
+    "error": "autotype operations not permitted for this agent"
+   }
+  },
+  {
+   "name": "autotype_missing_path",
+   "tool": "autotype",
+   "profile": {
+    "can_use_autotype": true,
+    "can_run_commands": false,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {},
+   "output": {
+    "text": "missing string argument \"path\"",
+    "is_error": true
+   }
+  },
+  {
+   "name": "autotype_scope_denied",
+   "tool": "autotype",
+   "profile": {
+    "can_use_autotype": true,
+    "can_run_commands": false,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "allowed"
+    ]
+   },
+   "input": {
+    "path": "github"
+   },
+   "output": {
+    "text": "",
+    "is_error": false,
+    "error": "access denied: path \"github\" outside allowed scope"
+   }
+  },
+  {
+   "name": "autotype_approval_prompt",
+   "tool": "autotype",
+   "profile": {
+    "can_use_autotype": true,
+    "can_run_commands": false,
+    "approval_mode": "prompt",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "path": "github"
+   },
+   "output": {
+    "text": "",
+    "is_error": false,
+    "error": "autotype denied: approval required but cannot be granted"
+   }
+  },
+  {
+   "name": "autotype_approval_deny",
+   "tool": "autotype",
+   "profile": {
+    "can_use_autotype": true,
+    "can_run_commands": false,
+    "approval_mode": "deny",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "path": "github"
+   },
+   "output": {
+    "text": "",
+    "is_error": false,
+    "error": "autotype denied: approval required but cannot be granted"
+   }
+  },
+  {
+   "name": "autotype_entry_not_found",
+   "tool": "autotype",
+   "profile": {
+    "can_use_autotype": true,
+    "can_run_commands": false,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "path": "missing"
+   },
+   "output": {
+    "text": "Entry \"\" not found",
+    "is_error": true
+   }
+  },
+  {
+   "name": "autotype_field_not_found",
+   "tool": "autotype",
+   "profile": {
+    "can_use_autotype": true,
+    "can_run_commands": false,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "field": "nope",
+    "path": "github"
+   },
+   "output": {
+    "text": "field \"nope\" not found in entry github",
+    "is_error": true
+   }
+  },
+  {
+   "name": "autotype_field_not_string",
+   "tool": "autotype",
+   "profile": {
+    "can_use_autotype": true,
+    "can_run_commands": false,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "field": "attempts",
+    "path": "github"
+   },
+   "output": {
+    "text": "field \"attempts\" is not a string",
+    "is_error": true
+   }
+  },
+  {
+   "name": "autotype_backend_error",
+   "tool": "autotype",
+   "profile": {
+    "can_use_autotype": true,
+    "can_run_commands": false,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "path": "github"
+   },
+   "type_error": "no focused window",
+   "output": {
+    "text": "autotype failed: no focused window",
+    "is_error": true
+   },
+   "typed": "testpass123"
+  },
+  {
+   "name": "run_success",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "printf out-text; printf err-text >&2"
+    ]
+   },
+   "backend": {
+    "stdout": "out-text",
+    "stderr": "err-text",
+    "exit_code": 0,
+    "timed_out": false
+   },
+   "output": {
+    "text": "{\"duration_ms\":0,\"exit_code\":0,\"stderr\":\"\\u003c!-- DATA_MARKER label=command_output --\\u003eerr-text\\u003c!-- /DATA_MARKER --\\u003e\",\"stdout\":\"\\u003c!-- DATA_MARKER label=command_output --\\u003eout-text\\u003c!-- /DATA_MARKER --\\u003e\"}",
+    "is_error": false
+   }
+  },
+  {
+   "name": "run_success_empty_output",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "exit 0"
+    ]
+   },
+   "backend": {
+    "stdout": "",
+    "stderr": "",
+    "exit_code": 0,
+    "timed_out": false
+   },
+   "output": {
+    "text": "{\"duration_ms\":0,\"exit_code\":0,\"stderr\":\"\\u003c!-- DATA_MARKER label=command_output --\\u003e\\u003c!-- /DATA_MARKER --\\u003e\",\"stdout\":\"\\u003c!-- DATA_MARKER label=command_output --\\u003e\\u003c!-- /DATA_MARKER --\\u003e\"}",
+    "is_error": false
+   }
+  },
+  {
+   "name": "run_nonzero_exit_is_a_success_result",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "printf bad >&2; exit 3"
+    ]
+   },
+   "backend": {
+    "stdout": "",
+    "stderr": "bad",
+    "exit_code": 3,
+    "timed_out": false
+   },
+   "output": {
+    "text": "{\"duration_ms\":0,\"exit_code\":3,\"stderr\":\"\\u003c!-- DATA_MARKER label=command_output --\\u003ebad\\u003c!-- /DATA_MARKER --\\u003e\",\"stdout\":\"\\u003c!-- DATA_MARKER label=command_output --\\u003e\\u003c!-- /DATA_MARKER --\\u003e\"}",
+    "is_error": false
+   }
+  },
+  {
+   "name": "run_env_secret_masked",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "printf %s \"$TOKEN\"; printf %s \"$TOKEN\" >&2"
+    ],
+    "env": {
+     "TOKEN": "github.password"
+    }
+   },
+   "backend": {
+    "stdout": "testpass123",
+    "stderr": "testpass123",
+    "exit_code": 0,
+    "timed_out": false
+   },
+   "output": {
+    "text": "{\"duration_ms\":0,\"exit_code\":0,\"stderr\":\"\\u003c!-- DATA_MARKER label=command_output --\\u003e***\\u003c!-- /DATA_MARKER --\\u003e\",\"stdout\":\"\\u003c!-- DATA_MARKER label=command_output --\\u003e***\\u003c!-- /DATA_MARKER --\\u003e\"}",
+    "is_error": false
+   }
+  },
+  {
+   "name": "run_timeout",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "printf partial; sleep 5"
+    ],
+    "timeout": 1
+   },
+   "backend": {
+    "stdout": "partial",
+    "stderr": "",
+    "exit_code": -1,
+    "timed_out": true
+   },
+   "output": {
+    "text": "command timed out after 1s\nExit code: -1\nStdout: <!-- DATA_MARKER label=command_output -->partial<!-- /DATA_MARKER -->\nStderr: <!-- DATA_MARKER label=command_output --><!-- /DATA_MARKER -->",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_timeout_60s_renders_as_a_go_duration",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "sleep 65"
+    ],
+    "timeout": 60
+   },
+   "backend": {
+    "stdout": "",
+    "stderr": "",
+    "exit_code": -1,
+    "timed_out": true
+   },
+   "output": {
+    "text": "command timed out after 1m0s\nExit code: -1\nStdout: <!-- DATA_MARKER label=command_output --><!-- /DATA_MARKER -->\nStderr: <!-- DATA_MARKER label=command_output --><!-- /DATA_MARKER -->",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_spawn_error",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "r13-no-such-executable"
+    ]
+   },
+   "backend": {
+    "stdout": "",
+    "stderr": "",
+    "exit_code": 0,
+    "timed_out": false,
+    "spawn_error": "exec: \"r13-no-such-executable\": executable file not found in $PATH"
+   },
+   "output": {
+    "text": "failed to run command: exec: \"r13-no-such-executable\": executable file not found in $PATH",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_capability_denied",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": false,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "echo"
+    ]
+   },
+   "output": {
+    "text": "",
+    "is_error": false,
+    "error": "command execution not permitted for this agent: set \"canRunCommands: true\" in its profile (symvault config set agents.fixture.canRunCommands true), or add \"run_command\" to allowed_tools if tier-based scoping applies. For interactive use without running commands, use copy_to_clipboard, autotype, or request_credential instead"
+   }
+  },
+  {
+   "name": "run_missing_command",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {},
+   "output": {
+    "text": "missing required argument \"command\"",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_command_not_array",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": "echo"
+   },
+   "output": {
+    "text": "argument \"command\" must be an array",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_command_empty",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": []
+   },
+   "output": {
+    "text": "command array must not be empty",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_command_element_not_string",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     3
+    ]
+   },
+   "output": {
+    "text": "command[1] must be a string",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_executable_denied",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ],
+    "allowed_executables": [
+     "echo"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "true"
+    ]
+   },
+   "output": {
+    "text": "",
+    "is_error": false,
+    "error": "command execution denied: executable \"sh\" not in agent allowlist"
+   }
+  },
+  {
+   "name": "run_timeout_not_numeric",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "true"
+    ],
+    "timeout": "abc"
+   },
+   "output": {
+    "text": "argument \"timeout\" must be numeric",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_timeout_fractional",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "true"
+    ],
+    "timeout": 1.5
+   },
+   "output": {
+    "text": "argument \"timeout\" must be a whole number of seconds",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_timeout_out_of_range",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "true"
+    ],
+    "timeout": 301
+   },
+   "output": {
+    "text": "argument \"timeout\" must be between 1 and 300 seconds",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_env_not_object",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "true"
+    ],
+    "env": "x"
+   },
+   "output": {
+    "text": "argument \"env\" must be an object",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_env_value_not_string",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "true"
+    ],
+    "env": {
+     "TOKEN": 4
+    }
+   },
+   "output": {
+    "text": "env.TOKEN value must be a string secret reference",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_env_scope_denied",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "allowed"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "true"
+    ],
+    "env": {
+     "TOKEN": "github.password"
+    }
+   },
+   "output": {
+    "text": "",
+    "is_error": false,
+    "error": "access denied: secret ref path \"github\" outside allowed scope"
+   }
+  },
+  {
+   "name": "run_env_ref_missing",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "true"
+    ],
+    "env": {
+     "TOKEN": "absent.password"
+    }
+   },
+   "output": {
+    "text": "cannot resolve secret ref \"absent.password\": secret ref not found: absent.password",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_env_denied_key",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "true"
+    ],
+    "env": {
+     "LD_PRELOAD": "github.password"
+    }
+   },
+   "output": {
+    "text": "env contains denied keys: LD_PRELOAD",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_files_not_object",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "true"
+    ],
+    "files": "x"
+   },
+   "output": {
+    "text": "argument \"files\" must be an object",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_files_ref_missing",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "true"
+    ],
+    "files": {
+     "CERT": "absent.password"
+    }
+   },
+   "output": {
+    "text": "cannot resolve secret ref \"absent.password\": secret ref not found: absent.password",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_files_unsupported_encoding",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "true"
+    ],
+    "files": {
+     "CERT": {
+      "encoding": "rot13",
+      "ref": "github.password"
+     }
+    }
+   },
+   "output": {
+    "text": "files.CERT: unsupported encoding \"rot13\" (supported: base64)",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_files_bad_base64",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "true"
+    ],
+    "files": {
+     "CERT": {
+      "encoding": "base64",
+      "ref": "github.password"
+     }
+    }
+   },
+   "output": {
+    "text": "files.CERT: cannot base64-decode resolved value",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_working_dir_not_string",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "none",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "true"
+    ],
+    "working_dir": true
+   },
+   "output": {
+    "text": "argument \"working_dir\" must be a string",
+    "is_error": true
+   }
+  },
+  {
+   "name": "run_approval_prompt",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "prompt",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "true"
+    ]
+   },
+   "output": {
+    "text": "",
+    "is_error": false,
+    "error": "run_command denied: approval required but cannot be granted"
+   }
+  },
+  {
+   "name": "run_approval_deny",
+   "tool": "run_command",
+   "profile": {
+    "can_use_autotype": false,
+    "can_run_commands": true,
+    "approval_mode": "deny",
+    "allowed_paths": [
+     "*"
+    ]
+   },
+   "input": {
+    "command": [
+     "sh",
+     "-c",
+     "true"
+    ]
+   },
+   "output": {
+    "text": "",
+    "is_error": false,
+    "error": "run_command denied: approval required but cannot be granted"
+   }
+  }
+ ],
+ "normalizations": [
+  "DATA_<hex> markers (EmbedAsData random marker) -> DATA_MARKER",
+  "duration_ms -> 0"
+ ],
+ "oracle": {
+  "commit": "ce2390d748818a4beb413e97183b7795efa99411",
+  "tag": "legacy/go-oracle",
+  "go_version": "go1.26.6",
+  "recorded_goos": [
+   "darwin"
+  ],
+  "go_source": "internal/mcp/server/r13_autotype_run_command_observation_test.go (TestR13AutotypeRunCommandObservation, detached; copy: scripts/rust-port/mcp_r13.go.txt)",
+  "program_sha256": "813b385d37619fdbd27acedacd0601b9e7788a04aa009d5bccfe2be7814cf141",
+  "source_files": [
+   "internal/mcp/server/tools_autotype.go",
+   "internal/mcp/server/tools_run.go",
+   "internal/secrets/runner.go",
+   "internal/mcp/server/command_policy.go",
+   "internal/mcp/server/server_authorize.go"
+  ],
+  "go_code_path": "Server.handleAutotype / Server.handleRunCommand -> secrets.RunCommand (real child process, scripted per case)"
+ },
+ "schema_version": 1,
+ "vault": {
+  "data": {
+   "attempts": 3,
+   "password": "testpass123",
+   "username": "octocat"
+  },
+  "entry": "github"
+ },
+ "note": "R13 (ADR 0037, MCP-003): tool-result text of the production Go autotype and run_command handlers for every success, denied and error branch. autotype uses a fake backend (autotype.SetAutotype); run_command has no injection seam in Go, so each case's `backend` is the scripted child outcome the generator asserted Go really observed (exit code, stdout, stderr, timeout, spawn error); the Rust replay feeds the same values to its fake executor. Not reachable in Go: the `autotype not available on this platform` branch (tools_autotype.go:56) needs a nil DefaultAutotype, which the darwin/linux factories never return. Handler errors (JSON-RPC internal errors) are in output.error. Darwin run; sh/printf only."
+}

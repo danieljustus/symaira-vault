@@ -205,6 +205,29 @@ fn value_read_approval_gate_follows_argument_validation_and_scope() {
     assert!(!gated.to_string().contains("hunter2-fixture"));
 }
 
+/// Go's recorded `autotype`/`run_command` handler output (ADR 0037 R13,
+/// `testdata/port/mcp/autotype-run-command.json`): the tool-result text, or the
+/// handler error for JSON-RPC internal errors.
+fn recorded(name: &str) -> String {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../testdata/port/mcp/autotype-run-command.json"
+    ))
+    .unwrap();
+    let case = fixture["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["name"] == name)
+        .unwrap_or_else(|| panic!("recorded case {name}"));
+    let output = &case["output"];
+    output["error"]
+        .as_str()
+        .filter(|error| !error.is_empty())
+        .or_else(|| output["text"].as_str())
+        .unwrap()
+        .to_owned()
+}
+
 fn autotype_config() -> ReadOnlyRuntimeConfig {
     ReadOnlyRuntimeConfig {
         tier: "admin".into(),
@@ -227,14 +250,14 @@ fn autotype_types_only_after_capability_scope_and_approval() {
     let denied = call(&mut f, "autotype", json!({"path": "public/site"}));
     assert_eq!(
         rpc_error(&denied),
-        (-32603, "autotype operations not permitted for this agent")
+        (-32603, recorded("autotype_capability_denied").as_str())
     );
     assert!(f.typed.typed.lock().unwrap().is_empty());
 
     let mut f = fixture(autotype_config(), true);
     assert_eq!(
         text(&call(&mut f, "autotype", json!({}))),
-        "missing string argument \"path\""
+        recorded("autotype_missing_path")
     );
     let outside = call(&mut f, "autotype", json!({"path": "elsewhere/site"}));
     assert_eq!(
@@ -250,7 +273,10 @@ fn autotype_types_only_after_capability_scope_and_approval() {
             "autotype",
             json!({"path": "public/site", "field": "missing"})
         )),
-        "field \"missing\" not found in entry public/site"
+        // Same template as the recording (`field "nope" not found in entry github`).
+        recorded("autotype_field_not_found")
+            .replace("\"nope\"", "\"missing\"")
+            .replace("entry github", "entry public/site")
     );
     assert_eq!(
         text(&call(
@@ -258,7 +284,7 @@ fn autotype_types_only_after_capability_scope_and_approval() {
             "autotype",
             json!({"path": "public/site", "field": "attempts"})
         )),
-        "field \"attempts\" is not a string"
+        recorded("autotype_field_not_string")
     );
     assert!(
         f.typed.typed.lock().unwrap().is_empty(),
@@ -280,10 +306,7 @@ fn autotype_types_only_after_capability_scope_and_approval() {
     let refused = call(&mut f, "autotype", json!({"path": "public/site"}));
     assert_eq!(
         rpc_error(&refused),
-        (
-            -32603,
-            "autotype denied: approval required but cannot be granted"
-        )
+        (-32603, recorded("autotype_approval_prompt").as_str())
     );
     assert!(f.typed.typed.lock().unwrap().is_empty());
 

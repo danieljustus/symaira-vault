@@ -1,0 +1,323 @@
+package main
+
+// ADR 0037 R11 and R12 (IO-002). Detached oracle program: run it from a
+// worktree of the tag legacy/go-oracle with
+//
+//	R11_OUT=<gzip header observation.json> R12_OUT=<tar cap observation.json> \
+//	  go test ./scripts/rust-port/cmd/restoregen -run TestR11R12
+//
+// R11: the first gzip member's optional header fields (FEXTRA, FNAME,
+// FCOMMENT, FHCRC) and the other header bytes, then the same fields on a later
+// member. R12: the 1 MiB cap Go's archive/tar puts on the body of the special
+// headers 'g' (PAX global) and 'K' (GNU long link name), just under, at and
+// over the cap and with a declared size over it. Every archive is handed to
+// the production admin.RestoreBackup through the generator's own runAt, which
+// records Go's error text and the complete resulting file tree.
+
+import (
+	"archive/tar"
+	"bytes"
+	"compress/flate"
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/json"
+	"fmt"
+	"hash/crc32"
+	"os"
+	"runtime"
+	"strings"
+	"testing"
+)
+
+type gzSpec struct {
+	magic    []byte
+	method   byte
+	flags    byte
+	mtime    uint32
+	xfl, os  byte
+	extra    []byte // FEXTRA data
+	xlen     *int   // XLEN override
+	name     []byte
+	comment  []byte
+	noNameNL bool // omit the NUL that ends FNAME
+	noCommNL bool
+	hcrc     string // "", "valid", "wrong", "half"
+	// cut drops everything after this many bytes of the finished member.
+	cut int
+}
+
+func ptr(n int) *int { return &n }
+
+func gzMember(payload []byte, s gzSpec) []byte {
+	if s.magic == nil {
+		s.magic = []byte{0x1f, 0x8b}
+	}
+	if s.method == 0 {
+		s.method = 8
+	}
+	var head bytes.Buffer
+	head.Write(s.magic)
+	head.WriteByte(s.method)
+	head.WriteByte(s.flags)
+	_ = binary.Write(&head, binary.LittleEndian, s.mtime)
+	head.WriteByte(s.xfl)
+	head.WriteByte(s.os)
+	if s.flags&0x04 != 0 {
+		xlen := len(s.extra)
+		if s.xlen != nil {
+			xlen = *s.xlen
+		}
+		_ = binary.Write(&head, binary.LittleEndian, uint16(xlen))
+		head.Write(s.extra)
+	}
+	if s.flags&0x08 != 0 {
+		head.Write(s.name)
+		if !s.noNameNL {
+			head.WriteByte(0)
+		}
+	}
+	if s.flags&0x10 != 0 {
+		head.Write(s.comment)
+		if !s.noCommNL {
+			head.WriteByte(0)
+		}
+	}
+	if s.flags&0x02 != 0 {
+		sum := uint16(crc32.ChecksumIEEE(head.Bytes()))
+		switch s.hcrc {
+		case "wrong":
+			sum ^= 0x5a5a
+		case "half":
+			head.WriteByte(byte(sum))
+			sum = 0
+			s.cut = head.Len()
+		}
+		if s.hcrc != "half" {
+			_ = binary.Write(&head, binary.LittleEndian, sum)
+		}
+	}
+	var body bytes.Buffer
+	fw, err := flate.NewWriter(&body, flate.DefaultCompression)
+	if err != nil {
+		panic(err)
+	}
+	if _, err := fw.Write(payload); err != nil {
+		panic(err)
+	}
+	if err := fw.Close(); err != nil {
+		panic(err)
+	}
+	out := append(head.Bytes(), body.Bytes()...)
+	trailer := make([]byte, 8)
+	binary.LittleEndian.PutUint32(trailer[0:4], crc32.ChecksumIEEE(payload))
+	binary.LittleEndian.PutUint32(trailer[4:8], uint32(len(payload)))
+	out = append(out, trailer...)
+	if s.cut > 0 && s.cut < len(out) {
+		out = out[:s.cut]
+	}
+	return out
+}
+
+type r11Spec struct {
+	name string
+	// first describes the first gzip member; second, when set, a later one
+	// holding the rest of the tar stream split at tarOffset(members, 3).
+	first  gzSpec
+	second *gzSpec
+}
+
+func r11Specs() []r11Spec {
+	long := bytes.Repeat([]byte("n"), 1000)
+	big := bytes.Repeat([]byte{0xab}, 65535)
+	all := gzSpec{flags: 0x1e, extra: []byte("AB\x02\x00xx"), name: []byte("archive.tar"), comment: []byte("a comment"), hcrc: "valid"}
+	allWrong := all
+	allWrong.hcrc = "wrong"
+	return []r11Spec{
+		{name: "header/plain-control"},
+		{name: "header/mtime-xfl-os-set", first: gzSpec{mtime: 1700000000, xfl: 2, os: 3}},
+		{name: "header/ftext-flag", first: gzSpec{flags: 0x01}},
+		{name: "header/fname", first: gzSpec{flags: 0x08, name: []byte("archive.tar")}},
+		{name: "header/fname-empty", first: gzSpec{flags: 0x08}},
+		{name: "header/fname-1000-bytes", first: gzSpec{flags: 0x08, name: long}},
+		{name: "header/fname-latin1-and-invalid-utf8", first: gzSpec{flags: 0x08, name: []byte("caf\xe9\xff\xfe.tar")}},
+		{name: "header/fname-utf8", first: gzSpec{flags: 0x08, name: []byte("caf\xc3\xa9.tar")}},
+		{name: "header/fname-unterminated-at-eof", first: gzSpec{flags: 0x08, name: []byte("archive.tar"), noNameNL: true, cut: 10 + len("archive.tar")}},
+		{name: "header/fname-with-nul-inside-ignored-tail", first: gzSpec{flags: 0x08, name: []byte("a\x00b")}},
+		{name: "header/fextra-4-bytes", first: gzSpec{flags: 0x04, extra: []byte("AB\x00\x00")}},
+		{name: "header/fextra-subfield", first: gzSpec{flags: 0x04, extra: []byte("AB\x02\x00xx")}},
+		{name: "header/fextra-empty", first: gzSpec{flags: 0x04}},
+		{name: "header/fextra-65535-bytes", first: gzSpec{flags: 0x04, extra: big}},
+		{name: "header/fextra-length-beyond-eof", first: gzSpec{flags: 0x04, extra: bytes.Repeat([]byte("e"), 10), xlen: ptr(100), cut: 12 + 10}},
+		{name: "header/fextra-length-only-then-eof", first: gzSpec{flags: 0x04, extra: []byte("abc"), xlen: ptr(5), cut: 12}},
+		{name: "header/fcomment", first: gzSpec{flags: 0x10, comment: []byte("a comment")}},
+		{name: "header/fcomment-empty", first: gzSpec{flags: 0x10}},
+		{name: "header/fcomment-unterminated-at-eof", first: gzSpec{flags: 0x10, comment: []byte("a comment"), noCommNL: true, cut: 10 + len("a comment")}},
+		{name: "header/fhcrc-valid", first: gzSpec{flags: 0x02, hcrc: "valid"}},
+		{name: "header/fhcrc-wrong", first: gzSpec{flags: 0x02, hcrc: "wrong"}},
+		{name: "header/fhcrc-half-then-eof", first: gzSpec{flags: 0x02, hcrc: "half"}},
+		{name: "header/fhcrc-valid-with-fname", first: gzSpec{flags: 0x0a, name: []byte("archive.tar"), hcrc: "valid"}},
+		{name: "header/fhcrc-wrong-with-fname", first: gzSpec{flags: 0x0a, name: []byte("archive.tar"), hcrc: "wrong"}},
+		{name: "header/fhcrc-valid-with-fextra", first: gzSpec{flags: 0x06, extra: []byte("AB\x02\x00xx"), hcrc: "valid"}},
+		{name: "header/fhcrc-valid-with-fcomment", first: gzSpec{flags: 0x12, comment: []byte("c"), hcrc: "valid"}},
+		{name: "header/all-four-flags-valid", first: all},
+		{name: "header/all-four-flags-wrong-crc", first: allWrong},
+		{name: "header/reserved-flag-0x20", first: gzSpec{flags: 0x20}},
+		{name: "header/reserved-flag-0x40", first: gzSpec{flags: 0x40}},
+		{name: "header/reserved-flag-0x80", first: gzSpec{flags: 0x80}},
+		{name: "header/bad-method", first: gzSpec{method: 9}},
+		{name: "header/bad-magic", first: gzSpec{magic: []byte{0x1f, 0x8c}}},
+		{name: "second-member/all-four-flags-valid", first: gzSpec{}, second: &all},
+		{name: "second-member/fname", first: gzSpec{}, second: &gzSpec{flags: 0x08, name: []byte("part2.tar")}},
+		{name: "second-member/fextra", first: gzSpec{}, second: &gzSpec{flags: 0x04, extra: []byte("AB\x02\x00xx")}},
+		{name: "second-member/fcomment", first: gzSpec{}, second: &gzSpec{flags: 0x10, comment: []byte("c")}},
+		{name: "second-member/fhcrc-wrong", first: gzSpec{}, second: &gzSpec{flags: 0x02, hcrc: "wrong"}},
+		{name: "second-member/all-four-flags-wrong-crc", first: gzSpec{}, second: &allWrong},
+		{name: "second-member/fextra-length-beyond-eof", first: gzSpec{}, second: &gzSpec{flags: 0x04, extra: []byte("e"), xlen: ptr(100), cut: 12 + 1}},
+		{name: "second-member/reserved-flag-0x20", first: gzSpec{}, second: &gzSpec{flags: 0x20}},
+		{name: "both-members/all-four-flags-valid", first: all, second: &all},
+	}
+}
+
+type r1xCase struct {
+	restoreCase
+	GzB64 string `json:"gz_b64"`
+}
+
+func r11Cases() []r1xCase {
+	members := multistreamMembers()
+	var cases []r1xCase
+	for _, spec := range r11Specs() {
+		var gz []byte
+		item := runAt("gzip-header/"+spec.name, "raw", tar.FormatUnknown, members, true, nil, "", "vault", false,
+			func(data []byte) []byte {
+				if spec.second == nil {
+					gz = gzMember(data, spec.first)
+				} else {
+					cut := tarOffset(members, 3)
+					gz = append(gzMember(data[:cut], spec.first), gzMember(data[cut:], *spec.second)...)
+				}
+				return gz
+			})
+		item.Wrap = fmt.Sprintf("gzip-members first=%+v second=%v", brief(spec.first), spec.second != nil)
+		item.TarB64 = ""
+		item.TarParts = nil
+		cases = append(cases, r1xCase{restoreCase: item, GzB64: base64.StdEncoding.EncodeToString(gz)})
+	}
+	return cases
+}
+
+func brief(s gzSpec) string {
+	return fmt.Sprintf("flags=%#x hcrc=%s", s.flags, s.hcrc)
+}
+
+// ---- R12 ------------------------------------------------------------------
+
+const capBytes = 1 << 20
+
+// globalPAXBody is a single valid PAX record "<len> comment=<value>\n" whose
+// total length is exactly total.
+func globalPAXBody(total int) []byte {
+	digits := len(fmt.Sprint(total))
+	valueLen := total - (len(" comment=\n") + digits)
+	body := []byte(fmt.Sprintf("%d comment=%s\n", total, strings.Repeat("c", valueLen)))
+	if len(body) != total {
+		panic(fmt.Sprintf("pax record is %d bytes, want %d", len(body), total))
+	}
+	return body
+}
+
+func r12Cases() []r1xCase {
+	members := with(member{Name: "entries/fieldcase", Type: "reg", Mode: 0o600, Data: "x"})
+	insertAt := tarOffset(members, len(members)-1)
+	type spec struct {
+		name    string
+		flag    byte
+		content []byte
+		// declared, when non-empty, overwrites the header's size field.
+		declared string
+	}
+	linkBody := func(n int) []byte { return append(bytes.Repeat([]byte("l"), n-1), 0) }
+	specs := []spec{
+		{name: "pax-global/under-cap", flag: 'g', content: globalPAXBody(capBytes - 1)},
+		{name: "pax-global/at-cap", flag: 'g', content: globalPAXBody(capBytes)},
+		{name: "pax-global/over-cap-by-one", flag: 'g', content: globalPAXBody(capBytes + 1)},
+		{name: "pax-global/over-cap-by-512", flag: 'g', content: globalPAXBody(capBytes + 512)},
+		{name: "pax-global/declared-size-over-cap", flag: 'g', content: []byte("x"), declared: "00004000001\x00"},
+		{name: "pax-global/declared-size-at-cap-short-body", flag: 'g', content: []byte("x"), declared: "00004000000\x00"},
+		{name: "gnu-longlink/under-cap", flag: 'K', content: linkBody(capBytes - 1)},
+		{name: "gnu-longlink/at-cap", flag: 'K', content: linkBody(capBytes)},
+		{name: "gnu-longlink/over-cap-by-one", flag: 'K', content: bytes.Repeat([]byte("l"), capBytes+1)},
+		{name: "gnu-longlink/over-cap-by-512", flag: 'K', content: bytes.Repeat([]byte("l"), capBytes+512)},
+		{name: "gnu-longlink/declared-size-over-cap", flag: 'K', content: []byte("x"), declared: "00004000001\x00"},
+		{name: "gnu-longlink/declared-size-at-cap-short-body", flag: 'K', content: []byte("x"), declared: "00004000000\x00"},
+		// The same boundary for the PAX local header, which the existing
+		// corpus pins only above the cap (a 1 MiB GNU long name is left out:
+		// it would put a 1 MiB file name into the error text).
+		{name: "pax-local/under-cap", flag: 'x', content: globalPAXBody(capBytes - 1)},
+		{name: "pax-local/at-cap", flag: 'x', content: globalPAXBody(capBytes)},
+	}
+	var cases []r1xCase
+	for _, s := range specs {
+		s := s
+		var gz []byte
+		item := runAt("tar-special-cap/"+s.name, "gzip", tar.FormatUnknown, members, true, nil, "", "vault", false,
+			func(data []byte) []byte {
+				ext := extBlocks(s.flag, s.content, nil)
+				if s.declared != "" {
+					ext = patchHeader(ext, 0, 124, s.declared)
+				}
+				out := append(append(append([]byte{}, data[:insertAt]...), ext...), data[insertAt:]...)
+				gz = gzipBytes(out)
+				return out
+			})
+		cases = append(cases, r1xCase{restoreCase: item, GzB64: base64.StdEncoding.EncodeToString(gz)})
+	}
+	return cases
+}
+
+func writeR1x(t *testing.T, path string, cases []r1xCase) {
+	t.Helper()
+	doc := map[string]any{
+		"schema_version": 1,
+		"goos":           runtime.GOOS,
+		"goarch":         runtime.GOARCH,
+		"go_version":     runtime.Version(),
+		"cases":          cases,
+	}
+	var buffer bytes.Buffer
+	enc := json.NewEncoder(&buffer)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", " ")
+	if err := enc.Encode(doc); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, buffer.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestR11R12(t *testing.T) {
+	r11, r12 := os.Getenv("R11_OUT"), os.Getenv("R12_OUT")
+	if r11 == "" || r12 == "" {
+		t.Skip("R11_OUT and R12_OUT are required")
+	}
+	first, second := r11Cases(), r11Cases()
+	if a, b := mustJSONr(t, first), mustJSONr(t, second); a != b {
+		t.Fatal("two evaluations of the gzip header corpus differ")
+	}
+	writeR1x(t, r11, first)
+	c1, c2 := r12Cases(), r12Cases()
+	if a, b := mustJSONr(t, c1), mustJSONr(t, c2); a != b {
+		t.Fatal("two evaluations of the tar cap corpus differ")
+	}
+	writeR1x(t, r12, c1)
+}
+
+func mustJSONr(t *testing.T, v any) string {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}

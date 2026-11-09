@@ -267,7 +267,10 @@ impl GitRepository {
         if limit > 0 {
             args.push(&limit_arg);
         }
-        args.extend(["--date=iso-strict", "--format=%H%x1f%an%x1f%aI%x1f%s%x1e"]);
+        args.extend([
+            "--date=iso-strict",
+            "--format=%H%x1f%an%x1f%ae%x1f%aI%x1f%s%x1e",
+        ]);
         if let Some(path) = path.filter(|path| !path.is_empty()) {
             validate_paths(&[path.to_owned()])?;
             args.extend(["--", path]);
@@ -277,15 +280,21 @@ impl GitRepository {
         text.split('\x1e')
             .filter(|s| !s.trim().is_empty())
             .map(|record| {
-                let f: Vec<_> = record.trim_end_matches('\n').split('\x1f').collect();
-                if f.len() != 4 {
+                // `git log` separates records with a newline after %x1e.
+                let f: Vec<_> = record.trim_matches('\n').split('\x1f').collect();
+                if f.len() != 5 {
                     return Err(GitError::Parse(record.to_owned()));
                 }
                 Ok(Commit {
                     hash: f[0].into(),
-                    author: f[1].into(),
-                    date: f[2].into(),
-                    message: f[3].into(),
+                    // Go's `formatAuthor`: "Name <email>", or whichever is set.
+                    author: match (f[1], f[2]) {
+                        (name, "") => name.to_owned(),
+                        ("", email) => email.to_owned(),
+                        (name, email) => format!("{name} <{email}>"),
+                    },
+                    date: f[3].into(),
+                    message: f[4].into(),
                 })
             })
             .collect()
@@ -1359,7 +1368,7 @@ mod tests {
 
         let head = repo.log(1).unwrap();
         assert_eq!(head.len(), 1);
-        assert_eq!(head[0].author, "Symaira Vault");
+        assert_eq!(head[0].author, "Symaira Vault <symvault@example.com>");
         assert_eq!(commit_email(&repo), "symvault@example.com");
     }
 
@@ -1383,7 +1392,7 @@ mod tests {
         .expect("commit created");
 
         let head = repo.log(1).unwrap();
-        assert_eq!(head[0].author, "Vault Owner");
+        assert_eq!(head[0].author, "Vault Owner <owner@example.invalid>");
         assert_eq!(commit_email(&repo), "owner@example.invalid");
     }
 

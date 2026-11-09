@@ -1572,7 +1572,21 @@ fn run_cli() -> ExitCode {
                         path: name.clone(),
                         editor: editor.unwrap_or_default(),
                     },
-                )?;
+                )
+                .map_err(|error| {
+                    if error.starts_with("entry not found: ") {
+                        // Go: `errorspkg.NotFound("entry not found: %s", name)`.
+                        reported(
+                            2,
+                            &format!("{error}: entry not found"),
+                            Some(
+                                "Try: symvault list to browse entries, or symvault find <term> to search by keyword.",
+                            ),
+                        )
+                    } else {
+                        error
+                    }
+                })?;
                 if !cli.quiet {
                     println!("Entry updated: {name}");
                 }
@@ -4483,14 +4497,19 @@ fn run_recipients(
             } => {
                 let identity = device::unlock_vault(&vault)?;
                 if !yes {
-                    eprint!("Remove recipient {recipient}? (y/N): ");
+                    // Go: `confirmInteractive("Remove recipient %s", false)` prints
+                    // "<prompt> (y/N): " and treats EOF with no answer as an error.
+                    eprint!("Remove recipient {recipient} (y/N): ");
                     io::stderr()
                         .flush()
                         .map_err(|error| format!("recipient confirmation prompt: {error}"))?;
                     let mut answer = String::new();
-                    io::stdin()
+                    let read = io::stdin()
                         .read_line(&mut answer)
-                        .map_err(|error| format!("recipient confirmation: {error}"))?;
+                        .map_err(|error| format!("read confirmation: {error}"))?;
+                    if read == 0 {
+                        return Err(reported(1, "read confirmation: EOF", None));
+                    }
                     if !answer.trim().eq_ignore_ascii_case("y") {
                         if !quiet {
                             eprintln!("Canceled");

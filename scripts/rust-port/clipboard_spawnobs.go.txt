@@ -1,0 +1,217 @@
+// Command spawnobs records the error text the production Go clipboard
+// (internal/clipboard.NewSystemClipboard -> atotto/clipboard v0.1.4) returns
+// when its fake clipboard tools die by a signal (R7) or cannot be started
+// (R8). It is a detached oracle program: build it in a worktree of the tag
+// legacy/go-oracle, run it on the GOOS under observation and keep only the
+// JSON it prints.
+//
+// atotto selects its tool in package init() from PATH, so every scenario runs
+// in a re-executed child with a disposable PATH holding only the fake tools.
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"runtime/debug"
+	"sort"
+	"strings"
+
+	"github.com/danieljustus/symaira-vault/internal/clipboard"
+)
+
+const childEnv = "SPAWNOBS_CHILD"
+
+type childResult struct {
+	CopyError *string `json:"copy_error"`
+	ReadError *string `json:"read_error"`
+	ReadValue string  `json:"read_value"`
+}
+
+type scenario struct {
+	Name string `json:"name"`
+	// Files maps a file name in the disposable PATH directory to its setup.
+	Files map[string]fileSpec `json:"files"`
+}
+
+type fileSpec struct {
+	Mode    string `json:"mode"` // octal, e.g. "0755"
+	Content string `json:"content"`
+}
+
+type observation struct {
+	scenario
+	WaylandDisplay string      `json:"wayland_display,omitempty"`
+	Result         childResult `json:"result"`
+}
+
+// toolNames are the file names the production backend of GOOS looks up.
+func toolNames() (copyName, pasteName string) {
+	if runtime.GOOS == "darwin" {
+		return "pbcopy", "pbpaste"
+	}
+	return "xclip", "xclip"
+}
+
+// pair returns the same script content for the copy and the paste tool. The
+// Linux xclip is one file serving both (`-in` selects copy); on darwin
+// pbcopy copies and pbpaste pastes.
+func pair(content string, mode string) map[string]fileSpec {
+	c, p := toolNames()
+	files := map[string]fileSpec{c: {Mode: mode, Content: content}}
+	if p != c {
+		files[p] = fileSpec{Mode: mode, Content: content}
+	}
+	return files
+}
+
+func withHelper(files map[string]fileSpec, name, content, mode string) map[string]fileSpec {
+	files[name] = fileSpec{Mode: mode, Content: content}
+	return files
+}
+
+func signalScript(sig string) string {
+	// Copy mode drains stdin first so the parent's write never races the
+	// child's death; paste mode dies at once.
+	if runtime.GOOS == "darwin" {
+		return "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -" + sig + " $$\n"
+	}
+	return "#!/bin/sh\nmode=paste\nfor a in \"$@\"; do case \"$a\" in -in) mode=copy;; esac; done\nif [ \"$mode\" = copy ]; then /bin/cat >/dev/null; fi\nkill -" + sig + " $$\n"
+}
+
+func scenarios(group string) []scenario {
+	var out []scenario
+	if group == "signals" {
+		for _, sig := range []string{"KILL", "TERM", "SEGV", "HUP", "INT", "ABRT", "BUS", "USR1", "PIPE"} {
+			out = append(out, scenario{Name: "signal_" + strings.ToLower(sig), Files: pair(signalScript(sig), "0755")})
+		}
+		return out
+	}
+	// spawn errors
+	good := "#!/bin/sh\n/bin/cat >/dev/null\nexit 0\n"
+	out = append(out,
+		scenario{Name: "enoexec_garbage_no_shebang", Files: pair("\x01\x02garbage without a shebang\n", "0755")},
+		scenario{Name: "enoexec_empty_file", Files: pair("", "0755")},
+		// execve fails with EACCES when the shebang interpreter is not
+		// executable, ENOENT when it is missing.
+		scenario{Name: "eacces_interpreter_not_executable", Files: withHelper(pair("#!@BIN@/interp\n", "0755"), "interp", "#!/bin/sh\nexit 0\n", "0644")},
+		scenario{Name: "enoent_interpreter_missing", Files: pair("#!@BIN@/no-such-interpreter\n", "0755")},
+		scenario{Name: "not_executable_file", Files: pair(good, "0644")},
+		scenario{Name: "unreadable_not_executable", Files: pair(good, "0000")},
+	)
+	if runtime.GOOS == "linux" {
+		// Only the copy half is unusable: the other tool of the pair works.
+		// (Linux selects xclip as one file, so use xsel to keep a fallback.)
+		out = append(out,
+			scenario{Name: "not_executable_xclip_falls_back_to_xsel", Files: map[string]fileSpec{
+				"xclip": {Mode: "0644", Content: good},
+				"xsel":  {Mode: "0755", Content: "#!/bin/sh\nif [ \"$1\" = --input ]; then /bin/cat >/dev/null; exit 0; fi\nprintf selected-xsel\n"},
+			}},
+			scenario{Name: "enoexec_xclip_beats_xsel", Files: map[string]fileSpec{
+				"xclip": {Mode: "0755", Content: "\x01\x02garbage\n"},
+				"xsel":  {Mode: "0755", Content: "#!/bin/sh\n/bin/cat >/dev/null\nexit 0\n"},
+			}},
+		)
+	}
+	return out
+}
+
+func child() {
+	c := clipboard.NewSystemClipboard()
+	var res childResult
+	if err := c.Copy("secret-text"); err != nil {
+		s := err.Error()
+		res.CopyError = &s
+	}
+	v, err := c.Read()
+	if err != nil {
+		s := err.Error()
+		res.ReadError = &s
+	}
+	res.ReadValue = v
+	_ = json.NewEncoder(os.Stdout).Encode(res)
+}
+
+func main() {
+	if os.Getenv(childEnv) == "1" {
+		child()
+		return
+	}
+	group := "signals"
+	if len(os.Args) > 1 {
+		group = os.Args[1]
+	}
+	self, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	var observations []observation
+	for _, sc := range scenarios(group) {
+		dir, err := os.MkdirTemp("", "spawnobs-bin-")
+		if err != nil {
+			panic(err)
+		}
+		names := make([]string, 0, len(sc.Files))
+		for n := range sc.Files {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		for _, n := range names {
+			f := sc.Files[n]
+			var m uint32
+			fmt.Sscanf(f.Mode, "%o", &m)
+			p := filepath.Join(dir, n)
+			if err := os.WriteFile(p, []byte(strings.ReplaceAll(f.Content, "@BIN@", dir)), 0o600); err != nil {
+				panic(err)
+			}
+			if err := os.Chmod(p, os.FileMode(m)); err != nil {
+				panic(err)
+			}
+		}
+		cmd := exec.Command(self)
+		cmd.Env = []string{childEnv + "=1", "PATH=" + dir, "HOME=" + dir}
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		if err := cmd.Run(); err != nil {
+			panic(fmt.Sprintf("%s: %v: %s", sc.Name, err, stderr.String()))
+		}
+		var res childResult
+		if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+			panic(err)
+		}
+		norm := func(s *string) *string {
+			if s == nil {
+				return nil
+			}
+			t := strings.ReplaceAll(*s, dir, "<BIN>")
+			return &t
+		}
+		res.CopyError, res.ReadError = norm(res.CopyError), norm(res.ReadError)
+		observations = append(observations, observation{scenario: sc, Result: res})
+		_ = os.RemoveAll(dir)
+	}
+	info, _ := debug.ReadBuildInfo()
+	settings := map[string]string{}
+	for _, s := range info.Settings {
+		settings[s.Key] = s.Value
+	}
+	doc := map[string]any{
+		"schema_version": 1,
+		"group":          group,
+		"goos":           runtime.GOOS,
+		"goarch":         runtime.GOARCH,
+		"go_version":     runtime.Version(),
+		"atotto_version": "v0.1.4",
+		"uid_is_root":    os.Geteuid() == 0,
+		"observations":   observations,
+		"vcs_revision":   settings["vcs.revision"],
+		"vcs_modified":   settings["vcs.modified"],
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(doc)
+}
