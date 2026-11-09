@@ -43,7 +43,7 @@ def case_environment(root, index, case, inherited_env):
     return base, config, env
 
 
-def verify_manual_paths(rust_binary, root, inherited_env, artifact, go_recorded):
+def verify_manual_paths(rust_binary, root, inherited_env, artifact, go_recorded, rust_only_man=lambda name, text: text):
     """Rust literal manual paths against the recorded Go facts.
 
     `go_recorded` is the committed observation (scripts/rust-port/fixtures/go-observations/cli-artifacts-contract.*)
@@ -57,7 +57,10 @@ def verify_manual_paths(rust_binary, root, inherited_env, artifact, go_recorded)
         base, config, env = case_environment(root, index, case, inherited_env)
         config_path = str(config / 'symaira-vault/config.yaml')
         rust = pages(rust_binary, base / 'rust', config, env)
-        normalized = normalized_pages(rust, config)
+        # Declared Rust-only manual entries (#1554) are removed exactly once; the
+        # rest must still equal the committed Go artifact and recorded digest.
+        normalized = {name: rust_only_man(name, text.decode()).encode()
+                      for name, text in normalized_pages(rust, config).items()}
         assert normalized == {name: text.encode() for name, text in artifact['manpages'].items()}, ('unaffected manuals', case)
         recorded = go_recorded[index]
         assert recorded['case'] == case and recorded['manual_count'] == len(rust), ('recorded Go case', case)

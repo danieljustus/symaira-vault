@@ -458,7 +458,8 @@ def main():
             write_utf8(args.captured_output, artifact_bytes.decode('utf-8'))
         rust = args.rust.resolve()
         counts = verify_rust(rust, artifact, base, env)
-        manual_paths = verify_manual_paths(rust, base/'manual-path-controls', env, artifact, recorded['manual_paths'])
+        manual_paths = verify_manual_paths(rust, base/'manual-path-controls', env, artifact, recorded['manual_paths'],
+                                           without_rust_only_man)
         shells = verify_shells(recorded['shells'], rust, artifact, base, env, args.require_native_shells)
         candidate_files = subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard'],cwd=ROOT,text=True).splitlines()
         candidate_files = sorted(p for p in candidate_files if (p.startswith(('crates/','third_party/','testdata/')) and p.endswith(('.rs','.toml','.lock','.json','.txt'))) or p.startswith(('scripts/rust-port/cligap','scripts/rust-port/manual_path_')) or p in {'Cargo.toml','Cargo.lock','scripts/rust-port/cli_artifacts_contract.py','scripts/rust-port/test_cli_artifacts_contract.py','scripts/rust-port/cli_artifacts_probe.go.txt','.github/workflows/rust-cli-artifacts.yml','docs/adr/0011-cli-artifacts-and-completion-protocol.md'})

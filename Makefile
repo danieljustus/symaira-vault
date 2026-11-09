@@ -864,7 +864,7 @@ AREA_KDF_MIGRATION_TESTS := 10
 # store_adapter::tests R19 unit tests, 2 tests/http_budget_combinations.rs, 2
 # tests/http_tls_lifecycle.rs; 466 on that branch alone + 2 from r-platform;
 # confirmed by the integration gate).
-AREA_MCP_TEST_COUNT := 468
+AREA_MCP_TEST_COUNT := 470
 
 # `make -s print-<VARIABLE>` prints a variable's value, for the workflows that must
 # not repeat the constants above.
@@ -1104,7 +1104,9 @@ broker-egress-contract:
 		egress_verified_mitm_injects_and_masks_real_encrypted_credentials \
 		egress_callback_error_joins_idle_clients_and_releases_listener \
 		egress_stop_cancels_owned_upstream_request_without_waiting_for_network_timeout \
-		--contains "5 passed; 0 failed; 0 ignored"
+		egress_template_selection_limits_injection_to_the_named_templates \
+		egress_template_selection_rejects_unknown_and_empty_names \
+		--contains "7 passed; 0 failed; 0 ignored"
 	$(CARGO) build -p symvault-cli --bin symvault -p symvault-mcp --example egress_contract_probe --locked
 	mkdir -p "$(AREA_BIN)" && cp -f "$(RUST_BINARY)" "$(AREA_CLI)" && cp -f "$(AREA_PROBES)/egress_contract_probe" "$(AREA_BIN)/"
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/egress_contract.py \
