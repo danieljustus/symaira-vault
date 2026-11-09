@@ -115,6 +115,19 @@ values). Its verdict (`kind` `value-gate-verdict`, via `--json-out`) lists
 thresholds, size result and one row per command with `rss_improvement`,
 `p95_regression` and `pass`.
 
+## Unlock latency and Argon2 lanes
+
+The 5d44fc6d measurement (`list`/`get` p95 about 136/140 ms Rust vs 48/73 ms Go)
+was dominated by the identity KDF (argon2id `t=3,m=65536,p=4`): Go's
+`x/crypto/argon2` fills the four lanes of every slice concurrently, upstream
+RustCrypto `argon2` 0.5.3 fills them one after the other. The vendored crate now
+fills the lanes of each slice with `std::thread::scope` (safe Rust, no new
+dependency, bit-identical output; see `third_party/argon2/VAULT-COMPATIBILITY.md`).
+A 10-run `list` loop on the same vault went from about 82 ms to about 35 ms per
+invocation in Rust (Go: about 40 ms) on the measuring host. Re-run the gate on a
+quiet host before citing the new p95 numbers; the old JSON evidence predates
+this change.
+
 ## Tests
 
 `make value-gate-selftest` (`python3 -B scripts/rust-port/test_valuegate.py`)
