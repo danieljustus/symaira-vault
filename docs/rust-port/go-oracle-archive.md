@@ -219,6 +219,19 @@ step verdicts are replayed instead), and `validate_reference` (the corrected
 oracle's parent and changed-file set; `make oracle-reachability-check` keeps the pins
 reachable). Recapture = check out tag `legacy/go-oracle`.
 
+ADR 0037 R16 to R19 added four in-process recordings that need no process
+harness. Each generator is a `go test` file kept as `scripts/rust-port/*.go.txt`;
+copy it into the package named in its header at tag `legacy/go-oracle`, set the
+`R1x_OUT` / `R1x_ORACLE_COMMIT` variables its header lists and run the one test
+(`go1.26.6`; two captures are byte-identical):
+
+| Recording | Generator | Rust replay |
+|---|---|---|
+| `testdata/port/mcp/http-oauth-expiry.json` | `http_oauth_expiry_record.go.txt` (`internal/mcp/serverbootstrap`) | `oauth::expiry_replay`, `http::tests::access_token_expiry_matches_the_go_recording` |
+| `testdata/port/mcp/http-budget-combinations.json` | `http_budget_record.go.txt` (`internal/mcp/serverbootstrap`) | `crates/symvault-mcp/tests/http_budget_combinations.rs` |
+| `testdata/port/mcp/http-tls-lifecycle.json` | `http_tls_lifecycle_record.go.txt` (`internal/mcp/serverbootstrap`) | `crates/symvault-mcp/tests/http_tls_lifecycle.rs` |
+| `testdata/port/mcp/execute-api-diagnostics.json` | `execute_api_diagnostics_record.go.txt` (`internal/mcp/server`, `SYMVAULT_SECUREUI=none`) | `store_adapter::tests` (`r19_diagnostics_tests.rs`) |
+
 ## Go-free test replay: what the Rust tests replay, and what was retired
 
 The Rust tests in the CAP-CLI-B families no longer run Go. Each one either

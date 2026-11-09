@@ -1,0 +1,278 @@
+{
+  "adr": "0037 R16 / HTTP-003",
+  "cases": [
+    {
+      "id": "code-issuer-ttl",
+      "boundary": "authorization_code",
+      "position": "issue",
+      "status": 302,
+      "body": null,
+      "notes": {
+        "ttl_seconds_rounded": 300
+      }
+    },
+    {
+      "id": "code-valid-long",
+      "boundary": "authorization_code",
+      "position": "before",
+      "status": 200,
+      "headers": {
+        "content_type": "application/json"
+      },
+      "body": {
+        "access_token": {
+          "len": 64,
+          "shape": "hex"
+        },
+        "expires_in": 3599,
+        "refresh_token": {
+          "len": 64,
+          "shape": "hex"
+        },
+        "token_type": "Bearer"
+      }
+    },
+    {
+      "id": "code-short-immediate",
+      "boundary": "authorization_code",
+      "position": "before",
+      "status": 200,
+      "headers": {
+        "content_type": "application/json"
+      },
+      "body": {
+        "access_token": {
+          "len": 64,
+          "shape": "hex"
+        },
+        "expires_in": 3599,
+        "refresh_token": {
+          "len": 64,
+          "shape": "hex"
+        },
+        "token_type": "Bearer"
+      }
+    },
+    {
+      "id": "code-short-after-wait",
+      "boundary": "authorization_code",
+      "position": "after",
+      "status": 400,
+      "headers": {
+        "content_type": "application/json"
+      },
+      "body": {
+        "error": "invalid_grant"
+      },
+      "notes": {
+        "replay_body": {
+          "error": "invalid_grant"
+        },
+        "replay_status": 400,
+        "tokens_minted": 0
+      }
+    },
+    {
+      "id": "code-expired-by-1ns",
+      "boundary": "authorization_code",
+      "position": "after",
+      "status": 400,
+      "headers": {
+        "content_type": "application/json"
+      },
+      "body": {
+        "error": "invalid_grant"
+      }
+    },
+    {
+      "id": "access-short-immediate",
+      "boundary": "access_token",
+      "position": "before",
+      "status": 200,
+      "headers": {
+        "content_type": "text/plain; charset=utf-8"
+      },
+      "body": "ok"
+    },
+    {
+      "id": "access-short-after-wait",
+      "boundary": "access_token",
+      "position": "after",
+      "status": 401,
+      "headers": {
+        "content_type": "text/plain; charset=utf-8"
+      },
+      "body": "unauthorized\n"
+    },
+    {
+      "id": "access-no-ttl-never-expires",
+      "boundary": "access_token",
+      "position": "before",
+      "status": 200,
+      "headers": {
+        "content_type": "text/plain; charset=utf-8"
+      },
+      "body": "ok"
+    },
+    {
+      "id": "refresh-short-immediate",
+      "boundary": "refresh_token",
+      "position": "before",
+      "status": 200,
+      "headers": {
+        "content_type": "application/json"
+      },
+      "body": {
+        "access_token": {
+          "len": 64,
+          "shape": "hex"
+        },
+        "expires_in": 3599,
+        "refresh_token": {
+          "len": 64,
+          "shape": "hex"
+        },
+        "token_type": "Bearer"
+      },
+      "notes": {
+        "access_deadline_preserved_within_50ms": true,
+        "old_pair_revoked": true,
+        "refresh_deadline_preserved_within_50ms": true
+      }
+    },
+    {
+      "id": "refresh-short-after-wait",
+      "boundary": "refresh_token",
+      "position": "after",
+      "status": 400,
+      "headers": {
+        "content_type": "application/json"
+      },
+      "body": {
+        "error": "invalid_grant",
+        "error_description": "invalid or expired refresh token"
+      }
+    },
+    {
+      "id": "refresh-valid-but-access-expired",
+      "boundary": "refresh_token",
+      "position": "access_expired_refresh_valid",
+      "status": 400,
+      "headers": {
+        "content_type": "application/json"
+      },
+      "body": {
+        "error": "invalid_grant",
+        "error_description": "invalid or expired refresh token"
+      }
+    },
+    {
+      "id": "refresh-no-ttl-never-expires",
+      "boundary": "refresh_token",
+      "position": "before",
+      "status": 200,
+      "headers": {
+        "content_type": "application/json"
+      },
+      "body": {
+        "access_token": {
+          "len": 64,
+          "shape": "hex"
+        },
+        "expires_in": 3599,
+        "refresh_token": {
+          "len": 64,
+          "shape": "hex"
+        },
+        "token_type": "Bearer"
+      },
+      "notes": {
+        "rotated_refresh_expires_at_is_null": true
+      }
+    },
+    {
+      "id": "dcr-persisted-expires-in-future",
+      "boundary": "dcr_client",
+      "position": "before",
+      "status": 200,
+      "headers": {
+        "content_type": "text/html; charset=utf-8"
+      },
+      "body": {
+        "consent_page": true
+      }
+    },
+    {
+      "id": "dcr-persisted-expires-in-past",
+      "boundary": "dcr_client",
+      "position": "after",
+      "status": 400,
+      "headers": {
+        "content_type": "application/json",
+        "www_authenticate": "Bearer realm=\"symaira\",error=\"invalid_client\",error_description=\"unknown client_id; register via POST /oauth/register first\""
+      },
+      "body": {
+        "error": "invalid_client",
+        "error_description": "unknown client_id; register via POST /oauth/register first"
+      }
+    },
+    {
+      "id": "dcr-ttl-seconds-without-expires-at",
+      "boundary": "dcr_client",
+      "position": "before",
+      "status": 200,
+      "headers": {
+        "content_type": "text/html; charset=utf-8"
+      },
+      "body": {
+        "consent_page": true
+      }
+    },
+    {
+      "id": "dcr-short-immediate",
+      "boundary": "dcr_client",
+      "position": "before",
+      "status": 200,
+      "headers": {
+        "content_type": "text/html; charset=utf-8"
+      },
+      "body": {
+        "consent_page": true
+      }
+    },
+    {
+      "id": "dcr-short-after-wait",
+      "boundary": "dcr_client",
+      "position": "after",
+      "status": 400,
+      "headers": {
+        "content_type": "application/json",
+        "www_authenticate": "Bearer realm=\"symaira\",error=\"invalid_client\",error_description=\"unknown client_id; register via POST /oauth/register first\""
+      },
+      "body": {
+        "error": "invalid_client",
+        "error_description": "unknown client_id; register via POST /oauth/register first"
+      }
+    },
+    {
+      "id": "dcr-register-stores-no-expiry",
+      "boundary": "dcr_client",
+      "position": "issue",
+      "status": 201,
+      "body": null,
+      "notes": {
+        "client_secret_expires_at": 0,
+        "stored_client_keys": [
+          "client_id",
+          "created_at",
+          "redirect_uris"
+        ]
+      }
+    }
+  ],
+  "clock": "wall clock (no injection in Go); short cases use a 400ms TTL observed immediately and again after 900ms; long cases use absolute offsets of one hour",
+  "equality": "Go compares with time.Now().After(expiry): a value is still valid at exactly its expiry. The equality instant is not reachable on the wall clock and is not recorded.",
+  "oracle_commit": "ce2390d748818a4beb413e97183b7795efa99411",
+  "schema": "symvault.port.http-oauth-expiry/1",
+  "source": "legacy/go-oracle internal/mcp/serverbootstrap/oauth.go, internal/mcp/auth/{token,auth}.go"
+}

@@ -1,0 +1,285 @@
+package serverbootstrap
+
+// ADR 0037 R17 (HTTP-004): which of the configured read_header_timeout,
+// read_timeout and write_timeout fires first, and what the peer observes, for
+// every strict ordering of the three budgets (plus one tie). The production
+// entry point RunHTTPServerOnListener is driven by raw TCP clients that follow
+// the probe specs written into the recording; the Rust replay executes the
+// same specs. Capture only:
+//
+//	R17_OUT=/path/out.json R17_ORACLE_COMMIT=<sha> go test ./internal/mcp/serverbootstrap -run ^TestRecordR17BudgetCombinations$ -count=1
+//
+// The keep-alive idle budget is the constant 120s (http.go IdleTimeout) and not
+// configurable; the idle probe only shows that configured budgets do not bound
+// an idle persistent connection.
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net"
+	"os"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/danieljustus/symaira-vault/internal/config"
+	mcpserver "github.com/danieljustus/symaira-vault/internal/mcp/server"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
+)
+
+type r17Step struct {
+	AtMS int    `json:"at_ms"`
+	Data string `json:"data"`
+}
+
+type r17Dribble struct {
+	FromMS     int    `json:"from_ms"`
+	Byte       string `json:"byte"`
+	IntervalMS int    `json:"interval_ms"`
+	UntilMS    int    `json:"until_ms,omitempty"`
+}
+
+type r17Probe struct {
+	ID      string      `json:"id"`
+	Steps   []r17Step   `json:"steps"`
+	Dribble *r17Dribble `json:"dribble,omitempty"`
+	MaxMS   int         `json:"max_ms"`
+}
+
+type r17Result struct {
+	Terminal  string   `json:"terminal"`
+	ElapsedMS int      `json:"elapsed_bucket_ms"`
+	Responses []string `json:"responses"`
+}
+
+type r17Profile struct {
+	ID       string                `json:"id"`
+	HeaderMS int                   `json:"read_header_timeout_ms"`
+	ReadMS   int                   `json:"read_timeout_ms"`
+	WriteMS  int                   `json:"write_timeout_ms"`
+	Probes   []r17Probe            `json:"probes"`
+	Results  map[string]*r17Result `json:"results"`
+}
+
+const r17Body = `{"redirect_uris":["http://localhost/cb"]}`
+
+func r17Head(host string, length int) string {
+	return fmt.Sprintf("POST /oauth/register HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\n", host, length)
+}
+
+// r17Probes builds the probe list for one profile. {host} is substituted per run.
+func r17Probes(h, r, w int) []r17Probe {
+	pad := strings.Repeat(" ", 20)
+	full := r17Head("{host}", len(pad)+len(r17Body)) + "\r\n" + pad + r17Body
+	slowHead := "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\nX-Slow: "
+	lateAt := r + 500 // between read and header budget when header > read
+	return []r17Probe{
+		{ID: "normal", Steps: []r17Step{{0, full}}, MaxMS: 1500},
+		{ID: "idle-persistent", Steps: []r17Step{{0, full}, {2500, full}}, MaxMS: 4500},
+		{ID: "header-slow-forever", Steps: []r17Step{{0, slowHead}}, Dribble: &r17Dribble{FromMS: 50, Byte: "x", IntervalMS: 50}, MaxMS: 7000},
+		{ID: "body-slow-forever", Steps: []r17Step{{0, r17Head("{host}", 4096) + "\r\n"}}, Dribble: &r17Dribble{FromMS: 50, Byte: " ", IntervalMS: 50}, MaxMS: 7000},
+		{ID: "header-500ms-then-body-slow-forever", Steps: []r17Step{{0, slowHead + "x\r\n"}, {500, "Content-Type: application/json\r\nContent-Length: 4096\r\n\r\n"}}, Dribble: &r17Dribble{FromMS: 550, Byte: " ", IntervalMS: 50}, MaxMS: 7000},
+		{ID: "header-ends-after-read-budget-body-together", Steps: []r17Step{{0, slowHead}, {lateAt, "\r\n" + strings.TrimPrefix(full, "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\n")}}, Dribble: &r17Dribble{FromMS: 50, Byte: "x", IntervalMS: 50, UntilMS: lateAt - 50}, MaxMS: 7000},
+		{ID: "header-ends-after-read-budget-body-100ms-later", Steps: []r17Step{{0, slowHead}, {lateAt, "\r\n" + strings.TrimSuffix(strings.TrimPrefix(full, "POST /oauth/register HTTP/1.1\r\nHost: {host}\r\n"), pad+r17Body)}, {lateAt + 100, pad + r17Body}}, Dribble: &r17Dribble{FromMS: 50, Byte: "x", IntervalMS: 50, UntilMS: lateAt - 50}, MaxMS: 7000},
+		{ID: "body-completes-after-write-budget", Steps: []r17Step{{0, r17Head("{host}", len(pad)+len(r17Body)) + "\r\n" + pad}, {w + 500, r17Body}}, MaxMS: 7000},
+	}
+}
+
+func r17Run(host string, p r17Probe) *r17Result {
+	conn, err := net.DialTimeout("tcp", host, 2*time.Second)
+	if err != nil {
+		return &r17Result{Terminal: "connect-error"}
+	}
+	defer conn.Close()
+	start := time.Now()
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	send := func(b []byte) bool {
+		_ = conn.SetWriteDeadline(time.Now().Add(250 * time.Millisecond))
+		_, err := conn.Write(b)
+		return err == nil
+	}
+	sleepUntil := func(ms int) bool {
+		d := time.Until(start.Add(time.Duration(ms) * time.Millisecond))
+		if d > 0 {
+			select {
+			case <-time.After(d):
+			case <-stop:
+				return false
+			}
+		}
+		select {
+		case <-stop:
+			return false
+		default:
+			return true
+		}
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for _, s := range p.Steps {
+			if !sleepUntil(s.AtMS) {
+				return
+			}
+			if !send([]byte(strings.ReplaceAll(s.Data, "{host}", host))) {
+				return
+			}
+		}
+	}()
+	if d := p.Dribble; d != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for slot := 0; ; slot++ {
+				at := d.FromMS + slot*d.IntervalMS
+				if d.UntilMS > 0 && at > d.UntilMS {
+					return
+				}
+				if !sleepUntil(at) {
+					return
+				}
+				if !send([]byte(d.Byte)) {
+					return
+				}
+			}
+		}()
+	}
+	var raw bytes.Buffer
+	res := &r17Result{Terminal: "cap"}
+	buf := make([]byte, 4096)
+	for time.Since(start) < time.Duration(p.MaxMS)*time.Millisecond {
+		_ = conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+		n, err := conn.Read(buf)
+		raw.Write(buf[:n])
+		if err == nil {
+			continue
+		}
+		if ne, ok := err.(net.Error); ok && ne.Timeout() {
+			continue
+		}
+		// EOF and RST differ only by whether our dribble wrote after the
+		// server closed; both mean "the server closed the connection".
+		_ = io.EOF
+		res.Terminal = "closed"
+		break
+	}
+	elapsed := time.Since(start)
+	close(stop)
+	_ = conn.Close()
+	wg.Wait()
+	res.ElapsedMS = int((elapsed + 250*time.Millisecond) / (500 * time.Millisecond) * 500)
+	res.Responses = r17Responses(raw.Bytes())
+	return res
+}
+
+// r17Responses reduces raw bytes to status line plus body (Date dropped);
+// the body of a 201 registration (random client id) is shortened.
+func r17Responses(raw []byte) []string {
+	var out []string
+	rest := raw
+	for len(rest) > 0 {
+		headEnd := bytes.Index(rest, []byte("\r\n\r\n"))
+		if headEnd < 0 {
+			out = append(out, "partial:"+fmt.Sprint(len(rest)))
+			break
+		}
+		head := string(rest[:headEnd])
+		lines := strings.Split(head, "\r\n")
+		length := 0
+		for _, l := range lines[1:] {
+			if k, v, ok := strings.Cut(l, ":"); ok && strings.EqualFold(k, "content-length") {
+				fmt.Sscanf(strings.TrimSpace(v), "%d", &length)
+			}
+		}
+		bodyStart := headEnd + 4
+		end := bodyStart + length
+		if end > len(rest) {
+			end = len(rest)
+		}
+		body := string(rest[bodyStart:end])
+		if strings.HasPrefix(lines[0], "HTTP/1.1 201") {
+			body = "<client registration>"
+		}
+		out = append(out, lines[0]+" | "+strings.TrimSpace(body))
+		rest = rest[end:]
+	}
+	return out
+}
+
+func TestRecordR17BudgetCombinations(t *testing.T) {
+	out := os.Getenv("R17_OUT")
+	if out == "" {
+		t.Skip("capture only: set R17_OUT")
+	}
+	profiles := []r17Profile{}
+	for _, c := range [][3]int{{1000, 3000, 2000}, {1000, 2000, 3000}, {2000, 1000, 3000}, {2000, 3000, 1000}, {3000, 1000, 2000}, {3000, 2000, 1000}, {2000, 2000, 2000}} {
+		profiles = append(profiles, r17Profile{
+			ID:       fmt.Sprintf("h%d-r%d-w%d", c[0], c[1], c[2]),
+			HeaderMS: c[0], ReadMS: c[1], WriteMS: c[2],
+			Probes:  r17Probes(c[0], c[1], c[2]),
+			Results: map[string]*r17Result{},
+		})
+	}
+	var wg sync.WaitGroup
+	for i := range profiles {
+		pr := &profiles[i]
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			v := newTestVault(t)
+			v.Config.MCP = &config.MCPConfig{AllowInsecureBind: true, RateLimit: -1,
+				ReadHeaderTimeout: time.Duration(pr.HeaderMS) * time.Millisecond,
+				ReadTimeout:       time.Duration(pr.ReadMS) * time.Millisecond,
+				WriteTimeout:      time.Duration(pr.WriteMS) * time.Millisecond}
+			factory := func(*vaultpkg.Vault, string, string) (*mcpserver.Server, error) {
+				return nil, fmt.Errorf("no credential handler in this probe")
+			}
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan error, 1)
+			go func() { done <- RunHTTPServerOnListener(ctx, listener, v, v.Dir, "dev", factory) }()
+			host := listener.Addr().String()
+			var inner sync.WaitGroup
+			var mu sync.Mutex
+			for _, p := range pr.Probes {
+				inner.Add(1)
+				go func() {
+					defer inner.Done()
+					res := r17Run(host, p)
+					mu.Lock()
+					pr.Results[p.ID] = res
+					mu.Unlock()
+				}()
+			}
+			inner.Wait()
+			cancel()
+			<-done
+		}()
+	}
+	wg.Wait()
+	doc := map[string]any{
+		"schema":        "symvault.port.http-budget-combinations/1",
+		"adr":           "0037 R17 / HTTP-004",
+		"oracle_commit": os.Getenv("R17_ORACLE_COMMIT"),
+		"source":        "legacy/go-oracle internal/mcp/serverbootstrap/http.go (RunHTTPServerOnListener), http_setup.go (resolveServerTimeouts)",
+		"idle_timeout":  "constant 120s (http.go IdleTimeout), not configurable; persistent-connection probe shows configured budgets do not bound idleness",
+		"elapsed":       "rounded to the nearest 500ms; the client observes the first EOF/reset; a probe that is still open at max_ms ends with terminal=cap",
+		"profiles":      profiles,
+	}
+	enc, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(out, append(enc, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}

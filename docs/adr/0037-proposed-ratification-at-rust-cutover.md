@@ -450,10 +450,10 @@ maintainer accepts it as a gap in a later ADR.
 | R13 | MCP-003 | `autotype` and `run_command` handler texts (hand-written expectations today) | two tools Status: **Closed.** `go_autotype_tool_results_replay` and `go_run_command_tool_results_replay` (`crates/symvault-mcp/tests/autotype_run_command_contract.rs`, recording `testdata/port/mcp/autotype-run-command.json`, 39 cases); the hand-written expectations in `tools_authz_order.rs` and `store_adapter.rs` now read the recording. Fixed in Rust: a timeout renders as a Go `time.Duration` (`1m0s`, not `60s`) and a missing `env`/`files` ref reads `secret ref not found: <path>`. Not recordable: the `autotype not available on this platform` branch (`tools_autotype.go:56`) needs a nil backend, which Go's darwin/linux factories never return. |
 | R14 | CLI-003 | printed `broker --passthrough` list and `intake watch` interval text for unusual literals, from signal-ended runs | **CLOSED**. two commands |
 | R15 | CLI-003 | effective `unlock --ttl` against a persistent session cache | **CLOSED**. one flag |
-| R16 | HTTP-003 | remaining OAuth expiry boundaries (code, access, refresh, DCR client) | four boundaries |
-| R17 | HTTP-004 | combinations of configured header, body, idle and write budgets | finite budgets |
-| R18 | HTTP-004 | TLS server identity rotation, client revocation and expiration | three cases |
-| R19 | BROKER-002 | prompt/biometry diagnostics and tool-name context of `execute_api_request`; whether the template-open check is race-proof in Go | unmeasured, bounded |
+| R16 | HTTP-003 | remaining OAuth expiry boundaries (code, access, refresh, DCR client) | four boundaries |  **closed** (see "Recorded", R16) |
+| R17 | HTTP-004 | combinations of configured header, body, idle and write budgets | finite budgets |  **closed**, one Rust fix (see "Recorded", R17) |
+| R18 | HTTP-004 | TLS server identity rotation, client revocation and expiration | three cases |  **closed** (see "Recorded", R18) |
+| R19 | BROKER-002 | prompt/biometry diagnostics and tool-name context of `execute_api_request`; whether the template-open check is race-proof in Go | unmeasured, bounded |  **closed**, one Rust hardening (see "Recorded", R19) |
 | R20 | CLI-005 | **Closed 2026-11-09.** Alias after a redefined anchor: `alias_after_a_redefined_anchor_matches_go`, `testdata/port/cli-transcripts/cli_error_residuals.json` (10 configs x 4 commands). Go resolves to the definition in force at the alias; Rust (last definition) agrees whenever the alias stands after the last definition, which is the case this item asked for. The earlier-alias divergence stays ADR 0034 item 5; see the section above | one case |
 | R21 | CLI-005 | new, from the R3 sweep: in a sandbox without the vault directory `agent token new`, `agent token rotate`, `agent token revoke` and `share revoke` fail in Rust with `failed to read <dir>: No such file or directory (os error 2)`; Go reads the registry as empty (`token "x" not found or already revoked`, `share grant x not found`) or fails at the write of `mcp-tokens.json.tmp-<random>`. Pinned by `OPEN` in `cli_error_residuals.rs`; the test fails when one starts to match. Not fixed here: the store opens its root capability before the registry | four commands |
 
@@ -505,6 +505,157 @@ Differences left open, for the maintainer's decision:
   Go evidence only: the native TUI needs a terminal that answers
   cursor-position requests and its layout is pinned by `tui-harness-check`, so
   no deterministic Go-versus-Rust colour comparison exists for it.
+
+## Recorded from `legacy/go-oracle`: R16 to R19
+
+Recorded from the tag `legacy/go-oracle` (`ce2390d7`) with Go `go1.26.6`; the
+generators are frozen as `scripts/rust-port/*.go.txt` (they were run as `go test`
+files inside `internal/mcp/serverbootstrap` and `internal/mcp/server` of the
+archived tree; each recording is byte-identical across two captures). Rust
+replays each recording; Go is not needed again. Recordings carry no operator
+paths.
+
+**R16 (HTTP-003), closed.** `testdata/port/mcp/http-oauth-expiry.json`,
+generator `http_oauth_expiry_record.go.txt`, replays
+`oauth::expiry_replay::*` (`authorization_code_expiry_matches_the_go_recording`,
+`refresh_token_expiry_matches_the_go_recording`,
+`dcr_client_expiry_matches_the_go_recording`,
+`dcr_registration_stores_no_expiry_like_go`, `recording_covers_all_four_boundaries`)
+and `http::tests::access_token_expiry_matches_the_go_recording`. Go has no clock
+injection (`time.Now().After(expiry)`), so the recording holds a "before" and an
+"after" observation per boundary, taken with a 400 ms TTL read immediately and
+after 900 ms (access token, DCR client) or with one-hour offsets, plus the 300 s
+code lifetime from the real issuer. Rust replays the same positions on its
+injected clock (and on the real clock for the bearer leg). Everything matches
+(status, content type, body, `WWW-Authenticate`, no token minted on an expired
+code, replay of an expired code, rotated pairs keep both deadlines, a refresh
+without a TTL never expires, the real registration stores no expiry and a bare
+`ttl_seconds` never expires a client). Two Rust-only stricter behaviours are
+pinned next to the replay, both security-motivated:
+
+- Go refuses a refresh once the *access* token has expired
+  (`getByRefreshTokenHash` demands `!IsExpired()`); Rust renews with the
+  configured finite TTL and keeps the refresh deadline. This is
+  [ADR 0019](0019-oauth-consent-binding-and-token-lifetimes.md), recorded again
+  as `refresh-valid-but-access-expired`
+  (`refresh_after_access_expiry_is_the_adr_0019_divergence`).
+- The exact-equality instant is unreachable on Go's wall clock and is not
+  recorded. At exactly the refresh deadline Go (`After` is strict) accepts and
+  then computes `refreshTTL = Until(deadline) = 0`, which mints a replacement
+  pair whose refresh token never expires. Rust refuses at the deadline
+  (`refresh_at_exactly_the_deadline_is_refused`).
+
+**R17 (HTTP-004), closed with one Rust fix.**
+`testdata/port/mcp/http-budget-combinations.json`, generator
+`http_budget_record.go.txt`, replay
+`crates/symvault-mcp/tests/http_budget_combinations.rs`. Seven combinations of
+`read_header_timeout` / `read_timeout` / `write_timeout` (all six strict
+orderings of 1 s, 2 s, 3 s and one tie) through the production
+`RunHTTPServerOnListener`, each with eight probes (normal request; persistent
+connection with a 2.5 s idle gap; progressing header; progressing body;
+header then body; header ending after the read budget with the body in the same
+segment and 100 ms later; a body that completes after the write budget). The
+idle budget is the constant 120 s (`http.go` `IdleTimeout`) and not
+configurable; the idle probe shows that no configured budget bounds an idle
+persistent connection. Findings:
+
+- **Fixed in Rust.** The header deadline is `read_header_timeout` alone, even
+  when it exceeds `read_timeout` (net/http `readRequest`: the whole-request
+  deadline only replaces it once the headers are complete). Rust used the
+  earlier of the two (`initial_read.min(request_read)`, from the ADR 0024
+  wording), so with `read_header_timeout > read_timeout` it closed a slow
+  header at `read_timeout` and refused a request Go serves. `read_wire_request`
+  now uses `initial_read` alone. Before the fix the replay failed on
+  `header-slow-forever` and both `header-ends-after-read-budget-*` probes of
+  the three profiles with `read_header_timeout > read_timeout`; it passes after it.
+- Everything else matches in terminal kind and in the 500 ms bucket of the
+  close time: header-only expiry, body expiry measured from the start of the
+  request (not from the end of the headers), write budget starting when the
+  headers are complete (a body finishing after `write_timeout` gets no
+  response), idle not bounded by any budget.
+- 13 probes end, on the Go side, in the handler's `400 invalid_client_metadata`
+  envelope after a body-read timeout where Rust closes without a response. This
+  is the ADR 0024 decision ("Go's optional body-timeout error ... Rust
+  consistently stops with empty EOF/reset"), not new; the replay pins the count
+  (13) so no other Go-only response can hide behind it.
+
+**R18 (HTTP-004), closed.** `testdata/port/mcp/http-tls-lifecycle.json`,
+generator `http_tls_lifecycle_record.go.txt`, replay
+`crates/symvault-mcp/tests/http_tls_lifecycle.rs`. 26 cases through the
+production server with real certificate files, TLS and mTLS: the identity and
+the client CA are loaded once at start. Files replaced while running change
+nothing for new handshakes or established connections; a restart picks them
+up; a mismatched key pair fails the restart closed (both implementations; only
+the error wording differs). There is no CRL/OCSP: "revocation" is expressible
+only as replacing the client CA file and restarting, and an established
+connection survives it. An expired or not-yet-valid client certificate is
+rejected on new handshakes (TLS 1.3: seen on the client's first read; TLS 1.2:
+in the handshake), an established connection whose certificate expires
+afterwards keeps working. All 26 cases match except one alert byte (proposed
+item 33 below).
+
+**R19 (BROKER-002), closed with one Rust hardening.**
+`testdata/port/mcp/execute-api-diagnostics.json`, generator
+`execute_api_diagnostics_record.go.txt`, replay
+`store_adapter::tests::{execute_api_request_approval_diagnostics_match_the_go_recording,
+unknown_approval_mode_fails_closed_unlike_go,
+biometry_diagnostics_carry_the_tool_name_like_go,
+template_open_is_pinned_to_the_checked_file_unlike_go,
+template_symlinks_are_refused_where_go_follows_them}`. Go side driven through
+`Server.executeTool("execute_api_request", ...)` with the terminal seam
+(`openTTYDevice`), a mock biometric authenticator and `SYMVAULT_SECUREUI=none`.
+
+- Prompt diagnostics match byte for byte, tool name included: `deny`, no TTY,
+  user denies, TTY vanishing before the prompt, raw-mode failure, timeout
+  (`approval timed out after 1s`), read failure, user approves, `auto`.
+- Biometry texts match byte for byte: `policy requires biometric verification
+  for tool "execute_api_request", but biometric authentication is not available
+  on this platform. Agent "r19-agent" cannot execute this tool` and
+  `biometric verification failed for tool "execute_api_request": biometric
+  verification for execute_api_request failed: touch id authentication failed`.
+- Recorded Go quirks Rust deliberately does not copy, both stricter: Go's
+  `validateToolAccess` lets the tool run when the biometric challenge is
+  unavailable or fails and for `prompt`/`deny` policy rules on the caller's
+  `path` argument (one upstream request in each recorded case); Rust denies
+  with the challenge or policy text. That divergence predates this item and is
+  documented in `policy_biometry_challenge` and `tests/authguard_require_biometry.rs`.
+  The second quirk is new: an unrecognised approval mode proceeds in Go
+  (`default: return nil`) and is refused in Rust (proposed item 34).
+- **Template-open race: not race-proof in Go.** `apitemplates.Load` does
+  `os.Stat(path)` and then `os.ReadFile(path)`: two path lookups, symlinks
+  followed. A concurrent remove/recreate loop reaches the window within a
+  second (`read template file ...: no such file` instead of the builtin
+  fallback), and a symlink at the template path or at `templates/` is followed
+  to a file outside the vault (both deterministic, recorded). Rust refused the
+  symlinks already (item 35) but still checked by path and opened by path;
+  it now opens the checked path and refuses the file when the opened handle is
+  not the inode that passed the `lstat` (`template changed while loading`,
+  unix; a deterministic hook swaps the file between check and open in
+  `template_open_is_pinned_to_the_checked_file_unlike_go`, with a negative
+  control that fails without the check).
+
+### Proposed items from R16 to R19
+
+Same rules as items 1 to 32: not binding until the maintainer accepts them.
+
+- **33 rustls TLS 1.2 alert for a missing client certificate** (HTTP-004). For
+  a client that sends no certificate to an mTLS listener over TLS 1.2, Go's
+  `crypto/tls` sends `handshake_failure` and rustls sends `certificate_required`.
+  Both refuse the handshake; the alert byte is chosen inside the TLS library.
+  Pin: `OPAQUE_ALERT_DIFFERENCES` in `tests/http_tls_lifecycle.rs`. Recommendation R.
+- **34 unknown approval mode fails closed** (BROKER-002). Go proceeds, Rust
+  refuses with `execute_api_request denied: unknown approval mode "<mode>"`.
+  Config loading owns mode validation, so the CLI never produces the input.
+  Pin: `unknown_approval_mode_fails_closed_unlike_go`. Recommendation R.
+- **35 template symlinks refused** (BROKER-002). Go follows a symlink at the
+  template path and a symlinked `templates/` directory; Rust refuses
+  (`template must be a regular file`, `template directory escapes the vault
+  root`) so a vault-local link cannot substitute the endpoint allowlist or the
+  credential reference. Pin: `template_symlinks_are_refused_where_go_follows_them`.
+  Recommendation R.
+- **36 refresh at the exact deadline** (HTTP-003). See R16: Go would accept and
+  mint a non-expiring refresh token; Rust refuses. Pin:
+  `refresh_at_exactly_the_deadline_is_refused`. Recommendation R.
 
 ## Implement items (not ratified)
 
@@ -584,6 +735,10 @@ automated; a maintainer records them as a manual acceptance note.
 | 30 unit-level peer/timestamp checks | APPROVAL-001 | R | pending |
 | 31 cooldown end with injected clock | APPROVAL-001 | R | pending |
 | 32 Swift SKIP on Linux | FFI-001 | R | pending |
+| 33 rustls TLS 1.2 missing-client-certificate alert | HTTP-004 | R | pending |
+| 34 unknown approval mode fails closed | BROKER-002 | R | pending |
+| 35 template symlinks refused | BROKER-002 | R | pending |
+| 36 refresh refused at the exact deadline | HTTP-003 | R | pending |
 | U1 to U7 unenumerable classes | see section | R | pending |
 | Anchor wording | CLI-005 | wording | pending |
 

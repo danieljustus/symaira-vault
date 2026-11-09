@@ -1,0 +1,154 @@
+{
+  "adr": "0037 R19 / BROKER-002",
+  "cases": [
+    {
+      "id": "approval-deny-mode",
+      "group": "approval",
+      "error": "execute_api_request denied: approval mode is 'deny'",
+      "is_error": false,
+      "upstream_requests": 0
+    },
+    {
+      "id": "approval-prompt-no-tty",
+      "group": "approval",
+      "error": "execute_api_request requires approval but no TTY or GUI dialog available",
+      "is_error": false,
+      "upstream_requests": 0
+    },
+    {
+      "id": "approval-prompt-user-denies",
+      "group": "approval",
+      "error": "execute_api_request denied: user did not approve",
+      "is_error": false,
+      "upstream_requests": 0
+    },
+    {
+      "id": "approval-prompt-user-approves",
+      "group": "approval",
+      "tool_text": "\u003capi response status_code=200\u003e",
+      "is_error": false,
+      "upstream_requests": 1
+    },
+    {
+      "id": "approval-prompt-tty-vanishes-before-prompt",
+      "group": "approval",
+      "error": "execute_api_request approval failed: approval required but no TTY available (running non-interactively)",
+      "is_error": false,
+      "upstream_requests": 0
+    },
+    {
+      "id": "approval-prompt-raw-mode-fails",
+      "group": "approval",
+      "error": "execute_api_request approval failed: failed to set terminal raw mode: raw boom",
+      "is_error": false,
+      "upstream_requests": 0
+    },
+    {
+      "id": "approval-prompt-times-out",
+      "group": "approval",
+      "error": "execute_api_request approval failed: approval timed out after 1s",
+      "is_error": false,
+      "upstream_requests": 0
+    },
+    {
+      "id": "approval-prompt-read-fails",
+      "group": "approval",
+      "error": "execute_api_request approval failed: failed to read from terminal: read boom",
+      "is_error": false,
+      "upstream_requests": 0
+    },
+    {
+      "id": "approval-unknown-mode",
+      "group": "approval",
+      "tool_text": "\u003capi response status_code=200\u003e",
+      "is_error": false,
+      "upstream_requests": 1
+    },
+    {
+      "id": "approval-auto-mode",
+      "group": "approval",
+      "tool_text": "\u003capi response status_code=200\u003e",
+      "is_error": false,
+      "upstream_requests": 1
+    },
+    {
+      "id": "biometry-rule-unavailable",
+      "group": "biometry",
+      "tool_text": "\u003capi response status_code=200\u003e",
+      "is_error": false,
+      "upstream_requests": 1
+    },
+    {
+      "id": "biometry-rule-challenge-fails",
+      "group": "biometry",
+      "tool_text": "\u003capi response status_code=200\u003e",
+      "is_error": false,
+      "upstream_requests": 1
+    },
+    {
+      "id": "biometry-rule-challenge-passes",
+      "group": "biometry",
+      "tool_text": "\u003capi response status_code=200\u003e",
+      "is_error": false,
+      "upstream_requests": 1
+    },
+    {
+      "id": "policy-prompt-rule-on-path-argument",
+      "group": "biometry",
+      "tool_text": "\u003capi response status_code=200\u003e",
+      "is_error": false,
+      "upstream_requests": 1
+    },
+    {
+      "id": "policy-deny-rule-on-path-argument",
+      "group": "biometry",
+      "tool_text": "\u003capi response status_code=200\u003e",
+      "is_error": false,
+      "upstream_requests": 1
+    },
+    {
+      "id": "challenge-text-unavailable",
+      "group": "biometry-text",
+      "error": "policy requires biometric verification for tool \"execute_api_request\", but biometric authentication is not available on this platform. Agent \"r19-agent\" cannot execute this tool",
+      "is_error": false,
+      "upstream_requests": 0
+    },
+    {
+      "id": "challenge-text-failed",
+      "group": "biometry-text",
+      "error": "biometric verification failed for tool \"execute_api_request\": biometric verification for execute_api_request failed: touch id authentication failed",
+      "is_error": false,
+      "upstream_requests": 0
+    },
+    {
+      "id": "challenge-text-passed",
+      "group": "biometry-text",
+      "is_error": false,
+      "upstream_requests": 0
+    },
+    {
+      "id": "template-symlinks",
+      "group": "template-open",
+      "is_error": false,
+      "upstream_requests": 0,
+      "notes": {
+        "directory_symlink_followed": true,
+        "file_symlink_followed": true
+      }
+    },
+    {
+      "id": "template-concurrent-swap",
+      "group": "template-open",
+      "is_error": false,
+      "upstream_requests": 0,
+      "notes": {
+        "never_returns_a_non_template_value": true,
+        "note": "Load does os.Stat(path) and then os.ReadFile(path): two path lookups, no O_NOFOLLOW, no handle reuse; a file removed between them yields 'read template file ...: no such file' instead of the builtin fallback",
+        "stat_then_read_window_reachable": true
+      }
+    }
+  ],
+  "oracle_commit": "ce2390d748818a4beb413e97183b7795efa99411",
+  "schema": "symvault.port.execute-api-diagnostics/1",
+  "source": "legacy/go-oracle internal/mcp/server/{approval_helper,server_dispatch,server_authorize,tools_execute_api_request}.go, internal/mcp/apitemplates/template.go"
+}

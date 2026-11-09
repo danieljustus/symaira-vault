@@ -1,0 +1,296 @@
+package server
+
+// ADR 0037 R19 (BROKER-002): execute_api_request approval/prompt/biometry
+// diagnostics with the tool name in context, and whether the template-open
+// check is race-proof. Capture only:
+//
+//	R19_OUT=/path/out.json R19_ORACLE_COMMIT=<sha> SYMVAULT_SECUREUI=none go test ./internal/mcp/server -run ^TestRecordR19ExecuteAPIDiagnostics$ -count=1
+//
+// All terminal and biometric interaction goes through the existing seams
+// (openTTYDevice, authguard.Challenger); nothing prompts.
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/danieljustus/symaira-vault/internal/authguard"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/mcp/apitemplates"
+	"github.com/danieljustus/symaira-vault/internal/policy"
+	"github.com/danieljustus/symaira-vault/internal/session"
+)
+
+type r19Biometric struct {
+	available bool
+	err       error
+}
+
+func (b r19Biometric) Authenticate(context.Context, string) error { return b.err }
+func (b r19Biometric) IsAvailable() bool                          { return b.available }
+
+type r19Case struct {
+	ID       string         `json:"id"`
+	Group    string         `json:"group"`
+	Error    string         `json:"error,omitempty"`
+	ToolText string         `json:"tool_text,omitempty"`
+	IsError  bool           `json:"is_error"`
+	Requests int64          `json:"upstream_requests"`
+	Notes    map[string]any `json:"notes,omitempty"`
+}
+
+func r19Run(t *testing.T, id, group, mode string, timeout time.Duration, policyRules []policy.Rule, args map[string]any, challenger *authguard.Challenger, tty func() (ttyDevice, error)) r19Case {
+	t.Helper()
+	var requests atomic.Int64
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer upstream.Close()
+	vaultDir, identity := mockVaultWithEntry(t, "api-policy", map[string]any{"credential": "r19-credential"})
+	profile := config.AgentProfile{Name: "r19-agent", AllowedPaths: []string{"*"}, CanRunCommands: config.BoolPtr(true), ApprovalMode: config.StrPtr(mode)}
+	if timeout > 0 {
+		profile.ApprovalTimeout = config.DurationPtr(timeout)
+	}
+	srv := newTestServerWithVault(t, profile, "stdio", vaultDir)
+	srv.vault.Identity = identity
+	if challenger != nil {
+		srv.biometricChallenger = challenger
+	}
+	if policyRules != nil {
+		srv.policyEngine = policy.NewEngine([]*policy.Policy{{Version: "1.0", Rules: policyRules}})
+	}
+	writeTemplateOverride(t, vaultDir, "r19", fmt.Sprintf("base_url: %s\nauth_type: bearer\nentry_ref: api-policy\nallowed_endpoints: [/v1/*]\nallowed_methods: [GET]\nallow_private: true\n", upstream.URL))
+	if tty != nil {
+		original := openTTYDevice
+		openTTYDevice = tty
+		defer func() { openTTYDevice = original }()
+	}
+	raw, _ := json.Marshal(args)
+	payload, err := srv.executeTool(context.Background(), "execute_api_request", raw)
+	c := r19Case{ID: id, Group: group, Requests: requests.Load()}
+	if err != nil {
+		c.Error = err.Error()
+		return c
+	}
+	enc, _ := json.Marshal(payload)
+	var decoded struct {
+		Content []struct{ Text string } `json:"content"`
+		IsError bool                    `json:"isError"`
+	}
+	_ = json.Unmarshal(enc, &decoded)
+	if len(decoded.Content) > 0 {
+		c.ToolText = decoded.Content[0].Text
+	}
+	c.IsError = decoded.IsError
+	if !c.IsError && strings.Contains(c.ToolText, `"status_code"`) {
+		var out map[string]any
+		_ = json.Unmarshal([]byte(c.ToolText), &out)
+		c.ToolText = fmt.Sprintf("<api response status_code=%v>", out["status_code"])
+	}
+	return c
+}
+
+func r19TTY(t *testing.T, answer string, readErr error, rawErr error, failOpenAfter int) func() (ttyDevice, error) {
+	var opens atomic.Int64
+	return func() (ttyDevice, error) {
+		n := opens.Add(1)
+		if failOpenAfter > 0 && int(n) > failOpenAfter {
+			return nil, errors.New("no tty available")
+		}
+		return &mockTTYDevice{
+			readString: func() (string, error) { return answer, readErr },
+			output:     newMockOutputFile(t),
+			raw: func() (func(), error) {
+				if rawErr != nil {
+					return nil, rawErr
+				}
+				return func() {}, nil
+			},
+		}, nil
+	}
+}
+
+func TestRecordR19ExecuteAPIDiagnostics(t *testing.T) {
+	out := os.Getenv("R19_OUT")
+	if out == "" {
+		t.Skip("capture only: set R19_OUT")
+	}
+	if os.Getenv("SYMVAULT_SECUREUI") != "none" {
+		t.Fatal("run with SYMVAULT_SECUREUI=none so no GUI dialog can open")
+	}
+	args := map[string]any{"template": "r19", "endpoint": "/v1/status"}
+	noTTY := func() (ttyDevice, error) { return nil, errors.New("no tty available") }
+	var cases []r19Case
+	add := func(c r19Case) { cases = append(cases, c) }
+
+	add(r19Run(t, "approval-deny-mode", "approval", "deny", 0, nil, args, nil, nil))
+	add(r19Run(t, "approval-prompt-no-tty", "approval", "prompt", 0, nil, args, nil, noTTY))
+	add(r19Run(t, "approval-prompt-user-denies", "approval", "prompt", time.Second, nil, args, nil, r19TTY(t, "n", nil, nil, 0)))
+	add(r19Run(t, "approval-prompt-user-approves", "approval", "prompt", time.Second, nil, args, nil, r19TTY(t, "y", nil, nil, 0)))
+	add(r19Run(t, "approval-prompt-tty-vanishes-before-prompt", "approval", "prompt", time.Second, nil, args, nil, r19TTY(t, "y", nil, nil, 1)))
+	add(r19Run(t, "approval-prompt-raw-mode-fails", "approval", "prompt", time.Second, nil, args, nil, r19TTY(t, "y", nil, errors.New("raw boom"), 0)))
+	add(r19Run(t, "approval-prompt-times-out", "approval", "prompt", time.Second, nil, args, nil, r19TTY(t, "", os.ErrDeadlineExceeded, nil, 0)))
+	add(r19Run(t, "approval-prompt-read-fails", "approval", "prompt", time.Second, nil, args, nil, r19TTY(t, "", errors.New("read boom"), nil, 0)))
+	add(r19Run(t, "approval-unknown-mode", "approval", "bogus", 0, nil, args, nil, nil))
+	add(r19Run(t, "approval-auto-mode", "approval", "auto", 0, nil, args, nil, nil))
+
+	// Dispatcher-level policy on the caller-supplied `path` argument. The
+	// template's own entry is allowed, so only the dispatcher can block.
+	rules := func(action policy.Action) []policy.Rule {
+		return []policy.Rule{
+			{Name: "gate", Priority: 10, Action: action, Conditions: policy.Conditions{AgentID: "r19-agent", Path: "gate", ActionType: "run"}},
+			{Name: "entry", Priority: 1, Action: policy.ActionAllow, Conditions: policy.Conditions{AgentID: "r19-agent", Path: "api-policy", ActionType: "run"}},
+		}
+	}
+	gated := map[string]any{"template": "r19", "endpoint": "/v1/status", "path": "gate"}
+	bio := func(a r19Biometric) *authguard.Challenger {
+		return &authguard.Challenger{Authenticator: func() session.BiometricAuthenticator { return a }}
+	}
+	add(r19Run(t, "biometry-rule-unavailable", "biometry", "none", 0, rules(policy.ActionRequireBiometry), gated, bio(r19Biometric{available: false}), nil))
+	add(r19Run(t, "biometry-rule-challenge-fails", "biometry", "none", 0, rules(policy.ActionRequireBiometry), gated, bio(r19Biometric{available: true, err: errors.New("touch id authentication failed")}), nil))
+	add(r19Run(t, "biometry-rule-challenge-passes", "biometry", "none", 0, rules(policy.ActionRequireBiometry), gated, bio(r19Biometric{available: true}), nil))
+	add(r19Run(t, "policy-prompt-rule-on-path-argument", "biometry", "none", 0, rules(policy.ActionPrompt), gated, nil, nil))
+	add(r19Run(t, "policy-deny-rule-on-path-argument", "biometry", "none", 0, rules(policy.ActionDeny), gated, nil, nil))
+
+	// The text a failed challenge would carry, straight from challengeBiometric.
+	for _, tc := range []struct {
+		id string
+		b  r19Biometric
+	}{
+		{"challenge-text-unavailable", r19Biometric{available: false}},
+		{"challenge-text-failed", r19Biometric{available: true, err: errors.New("touch id authentication failed")}},
+		{"challenge-text-passed", r19Biometric{available: true}},
+	} {
+		srv := newTestServerWithVault(t, config.AgentProfile{Name: "r19-agent", AllowedPaths: []string{"*"}}, "stdio", "")
+		srv.biometricChallenger = bio(tc.b)
+		err := srv.challengeBiometric(context.Background(), "execute_api_request")
+		c := r19Case{ID: tc.id, Group: "biometry-text"}
+		if err != nil {
+			c.Error = err.Error()
+		}
+		add(c)
+	}
+
+	// ---- template-open: stat-then-read -----------------------------------
+	vaultDir := t.TempDir()
+	templates := filepath.Join(vaultDir, "templates")
+	if err := os.MkdirAll(templates, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	yamlA := "base_url: https://a.example.test\nauth_type: bearer\nentry_ref: a\nallowed_endpoints: [/v1/*]\nallowed_methods: [GET]\n"
+	yamlB := "base_url: https://b.example.test\nauth_type: bearer\nentry_ref: b\nallowed_endpoints: [/v1/*]\nallowed_methods: [GET]\n"
+	target := filepath.Join(templates, "race.yaml")
+	other := filepath.Join(templates, "other.tmp")
+	if err := os.WriteFile(target, []byte(yamlA), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "outside.yaml")
+	if err := os.WriteFile(outside, []byte(yamlB), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// deterministic: a symlink at the template path (and one for the whole
+	// directory) is followed to a file outside the vault.
+	linkDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(linkDir, "templates"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(linkDir, "templates", "linked.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	tmpl, err := apitemplates.Load("linked", linkDir)
+	followed := map[string]any{"file_symlink_followed": err == nil && tmpl.BaseURL == "https://b.example.test"}
+	realDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(realDir, "dirlinked.yaml"), []byte(yamlB), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dirVault := t.TempDir()
+	if err := os.Symlink(realDir, filepath.Join(dirVault, "templates")); err != nil {
+		t.Fatal(err)
+	}
+	tmpl, err = apitemplates.Load("dirlinked", dirVault)
+	followed["directory_symlink_followed"] = err == nil && tmpl.BaseURL == "https://b.example.test"
+	add(r19Case{ID: "template-symlinks", Group: "template-open", Notes: followed})
+
+	// concurrent swap: remove/recreate the file while Load runs. Classes seen:
+	// ok(A/B), builtin-fallback error, and read-after-stat error (the window).
+	classes := map[string]int{}
+	var mu sync.Mutex
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			_ = os.Remove(target)
+			content := yamlA
+			if i%2 == 1 {
+				content = yamlB
+			}
+			_ = os.WriteFile(other, []byte(content), 0o644)
+			_ = os.Rename(other, target)
+		}
+	}()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		got, err := apitemplates.Load("race", vaultDir)
+		class := "ok"
+		switch {
+		case err == nil && got.BaseURL == "https://a.example.test":
+			class = "ok-a"
+		case err == nil && got.BaseURL == "https://b.example.test":
+			class = "ok-b"
+		case err != nil && strings.Contains(err.Error(), "read template file"):
+			class = "error-read-after-stat"
+		case err != nil && strings.Contains(err.Error(), "not found"):
+			class = "error-not-found-builtin-fallback"
+		default:
+			class = "error-other"
+		}
+		mu.Lock()
+		classes[class]++
+		mu.Unlock()
+		if classes["error-read-after-stat"] > 0 && time.Since(deadline.Add(-3*time.Second)) > 500*time.Millisecond {
+			break
+		}
+	}
+	close(stop)
+	wg.Wait()
+	add(r19Case{ID: "template-concurrent-swap", Group: "template-open", Notes: map[string]any{
+		"stat_then_read_window_reachable":    classes["error-read-after-stat"] > 0,
+		"never_returns_a_non_template_value": classes["error-other"] == 0,
+		"note":                               "Load does os.Stat(path) and then os.ReadFile(path): two path lookups, no O_NOFOLLOW, no handle reuse; a file removed between them yields 'read template file ...: no such file' instead of the builtin fallback",
+	}})
+
+	doc := map[string]any{
+		"schema":        "symvault.port.execute-api-diagnostics/1",
+		"adr":           "0037 R19 / BROKER-002",
+		"oracle_commit": os.Getenv("R19_ORACLE_COMMIT"),
+		"source":        "legacy/go-oracle internal/mcp/server/{approval_helper,server_dispatch,server_authorize,tools_execute_api_request}.go, internal/mcp/apitemplates/template.go",
+		"cases":         cases,
+	}
+	enc, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(out, append(enc, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}

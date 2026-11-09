@@ -53,6 +53,16 @@ pub fn load_api_template_definition(
     vault_root: &Path,
     name: &str,
 ) -> Result<ApiTemplateDefinition, String> {
+    load_api_template_definition_with(vault_root, name, || {})
+}
+
+/// `after_check` runs between the path checks and the open; production passes a
+/// no-op, the race regression swaps the file there (ADR 0037 R19).
+fn load_api_template_definition_with(
+    vault_root: &Path,
+    name: &str,
+    after_check: impl FnOnce(),
+) -> Result<ApiTemplateDefinition, String> {
     if name.is_empty() || name.contains("..") || name.contains('/') || name.contains('\\') {
         return Err(format!("invalid template name: {name:?}"));
     }
@@ -87,13 +97,19 @@ pub fn load_api_template_definition(
     if !canonical.starts_with(&directory) {
         return Err("template path escapes the template directory".into());
     }
+    after_check();
     let file = fs::File::open(&canonical).map_err(|error| format!("read template: {error}"))?;
-    if file
+    let opened = file
         .metadata()
-        .map_err(|error| format!("stat template: {error}"))?
-        .len()
-        > MAX_API_TEMPLATE_BYTES
-    {
+        .map_err(|error| format!("stat template: {error}"))?;
+    // Go checks with os.Stat and then reads by path (two lookups, symlinks
+    // followed), so a swap in between is not detected. Pin the handle to the
+    // inode that passed the checks: a file renamed or relinked over the path
+    // after the lstat is refused instead of read.
+    if !opened.is_file() || !same_file(&metadata, &opened) {
+        return Err("template changed while loading".into());
+    }
+    if opened.len() > MAX_API_TEMPLATE_BYTES {
         return Err("template exceeds the 65536-byte limit".into());
     }
     let mut bytes = Vec::new();
@@ -104,6 +120,17 @@ pub fn load_api_template_definition(
         return Err("template exceeds the 65536-byte limit".into());
     }
     serde_yaml_ng::from_slice(&bytes).map_err(|error| format!("parse template: {error}"))
+}
+
+#[cfg(unix)]
+fn same_file(checked: &fs::Metadata, opened: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    checked.dev() == opened.dev() && checked.ino() == opened.ino()
+}
+
+#[cfg(not(unix))]
+fn same_file(_checked: &fs::Metadata, _opened: &fs::Metadata) -> bool {
+    true
 }
 
 fn load_builtin_api_template(name: &str) -> Result<ApiTemplateDefinition, String> {
@@ -6416,6 +6443,7 @@ mod tests {
     }
 
     include!("api_review_tests.rs");
+    include!("r19_diagnostics_tests.rs");
 }
 
 /// The audit row Go `handleGenerateTOTP` writes for a finished call, or `None`
