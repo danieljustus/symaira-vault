@@ -857,7 +857,12 @@ AREA_KDF_MIGRATION_TESTS := 10
 # 449 from local/impl-residuals (+1: http.rs unit test
 # head_to_an_unrouted_path_returns_404_with_a_suppressed_body; measured at the
 # 95419793 gate: 449 passed, 0 failed).
-AREA_MCP_TEST_COUNT := 449
+# 466 from local/r-http (+17, ADR 0037 R16 to R19: 7 oauth::expiry_replay and 1
+# http::tests::access_token_expiry_matches_the_go_recording unit tests, 5
+# store_adapter::tests R19 unit tests, 2 tests/http_budget_combinations.rs, 2
+# tests/http_tls_lifecycle.rs; measured on this tree: `cargo test -p symvault-mcp
+# --all-targets --locked` 466 passed, 0 failed over 58 result lines).
+AREA_MCP_TEST_COUNT := 466
 
 # `make -s print-<VARIABLE>` prints a variable's value, for the workflows that must
 # not repeat the constants above.
