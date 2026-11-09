@@ -178,6 +178,36 @@ fn responses(raw: &[u8]) -> Vec<String> {
     out
 }
 
+/// Every byte write of a probe as `(at_ms, data)`, in the order the recorded
+/// schedule intends: steps and dribble slots sorted by time, a step first when
+/// both fall on the same millisecond.
+fn timeline(probe: &Probe, host: &str) -> Vec<(u64, Vec<u8>)> {
+    let mut events: Vec<(u64, u8, Vec<u8>)> = probe
+        .steps
+        .iter()
+        .map(|step| {
+            (
+                step.at_ms,
+                0,
+                step.data.replace("{host}", host).into_bytes(),
+            )
+        })
+        .collect();
+    if let Some(dribble) = &probe.dribble {
+        let mut slot = 0_u64;
+        loop {
+            let at = dribble.from_ms + slot * dribble.interval_ms;
+            if (dribble.until_ms > 0 && at > dribble.until_ms) || at >= probe.max_ms {
+                break;
+            }
+            events.push((at, 1, dribble.byte.clone().into_bytes()));
+            slot += 1;
+        }
+    }
+    events.sort_by_key(|(at, order, _)| (*at, *order));
+    events.into_iter().map(|(at, _, data)| (at, data)).collect()
+}
+
 fn run(address: std::net::SocketAddr, probe: &Probe) -> Outcome {
     let host = address.to_string();
     let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(2)).expect("connect");
@@ -204,39 +234,22 @@ fn run(address: std::net::SocketAddr, probe: &Probe) -> Outcome {
         let _ = stream.set_write_timeout(Some(Duration::from_millis(250)));
         (&*stream).write_all(data).is_ok()
     };
-    let steps = probe.steps.clone();
-    let steps_writer = writer.try_clone().unwrap();
-    let steps_host = host.clone();
-    let steps_sleep = sleep_until.clone();
-    let steps_thread = thread::spawn(move || {
-        for step in steps {
-            if !steps_sleep(step.at_ms) {
-                return;
-            }
-            if !send(
-                &steps_writer,
-                step.data.replace("{host}", &steps_host).as_bytes(),
-            ) {
+    // One sender thread walks the merged step/dribble timeline in recorded
+    // order. Go's recorder uses a goroutine per stream, which is harmless on a
+    // fast host, but a descheduled dribble thread here can deliver its last
+    // filler bytes after the next step: they then arrive behind a complete
+    // request and open a second, header-timeout-bound request, so the server
+    // closes at step + read_header_timeout instead of idling like Go. A single
+    // sender may fall behind its clock, never reorder bytes (a step wins a tie).
+    let sender_writer = writer.try_clone().unwrap();
+    let sender_sleep = sleep_until.clone();
+    let schedule = timeline(probe, &host);
+    let sender_thread = thread::spawn(move || {
+        for (at_ms, data) in schedule {
+            if !sender_sleep(at_ms) || !send(&sender_writer, &data) {
                 return;
             }
         }
-    });
-    let dribble_thread = probe.dribble.clone().map(|dribble| {
-        let dribble_writer = writer.try_clone().unwrap();
-        let dribble_sleep = sleep_until.clone();
-        thread::spawn(move || {
-            let mut slot = 0_u64;
-            loop {
-                let at = dribble.from_ms + slot * dribble.interval_ms;
-                if dribble.until_ms > 0 && at > dribble.until_ms {
-                    return;
-                }
-                if !dribble_sleep(at) || !send(&dribble_writer, dribble.byte.as_bytes()) {
-                    return;
-                }
-                slot += 1;
-            }
-        })
     });
 
     let mut raw = Vec::new();
@@ -271,10 +284,7 @@ fn run(address: std::net::SocketAddr, probe: &Probe) -> Outcome {
     let elapsed = start.elapsed();
     *stop.lock().unwrap() = true;
     let _ = stream.shutdown(std::net::Shutdown::Both);
-    steps_thread.join().unwrap();
-    if let Some(thread) = dribble_thread {
-        thread.join().unwrap();
-    }
+    sender_thread.join().unwrap();
     let responses = responses(&raw);
     Outcome {
         terminal: terminal.into(),
