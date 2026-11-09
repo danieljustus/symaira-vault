@@ -128,7 +128,27 @@ fn run_scenario(obs: &Observation) -> (Option<String>, Option<String>, String) {
     )
 }
 
+/// The Go recording was made on hosts that write no core file, so a signalled
+/// tool carried no `(core dumped)` suffix. Go (and `go_exec`) append that
+/// suffix whenever the kernel reports a core dump, which depends on the host's
+/// `RLIMIT_CORE` and `core_pattern` (hosted Linux runners dump cores). Pin the
+/// limit to zero for this process and the tools it spawns so the replay does
+/// not depend on the host; `go_exec` keeps its own coverage of the suffix.
+fn disable_core_dumps() {
+    use rustix::process::{Resource, Rlimit, getrlimit, setrlimit};
+    let current = getrlimit(Resource::Core);
+    setrlimit(
+        Resource::Core,
+        Rlimit {
+            current: Some(0),
+            maximum: current.maximum,
+        },
+    )
+    .expect("lower RLIMIT_CORE to zero");
+}
+
 fn replay(group: &str, expected_cases: usize) {
+    disable_core_dumps();
     let document = document();
     assert_eq!(document.oracle.go_version, "go1.26.6");
     assert_eq!(document.oracle.atotto_clipboard_version, "v0.1.4");
