@@ -1801,6 +1801,13 @@
    "ref": "861ad93813e3ee43c4ec989f45940d14b05b6eaf",
    "value": "85d61017b7a7bfb1d3dedc2cb6dd30bc33075c9497ef145398164d98dca26599"
   },
+  "testdata/port/sync/restore-gzip-header-flags.json#/oracle#program_sha256": {
+   "kind": "other",
+   "class": "recorded",
+   "algo": "claimed",
+   "ref": null,
+   "value": "685cb5e0311eddf0d4844745a5a05aa5059a8572ec825f499669f22a36a71d53"
+  },
   "testdata/port/sync/restore-gzip-multistream.json#/#generator_digest": {
    "kind": "generator",
    "class": "recorded",
@@ -1814,6 +1821,13 @@
    "algo": "provenance",
    "ref": "861ad93813e3ee43c4ec989f45940d14b05b6eaf",
    "value": "85d61017b7a7bfb1d3dedc2cb6dd30bc33075c9497ef145398164d98dca26599"
+  },
+  "testdata/port/sync/restore-tar-special-caps.json#/oracle#program_sha256": {
+   "kind": "other",
+   "class": "recorded",
+   "algo": "claimed",
+   "ref": null,
+   "value": "685cb5e0311eddf0d4844745a5a05aa5059a8572ec825f499669f22a36a71d53"
   },
   "testdata/port/sync/sync.json#/oracle#generator_digest": {
    "kind": "generator",
