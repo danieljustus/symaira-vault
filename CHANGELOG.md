@@ -24,7 +24,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   credential injection. Unknown or empty names are refused before the broker
   listens (#1554).
 
+### Changed
+- `symvault config set` refuses a config that is only a document start marker
+  (`---`) with exit 6 and leaves the file unchanged, as the Go CLI did; the
+  `yaml-edit` pin is lifted (now 0.3.6) (#1526).
+- The local Rust gate (`scripts/rust-port/local-gate.sh`) refuses to start
+  below `LOCAL_GATE_MIN_FREE_GB` (default 40) and prunes stale cargo artifacts
+  after a successful lane (#1582).
+- Contract rows promoted to `PASS (local)` at `ee4d6a56` (ADR 0037 accepted,
+  #1584); hardware legs stay with the device acceptance runbook.
+
+### Fixed
+- `is_executable` (PATH lookup of desktop helpers) asks the kernel for the
+  effective user's execute permission like Go's `exec.LookPath` (#1480).
+
 ### Removed
+- Winsock ETW helper scripts and the remaining Windows-only Makefile branches
+  (#1553).
 - Go implementation, Go CI/release jobs; Rust-only. CI, release, packaging and
   developer tooling no longer need a Go toolchain: the `setup-go`, golangci-lint,
   gosec, govulncheck, Go fuzz/coverage and Go test jobs, the `gomod` Dependabot
