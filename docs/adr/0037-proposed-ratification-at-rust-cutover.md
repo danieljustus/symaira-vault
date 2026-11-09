@@ -1,7 +1,8 @@
 # ADR 0037: Proposed ratification of the remaining Go-only residuals at the Rust cutover
 
-Status: **Proposed** 2026-11-08 (maintainer approval pending). Nothing below
-takes effect until the maintainer accepts it; an accepted item is binding like
+Status: **Accepted** 2026-11-09 by the maintainer (Daniel Justus); every item of
+the decision table is ratified as recommended (decision recorded on #1214).
+Accepted items are binding; an accepted item is binding like
 an item of ADR 0034 or ADR 0035. Affects contract rows CLI-002, CLI-003,
 CLI-005, CLI-006, CLI-007, PLATFORM-001, PLATFORM-002, IO-002, MCP-003,
 BROKER-001, BROKER-002, HTTP-001, APPROVAL-001 and FFI-001. No row changes
@@ -645,7 +646,7 @@ template_symlinks_are_refused_where_go_follows_them}`. Go side driven through
 
 ### Proposed items from R16 to R19
 
-Same rules as items 1 to 32: not binding until the maintainer accepts them.
+Same rules as items 1 to 32; accepted with them on 2026-11-09.
 
 - **33 rustls TLS 1.2 alert for a missing client certificate** (HTTP-004). For
   a client that sends no certificate to an mTLS listener over TLS 1.2, Go's
@@ -712,48 +713,48 @@ automated; a maintainer records them as a manual acceptance note.
 
 | Item | Rows | Recommendation | Maintainer decision |
 |---|---|---|---|
-| 1 darwin `ui` Go comparison unavailable | CLI-002 | R | pending |
-| 2 sub-millisecond `--timeout` | CLI-003 | R | pending |
-| 3 seven extra-positional exclusions | CLI-005 | R | pending |
-| 4 test-isolation limits | CLI-005 | R | pending |
-| 5 `copyByDefault: false` | CLI-005 | R | pending |
-| 6 `intake watch` output modes | CLI-006 | R | pending |
-| 7 `doctor --no-network` | CLI-006 | R | pending |
-| 8 volatile fields by shape | CLI-006 | R | pending |
-| 9 unmapped config read errnos | CLI-006 | R | pending |
-| 10 per-instance broker CA | CLI-007, BROKER-001 | R | pending |
-| 11 broker dot segments | BROKER-001 | R | pending |
-| 12 opaque transport diagnostics | BROKER-002 | R | pending |
-| 13 SIGQUIT clears clipboard | CLI-007 | R | pending |
-| 14 Wayland autotype whitelist | PLATFORM-001 | R | pending |
-| 15 non-UTF-8 env dropped | PLATFORM-001 | R | pending |
-| 16 no Drop guard, no zeroize | PLATFORM-001 | R | pending |
-| 17 `initialize` not compared | PLATFORM-001 | R | pending |
-| 18 `go_version` provenance | PLATFORM-001 | R | pending |
-| 19 stdin-write EPIPE | PLATFORM-001 | R | pending |
-| 20 `/usr/bin` clipboard tools | PLATFORM-001 | R | pending |
-| 21 pasteboard deadline and env | PLATFORM-001 | R | pending |
-| 22 core dumped text | PLATFORM-001 | R | pending |
-| 23 lazy limiter sweep | HTTP-001 | R | pending |
-| 24 global tar header map order | IO-002 | R | pending |
-| 25 JSON collision values | IO-002 | R | pending |
-| 26 public DNS not exercised | MCP-003, BROKER-002 | R | pending |
-| 27 no device-session ticker | APPROVAL-001 | R | pending |
-| 28 mTLS check before bind | APPROVAL-001 | R | pending |
-| 29 non-mTLS TLS text | APPROVAL-001 | R | pending |
-| 30 unit-level peer/timestamp checks | APPROVAL-001 | R | pending |
-| 31 cooldown end with injected clock | APPROVAL-001 | R | pending |
-| 32 Swift SKIP on Linux | FFI-001 | R | pending |
-| 33 rustls TLS 1.2 missing-client-certificate alert | HTTP-004 | R | pending |
-| 34 unknown approval mode fails closed | BROKER-002 | R | pending |
-| 35 template symlinks refused | BROKER-002 | R | pending |
-| 36 refresh refused at the exact deadline | HTTP-003 | R | pending |
-| U1 to U7 unenumerable classes | see section | R | pending |
-| Anchor wording | CLI-005 | wording | pending |
+| 1 darwin `ui` Go comparison unavailable | CLI-002 | R | R: ratified |
+| 2 sub-millisecond `--timeout` | CLI-003 | R | R: ratified |
+| 3 seven extra-positional exclusions | CLI-005 | R | R: ratified |
+| 4 test-isolation limits | CLI-005 | R | R: ratified |
+| 5 `copyByDefault: false` | CLI-005 | R | R: ratified |
+| 6 `intake watch` output modes | CLI-006 | R | R: ratified |
+| 7 `doctor --no-network` | CLI-006 | R | R: ratified |
+| 8 volatile fields by shape | CLI-006 | R | R: ratified |
+| 9 unmapped config read errnos | CLI-006 | R | R: ratified |
+| 10 per-instance broker CA | CLI-007, BROKER-001 | R | R: ratified |
+| 11 broker dot segments | BROKER-001 | R | R: ratified |
+| 12 opaque transport diagnostics | BROKER-002 | R | R: ratified |
+| 13 SIGQUIT clears clipboard | CLI-007 | R | R: ratified |
+| 14 Wayland autotype whitelist | PLATFORM-001 | R | R: ratified |
+| 15 non-UTF-8 env dropped | PLATFORM-001 | R | R: ratified |
+| 16 no Drop guard, no zeroize | PLATFORM-001 | R | R: ratified |
+| 17 `initialize` not compared | PLATFORM-001 | R | R: ratified |
+| 18 `go_version` provenance | PLATFORM-001 | R | R: ratified |
+| 19 stdin-write EPIPE | PLATFORM-001 | R | R: ratified |
+| 20 `/usr/bin` clipboard tools | PLATFORM-001 | R | R: ratified |
+| 21 pasteboard deadline and env | PLATFORM-001 | R | R: ratified |
+| 22 core dumped text | PLATFORM-001 | R | R: ratified |
+| 23 lazy limiter sweep | HTTP-001 | R | R: ratified |
+| 24 global tar header map order | IO-002 | R | R: ratified |
+| 25 JSON collision values | IO-002 | R | R: ratified |
+| 26 public DNS not exercised | MCP-003, BROKER-002 | R | R: ratified |
+| 27 no device-session ticker | APPROVAL-001 | R | R: ratified |
+| 28 mTLS check before bind | APPROVAL-001 | R | R: ratified |
+| 29 non-mTLS TLS text | APPROVAL-001 | R | R: ratified |
+| 30 unit-level peer/timestamp checks | APPROVAL-001 | R | R: ratified |
+| 31 cooldown end with injected clock | APPROVAL-001 | R | R: ratified |
+| 32 Swift SKIP on Linux | FFI-001 | R | R: ratified |
+| 33 rustls TLS 1.2 missing-client-certificate alert | HTTP-004 | R | R: ratified |
+| 34 unknown approval mode fails closed | BROKER-002 | R | R: ratified |
+| 35 template symlinks refused | BROKER-002 | R | R: ratified |
+| 36 refresh refused at the exact deadline | HTTP-003 | R | R: ratified |
+| U1 to U7 unenumerable classes | see section | R | R: ratified |
+| Anchor wording | CLI-005 | wording | ratified (wording) |
 
 ## Consequences
 
-- If accepted, rows may cite this ADR for the listed residuals; they no longer
+- Accepted 2026-11-09: rows may cite this ADR for the listed residuals; they no longer
   block a `PASS (local)` label. The remaining blockers are receipts
   (`native-evidence`), the entries under "To be recorded", the `implement`
   items and the device acceptance notes.

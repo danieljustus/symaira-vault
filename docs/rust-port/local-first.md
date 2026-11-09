@@ -14,7 +14,7 @@ requests and per-slice hosted CI runs are suspended for the port.
 > `rust-port/local-history` named in rule 6; the Go oracle is the pushed tag
 > `legacy/go-oracle` (`ce2390d7`). The promotion rule (rule 4: `PASS (local)`
 > with `macos` and `linux` receipts, confirmed by the closing CI run) is
-> unchanged. Proposed ratification of the remaining Go-only residuals:
+> unchanged. Ratification of the remaining Go-only residuals (accepted 2026-11-09):
 > [ADR 0037](../adr/0037-proposed-ratification-at-rust-cutover.md).
 
 ## Rules
