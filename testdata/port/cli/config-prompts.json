@@ -1,0 +1,3063 @@
+{
+ "schema_version": 1,
+ "oracle": {
+  "commit": "ce2390d748818a4beb413e97183b7795efa99411",
+  "tag": "legacy/go-oracle",
+  "go_version": "go1.26.6",
+  "recorded_goos": [
+   "darwin",
+   "linux"
+  ],
+  "go_source": "scripts/rust-port/cmd/errtaxgen/r9_test.go (TestR9ConfigPromptAnswers; detached copy: scripts/rust-port/r9_config_prompts.go.txt)",
+  "program_sha256": "5b747e023d3da55e3e6961f24554899a41b952019b88f688a7a5ed5f6d2685b4",
+  "go_code_path": "internal/cli/unlock.go resolveConfig -> internal/cli/configfix.go InteractiveFixConfig -> internal/cli/input/input.go ConfirmInteractive (bufio.NewReader(os.Stdin).ReadString('\\n') per prompt)",
+  "seed": "testdata/port/cli/error-taxonomy.json#/vault_seed (the frozen Go-made vault)"
+ },
+ "note": "R9 (ADR 0037). Each case runs the oracle binary in a sandbox with the frozen vault whose config.yaml got `clipboard:\\n    auto_clear_duration: -5\\n` appended, SYMVAULT_PASSPHRASE + SYMVAULT_ALLOW_ENV_PASSPHRASE=1, EDITOR=<root>/editor.sh (`exit 0`), PATH=/usr/bin:/bin, CI=1, NO_COLOR=1, TZ=UTC, stdin = the scripted bytes. Darwin and linux (gate image) recordings were byte-identical and are stored once. `config_after_id` indexes `configs` (config.yaml after the run). Commands without `BodyRuns` only get declining answers: intake, broker, ui and mcp serve would run a listener, a TUI or a desktop notification, generate --store prints a random password, and `add` on a non-terminal stdin is a different residual (Go prompts line by line, Rust refuses).",
+ "env": {
+  "PATH": "/usr/bin:/bin",
+  "TZ": "UTC",
+  "SYMVAULT_PASSPHRASE": "seed passphrase from error-taxonomy.json",
+  "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+  "CI": "1",
+  "NO_COLOR": "1"
+ },
+ "configs": [
+  "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: __ROOT__/xdg-data/symaira-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nclipboard:\n    auto_clear_duration: -5\n",
+  "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nclipboard:\n    auto_clear_duration: 30\n    copyByDefault: true\nvaultDir: __ROOT__/xdg-data/symaira-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+ ],
+ "cases": [
+  {
+   "name": "find__eof",
+   "args": [
+    "find",
+    "x"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "find__n",
+   "args": [
+    "find",
+    "x"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "find__n_n",
+   "args": [
+    "find",
+    "x"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "find__empty_line_n",
+   "args": [
+    "find",
+    "x"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "find__word_n",
+   "args": [
+    "find",
+    "x"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "find__y",
+   "args": [
+    "find",
+    "x"
+   ],
+   "stdin": "y\n",
+   "exit_code": 0,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nNo matches found\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "find__upper_y",
+   "args": [
+    "find",
+    "x"
+   ],
+   "stdin": "Y\n",
+   "exit_code": 0,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nNo matches found\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "find__padded_y",
+   "args": [
+    "find",
+    "x"
+   ],
+   "stdin": "  y  \n",
+   "exit_code": 0,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nNo matches found\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "find__yes_word",
+   "args": [
+    "find",
+    "x"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "find__n_then_y",
+   "args": [
+    "find",
+    "x"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "find__y_without_newline",
+   "args": [
+    "find",
+    "x"
+   ],
+   "stdin": "y",
+   "exit_code": 0,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nNo matches found\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "add__eof",
+   "args": [
+    "add",
+    "x"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "add__n",
+   "args": [
+    "add",
+    "x"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "add__n_n",
+   "args": [
+    "add",
+    "x"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "add__empty_line_n",
+   "args": [
+    "add",
+    "x"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "add__word_n",
+   "args": [
+    "add",
+    "x"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "add__yes_word",
+   "args": [
+    "add",
+    "x"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "add__n_then_y",
+   "args": [
+    "add",
+    "x"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "delete__eof",
+   "args": [
+    "delete",
+    "x"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "delete__n",
+   "args": [
+    "delete",
+    "x"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "delete__n_n",
+   "args": [
+    "delete",
+    "x"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "delete__empty_line_n",
+   "args": [
+    "delete",
+    "x"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "delete__word_n",
+   "args": [
+    "delete",
+    "x"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "delete__y",
+   "args": [
+    "delete",
+    "x"
+   ],
+   "stdin": "y\n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nDelete x? (y/N): Error: read confirmation: EOF\nError: read confirmation: EOF\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "delete__upper_y",
+   "args": [
+    "delete",
+    "x"
+   ],
+   "stdin": "Y\n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nDelete x? (y/N): Error: read confirmation: EOF\nError: read confirmation: EOF\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "delete__padded_y",
+   "args": [
+    "delete",
+    "x"
+   ],
+   "stdin": "  y  \n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nDelete x? (y/N): Error: read confirmation: EOF\nError: read confirmation: EOF\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "delete__yes_word",
+   "args": [
+    "delete",
+    "x"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "delete__n_then_y",
+   "args": [
+    "delete",
+    "x"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "delete__y_without_newline",
+   "args": [
+    "delete",
+    "x"
+   ],
+   "stdin": "y",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nDelete x? (y/N): Error: read confirmation: EOF\nError: read confirmation: EOF\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "edit__eof",
+   "args": [
+    "edit",
+    "x"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "edit__n",
+   "args": [
+    "edit",
+    "x"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "edit__n_n",
+   "args": [
+    "edit",
+    "x"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "edit__empty_line_n",
+   "args": [
+    "edit",
+    "x"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "edit__word_n",
+   "args": [
+    "edit",
+    "x"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "edit__y",
+   "args": [
+    "edit",
+    "x"
+   ],
+   "stdin": "y\n",
+   "exit_code": 2,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: entry not found: x: entry not found\nError: entry not found: x: entry not found\nTry: symvault list to browse entries, or symvault find <term> to search by keyword.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "edit__upper_y",
+   "args": [
+    "edit",
+    "x"
+   ],
+   "stdin": "Y\n",
+   "exit_code": 2,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: entry not found: x: entry not found\nError: entry not found: x: entry not found\nTry: symvault list to browse entries, or symvault find <term> to search by keyword.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "edit__padded_y",
+   "args": [
+    "edit",
+    "x"
+   ],
+   "stdin": "  y  \n",
+   "exit_code": 2,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: entry not found: x: entry not found\nError: entry not found: x: entry not found\nTry: symvault list to browse entries, or symvault find <term> to search by keyword.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "edit__yes_word",
+   "args": [
+    "edit",
+    "x"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "edit__n_then_y",
+   "args": [
+    "edit",
+    "x"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "edit__y_without_newline",
+   "args": [
+    "edit",
+    "x"
+   ],
+   "stdin": "y",
+   "exit_code": 2,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: entry not found: x: entry not found\nError: entry not found: x: entry not found\nTry: symvault list to browse entries, or symvault find <term> to search by keyword.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "set_value__eof",
+   "args": [
+    "set",
+    "x",
+    "--value",
+    "v",
+    "--force"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "set_value__n",
+   "args": [
+    "set",
+    "x",
+    "--value",
+    "v",
+    "--force"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "set_value__n_n",
+   "args": [
+    "set",
+    "x",
+    "--value",
+    "v",
+    "--force"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "set_value__empty_line_n",
+   "args": [
+    "set",
+    "x",
+    "--value",
+    "v",
+    "--force"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "set_value__word_n",
+   "args": [
+    "set",
+    "x",
+    "--value",
+    "v",
+    "--force"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "set_value__y",
+   "args": [
+    "set",
+    "x",
+    "--value",
+    "v",
+    "--force"
+   ],
+   "stdin": "y\n",
+   "exit_code": 0,
+   "stdout": "Entry saved: x\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "set_value__upper_y",
+   "args": [
+    "set",
+    "x",
+    "--value",
+    "v",
+    "--force"
+   ],
+   "stdin": "Y\n",
+   "exit_code": 0,
+   "stdout": "Entry saved: x\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "set_value__padded_y",
+   "args": [
+    "set",
+    "x",
+    "--value",
+    "v",
+    "--force"
+   ],
+   "stdin": "  y  \n",
+   "exit_code": 0,
+   "stdout": "Entry saved: x\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "set_value__yes_word",
+   "args": [
+    "set",
+    "x",
+    "--value",
+    "v",
+    "--force"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "set_value__n_then_y",
+   "args": [
+    "set",
+    "x",
+    "--value",
+    "v",
+    "--force"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "set_value__y_without_newline",
+   "args": [
+    "set",
+    "x",
+    "--value",
+    "v",
+    "--force"
+   ],
+   "stdin": "y",
+   "exit_code": 0,
+   "stdout": "Entry saved: x\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "recipients_add__eof",
+   "args": [
+    "recipients",
+    "add",
+    "x"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "recipients_add__n",
+   "args": [
+    "recipients",
+    "add",
+    "x"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "recipients_add__n_n",
+   "args": [
+    "recipients",
+    "add",
+    "x"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "recipients_add__empty_line_n",
+   "args": [
+    "recipients",
+    "add",
+    "x"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "recipients_add__word_n",
+   "args": [
+    "recipients",
+    "add",
+    "x"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "recipients_add__y",
+   "args": [
+    "recipients",
+    "add",
+    "x"
+   ],
+   "stdin": "y\n",
+   "exit_code": 9,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: invalid recipient: must be a valid age public key starting with 'age1'\nError: invalid recipient: must be a valid age public key starting with 'age1'\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "recipients_add__upper_y",
+   "args": [
+    "recipients",
+    "add",
+    "x"
+   ],
+   "stdin": "Y\n",
+   "exit_code": 9,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: invalid recipient: must be a valid age public key starting with 'age1'\nError: invalid recipient: must be a valid age public key starting with 'age1'\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "recipients_add__padded_y",
+   "args": [
+    "recipients",
+    "add",
+    "x"
+   ],
+   "stdin": "  y  \n",
+   "exit_code": 9,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: invalid recipient: must be a valid age public key starting with 'age1'\nError: invalid recipient: must be a valid age public key starting with 'age1'\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "recipients_add__yes_word",
+   "args": [
+    "recipients",
+    "add",
+    "x"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "recipients_add__n_then_y",
+   "args": [
+    "recipients",
+    "add",
+    "x"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "recipients_add__y_without_newline",
+   "args": [
+    "recipients",
+    "add",
+    "x"
+   ],
+   "stdin": "y",
+   "exit_code": 9,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: invalid recipient: must be a valid age public key starting with 'age1'\nError: invalid recipient: must be a valid age public key starting with 'age1'\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "recipients_remove__eof",
+   "args": [
+    "recipients",
+    "remove",
+    "x"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "recipients_remove__n",
+   "args": [
+    "recipients",
+    "remove",
+    "x"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "recipients_remove__n_n",
+   "args": [
+    "recipients",
+    "remove",
+    "x"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "recipients_remove__empty_line_n",
+   "args": [
+    "recipients",
+    "remove",
+    "x"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "recipients_remove__word_n",
+   "args": [
+    "recipients",
+    "remove",
+    "x"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "recipients_remove__y",
+   "args": [
+    "recipients",
+    "remove",
+    "x"
+   ],
+   "stdin": "y\n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nRemove recipient x (y/N): Error: read confirmation: EOF\nError: read confirmation: EOF\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "recipients_remove__upper_y",
+   "args": [
+    "recipients",
+    "remove",
+    "x"
+   ],
+   "stdin": "Y\n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nRemove recipient x (y/N): Error: read confirmation: EOF\nError: read confirmation: EOF\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "recipients_remove__padded_y",
+   "args": [
+    "recipients",
+    "remove",
+    "x"
+   ],
+   "stdin": "  y  \n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nRemove recipient x (y/N): Error: read confirmation: EOF\nError: read confirmation: EOF\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "recipients_remove__yes_word",
+   "args": [
+    "recipients",
+    "remove",
+    "x"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "recipients_remove__n_then_y",
+   "args": [
+    "recipients",
+    "remove",
+    "x"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "recipients_remove__y_without_newline",
+   "args": [
+    "recipients",
+    "remove",
+    "x"
+   ],
+   "stdin": "y",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nRemove recipient x (y/N): Error: read confirmation: EOF\nError: read confirmation: EOF\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "run__eof",
+   "args": [
+    "run",
+    "--",
+    "x"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "run__n",
+   "args": [
+    "run",
+    "--",
+    "x"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "run__n_n",
+   "args": [
+    "run",
+    "--",
+    "x"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "run__empty_line_n",
+   "args": [
+    "run",
+    "--",
+    "x"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "run__word_n",
+   "args": [
+    "run",
+    "--",
+    "x"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "run__y",
+   "args": [
+    "run",
+    "--",
+    "x"
+   ],
+   "stdin": "y\n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: failed to run command: exec: \"x\": executable file not found in $PATH\nError: failed to run command: exec: \"x\": executable file not found in $PATH\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "run__upper_y",
+   "args": [
+    "run",
+    "--",
+    "x"
+   ],
+   "stdin": "Y\n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: failed to run command: exec: \"x\": executable file not found in $PATH\nError: failed to run command: exec: \"x\": executable file not found in $PATH\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "run__padded_y",
+   "args": [
+    "run",
+    "--",
+    "x"
+   ],
+   "stdin": "  y  \n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: failed to run command: exec: \"x\": executable file not found in $PATH\nError: failed to run command: exec: \"x\": executable file not found in $PATH\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "run__yes_word",
+   "args": [
+    "run",
+    "--",
+    "x"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "run__n_then_y",
+   "args": [
+    "run",
+    "--",
+    "x"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "run__y_without_newline",
+   "args": [
+    "run",
+    "--",
+    "x"
+   ],
+   "stdin": "y",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: failed to run command: exec: \"x\": executable file not found in $PATH\nError: failed to run command: exec: \"x\": executable file not found in $PATH\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "file_use__eof",
+   "args": [
+    "file",
+    "use",
+    "seed/cert",
+    "x"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_use__n",
+   "args": [
+    "file",
+    "use",
+    "seed/cert",
+    "x"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_use__n_n",
+   "args": [
+    "file",
+    "use",
+    "seed/cert",
+    "x"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_use__empty_line_n",
+   "args": [
+    "file",
+    "use",
+    "seed/cert",
+    "x"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_use__word_n",
+   "args": [
+    "file",
+    "use",
+    "seed/cert",
+    "x"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_use__y",
+   "args": [
+    "file",
+    "use",
+    "seed/cert",
+    "x"
+   ],
+   "stdin": "y\n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: failed to run command: exec: \"x\": executable file not found in $PATH\nError: failed to run command: exec: \"x\": executable file not found in $PATH\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "file_use__upper_y",
+   "args": [
+    "file",
+    "use",
+    "seed/cert",
+    "x"
+   ],
+   "stdin": "Y\n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: failed to run command: exec: \"x\": executable file not found in $PATH\nError: failed to run command: exec: \"x\": executable file not found in $PATH\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "file_use__padded_y",
+   "args": [
+    "file",
+    "use",
+    "seed/cert",
+    "x"
+   ],
+   "stdin": "  y  \n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: failed to run command: exec: \"x\": executable file not found in $PATH\nError: failed to run command: exec: \"x\": executable file not found in $PATH\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "file_use__yes_word",
+   "args": [
+    "file",
+    "use",
+    "seed/cert",
+    "x"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_use__n_then_y",
+   "args": [
+    "file",
+    "use",
+    "seed/cert",
+    "x"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_use__y_without_newline",
+   "args": [
+    "file",
+    "use",
+    "seed/cert",
+    "x"
+   ],
+   "stdin": "y",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: failed to run command: exec: \"x\": executable file not found in $PATH\nError: failed to run command: exec: \"x\": executable file not found in $PATH\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "file_get__eof",
+   "args": [
+    "file",
+    "get",
+    "seed/cert",
+    "--out",
+    "o"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_get__n",
+   "args": [
+    "file",
+    "get",
+    "seed/cert",
+    "--out",
+    "o"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_get__n_n",
+   "args": [
+    "file",
+    "get",
+    "seed/cert",
+    "--out",
+    "o"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_get__empty_line_n",
+   "args": [
+    "file",
+    "get",
+    "seed/cert",
+    "--out",
+    "o"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_get__word_n",
+   "args": [
+    "file",
+    "get",
+    "seed/cert",
+    "--out",
+    "o"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_get__y",
+   "args": [
+    "file",
+    "get",
+    "seed/cert",
+    "--out",
+    "o"
+   ],
+   "stdin": "y\n",
+   "exit_code": 0,
+   "stdout": "Exported seed/cert#cert_p12 to o (42 bytes)\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "file_get__upper_y",
+   "args": [
+    "file",
+    "get",
+    "seed/cert",
+    "--out",
+    "o"
+   ],
+   "stdin": "Y\n",
+   "exit_code": 0,
+   "stdout": "Exported seed/cert#cert_p12 to o (42 bytes)\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "file_get__padded_y",
+   "args": [
+    "file",
+    "get",
+    "seed/cert",
+    "--out",
+    "o"
+   ],
+   "stdin": "  y  \n",
+   "exit_code": 0,
+   "stdout": "Exported seed/cert#cert_p12 to o (42 bytes)\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "file_get__yes_word",
+   "args": [
+    "file",
+    "get",
+    "seed/cert",
+    "--out",
+    "o"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_get__n_then_y",
+   "args": [
+    "file",
+    "get",
+    "seed/cert",
+    "--out",
+    "o"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_get__y_without_newline",
+   "args": [
+    "file",
+    "get",
+    "seed/cert",
+    "--out",
+    "o"
+   ],
+   "stdin": "y",
+   "exit_code": 0,
+   "stdout": "Exported seed/cert#cert_p12 to o (42 bytes)\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "file_add__eof",
+   "args": [
+    "file",
+    "add",
+    "x",
+    "--field",
+    "f",
+    "--from",
+    "source.csv"
+   ],
+   "stdin": "",
+   "files": {
+    "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_add__n",
+   "args": [
+    "file",
+    "add",
+    "x",
+    "--field",
+    "f",
+    "--from",
+    "source.csv"
+   ],
+   "stdin": "n\n",
+   "files": {
+    "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_add__n_n",
+   "args": [
+    "file",
+    "add",
+    "x",
+    "--field",
+    "f",
+    "--from",
+    "source.csv"
+   ],
+   "stdin": "n\nn\n",
+   "files": {
+    "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_add__empty_line_n",
+   "args": [
+    "file",
+    "add",
+    "x",
+    "--field",
+    "f",
+    "--from",
+    "source.csv"
+   ],
+   "stdin": "\nn\n",
+   "files": {
+    "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_add__word_n",
+   "args": [
+    "file",
+    "add",
+    "x",
+    "--field",
+    "f",
+    "--from",
+    "source.csv"
+   ],
+   "stdin": "no\nno\n",
+   "files": {
+    "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_add__y",
+   "args": [
+    "file",
+    "add",
+    "x",
+    "--field",
+    "f",
+    "--from",
+    "source.csv"
+   ],
+   "stdin": "y\n",
+   "files": {
+    "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+   },
+   "exit_code": 0,
+   "stdout": "Attached source.csv to x#f (48 bytes, sha256:2f8f84e45e7ef5e240ee82ba99f258a54659a1302f14eff0d7dd809fc69eab0c)\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "file_add__upper_y",
+   "args": [
+    "file",
+    "add",
+    "x",
+    "--field",
+    "f",
+    "--from",
+    "source.csv"
+   ],
+   "stdin": "Y\n",
+   "files": {
+    "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+   },
+   "exit_code": 0,
+   "stdout": "Attached source.csv to x#f (48 bytes, sha256:2f8f84e45e7ef5e240ee82ba99f258a54659a1302f14eff0d7dd809fc69eab0c)\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "file_add__padded_y",
+   "args": [
+    "file",
+    "add",
+    "x",
+    "--field",
+    "f",
+    "--from",
+    "source.csv"
+   ],
+   "stdin": "  y  \n",
+   "files": {
+    "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+   },
+   "exit_code": 0,
+   "stdout": "Attached source.csv to x#f (48 bytes, sha256:2f8f84e45e7ef5e240ee82ba99f258a54659a1302f14eff0d7dd809fc69eab0c)\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "file_add__yes_word",
+   "args": [
+    "file",
+    "add",
+    "x",
+    "--field",
+    "f",
+    "--from",
+    "source.csv"
+   ],
+   "stdin": "yes\nyes\n",
+   "files": {
+    "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_add__n_then_y",
+   "args": [
+    "file",
+    "add",
+    "x",
+    "--field",
+    "f",
+    "--from",
+    "source.csv"
+   ],
+   "stdin": "n\ny\n",
+   "files": {
+    "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "file_add__y_without_newline",
+   "args": [
+    "file",
+    "add",
+    "x",
+    "--field",
+    "f",
+    "--from",
+    "source.csv"
+   ],
+   "stdin": "y",
+   "files": {
+    "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+   },
+   "exit_code": 0,
+   "stdout": "Attached source.csv to x#f (48 bytes, sha256:2f8f84e45e7ef5e240ee82ba99f258a54659a1302f14eff0d7dd809fc69eab0c)\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "import_review_list__eof",
+   "args": [
+    "import",
+    "review",
+    "list"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "import_review_list__n",
+   "args": [
+    "import",
+    "review",
+    "list"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "import_review_list__n_n",
+   "args": [
+    "import",
+    "review",
+    "list"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "import_review_list__empty_line_n",
+   "args": [
+    "import",
+    "review",
+    "list"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "import_review_list__word_n",
+   "args": [
+    "import",
+    "review",
+    "list"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "import_review_list__y",
+   "args": [
+    "import",
+    "review",
+    "list"
+   ],
+   "stdin": "y\n",
+   "exit_code": 0,
+   "stdout": "No quarantined imports found.\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "import_review_list__upper_y",
+   "args": [
+    "import",
+    "review",
+    "list"
+   ],
+   "stdin": "Y\n",
+   "exit_code": 0,
+   "stdout": "No quarantined imports found.\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "import_review_list__padded_y",
+   "args": [
+    "import",
+    "review",
+    "list"
+   ],
+   "stdin": "  y  \n",
+   "exit_code": 0,
+   "stdout": "No quarantined imports found.\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "import_review_list__yes_word",
+   "args": [
+    "import",
+    "review",
+    "list"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "import_review_list__n_then_y",
+   "args": [
+    "import",
+    "review",
+    "list"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "import_review_list__y_without_newline",
+   "args": [
+    "import",
+    "review",
+    "list"
+   ],
+   "stdin": "y",
+   "exit_code": 0,
+   "stdout": "No quarantined imports found.\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "import_review_promote__eof",
+   "args": [
+    "import",
+    "review",
+    "promote",
+    "x"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "import_review_promote__n",
+   "args": [
+    "import",
+    "review",
+    "promote",
+    "x"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "import_review_promote__n_n",
+   "args": [
+    "import",
+    "review",
+    "promote",
+    "x"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "import_review_promote__empty_line_n",
+   "args": [
+    "import",
+    "review",
+    "promote",
+    "x"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "import_review_promote__word_n",
+   "args": [
+    "import",
+    "review",
+    "promote",
+    "x"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "import_review_promote__y",
+   "args": [
+    "import",
+    "review",
+    "promote",
+    "x"
+   ],
+   "stdin": "y\n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: no quarantined entries found for import-id \"x\"\nError: no quarantined entries found for import-id \"x\"\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "import_review_promote__upper_y",
+   "args": [
+    "import",
+    "review",
+    "promote",
+    "x"
+   ],
+   "stdin": "Y\n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: no quarantined entries found for import-id \"x\"\nError: no quarantined entries found for import-id \"x\"\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "import_review_promote__padded_y",
+   "args": [
+    "import",
+    "review",
+    "promote",
+    "x"
+   ],
+   "stdin": "  y  \n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: no quarantined entries found for import-id \"x\"\nError: no quarantined entries found for import-id \"x\"\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "import_review_promote__yes_word",
+   "args": [
+    "import",
+    "review",
+    "promote",
+    "x"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "import_review_promote__n_then_y",
+   "args": [
+    "import",
+    "review",
+    "promote",
+    "x"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "import_review_promote__y_without_newline",
+   "args": [
+    "import",
+    "review",
+    "promote",
+    "x"
+   ],
+   "stdin": "y",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: no quarantined entries found for import-id \"x\"\nError: no quarantined entries found for import-id \"x\"\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "export_csv_yes__eof",
+   "args": [
+    "export",
+    "--format",
+    "csv",
+    "--yes"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "WARNING: Vault export produces unencrypted output. All secrets will be in plaintext.\nConfiguration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "export_csv_yes__n",
+   "args": [
+    "export",
+    "--format",
+    "csv",
+    "--yes"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "WARNING: Vault export produces unencrypted output. All secrets will be in plaintext.\nConfiguration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "export_csv_yes__n_n",
+   "args": [
+    "export",
+    "--format",
+    "csv",
+    "--yes"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "WARNING: Vault export produces unencrypted output. All secrets will be in plaintext.\nConfiguration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "export_csv_yes__empty_line_n",
+   "args": [
+    "export",
+    "--format",
+    "csv",
+    "--yes"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "WARNING: Vault export produces unencrypted output. All secrets will be in plaintext.\nConfiguration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "export_csv_yes__word_n",
+   "args": [
+    "export",
+    "--format",
+    "csv",
+    "--yes"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "WARNING: Vault export produces unencrypted output. All secrets will be in plaintext.\nConfiguration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "export_csv_yes__y",
+   "args": [
+    "export",
+    "--format",
+    "csv",
+    "--yes"
+   ],
+   "stdin": "y\n",
+   "exit_code": 0,
+   "stdout": "path,cert_p12,token\nseed/api,,synthetic-api-token-0001\nseed/cert,c3ludGhldGljIGF0dGFjaG1lbnQgY29udGVudCwgbm90IGEgc2VjcmV0,\nExported 2 entries\n",
+   "stderr": "WARNING: Vault export produces unencrypted output. All secrets will be in plaintext.\nConfiguration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "export_csv_yes__upper_y",
+   "args": [
+    "export",
+    "--format",
+    "csv",
+    "--yes"
+   ],
+   "stdin": "Y\n",
+   "exit_code": 0,
+   "stdout": "path,cert_p12,token\nseed/api,,synthetic-api-token-0001\nseed/cert,c3ludGhldGljIGF0dGFjaG1lbnQgY29udGVudCwgbm90IGEgc2VjcmV0,\nExported 2 entries\n",
+   "stderr": "WARNING: Vault export produces unencrypted output. All secrets will be in plaintext.\nConfiguration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "export_csv_yes__padded_y",
+   "args": [
+    "export",
+    "--format",
+    "csv",
+    "--yes"
+   ],
+   "stdin": "  y  \n",
+   "exit_code": 0,
+   "stdout": "path,cert_p12,token\nseed/api,,synthetic-api-token-0001\nseed/cert,c3ludGhldGljIGF0dGFjaG1lbnQgY29udGVudCwgbm90IGEgc2VjcmV0,\nExported 2 entries\n",
+   "stderr": "WARNING: Vault export produces unencrypted output. All secrets will be in plaintext.\nConfiguration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "export_csv_yes__yes_word",
+   "args": [
+    "export",
+    "--format",
+    "csv",
+    "--yes"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "WARNING: Vault export produces unencrypted output. All secrets will be in plaintext.\nConfiguration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "export_csv_yes__n_then_y",
+   "args": [
+    "export",
+    "--format",
+    "csv",
+    "--yes"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "WARNING: Vault export produces unencrypted output. All secrets will be in plaintext.\nConfiguration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "export_csv_yes__y_without_newline",
+   "args": [
+    "export",
+    "--format",
+    "csv",
+    "--yes"
+   ],
+   "stdin": "y",
+   "exit_code": 0,
+   "stdout": "path,cert_p12,token\nseed/api,,synthetic-api-token-0001\nseed/cert,c3ludGhldGljIGF0dGFjaG1lbnQgY29udGVudCwgbm90IGEgc2VjcmV0,\nExported 2 entries\n",
+   "stderr": "WARNING: Vault export produces unencrypted output. All secrets will be in plaintext.\nConfiguration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "git_log__eof",
+   "args": [
+    "git",
+    "log"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "git_log__n",
+   "args": [
+    "git",
+    "log"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "git_log__n_n",
+   "args": [
+    "git",
+    "log"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "git_log__empty_line_n",
+   "args": [
+    "git",
+    "log"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "git_log__word_n",
+   "args": [
+    "git",
+    "log"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "git_log__y",
+   "args": [
+    "git",
+    "log"
+   ],
+   "stdin": "y\n",
+   "exit_code": 0,
+   "stdout": "d3a254b  2026-11-01  Update seed/api\n  Author: Symaira Vault <symvault@example.com>\n0382ee4  2026-11-01  Update seed/cert\n  Author: Symaira Vault <symvault@example.com>\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "git_log__upper_y",
+   "args": [
+    "git",
+    "log"
+   ],
+   "stdin": "Y\n",
+   "exit_code": 0,
+   "stdout": "d3a254b  2026-11-01  Update seed/api\n  Author: Symaira Vault <symvault@example.com>\n0382ee4  2026-11-01  Update seed/cert\n  Author: Symaira Vault <symvault@example.com>\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "git_log__padded_y",
+   "args": [
+    "git",
+    "log"
+   ],
+   "stdin": "  y  \n",
+   "exit_code": 0,
+   "stdout": "d3a254b  2026-11-01  Update seed/api\n  Author: Symaira Vault <symvault@example.com>\n0382ee4  2026-11-01  Update seed/cert\n  Author: Symaira Vault <symvault@example.com>\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "git_log__yes_word",
+   "args": [
+    "git",
+    "log"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "git_log__n_then_y",
+   "args": [
+    "git",
+    "log"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "git_log__y_without_newline",
+   "args": [
+    "git",
+    "log"
+   ],
+   "stdin": "y",
+   "exit_code": 0,
+   "stdout": "d3a254b  2026-11-01  Update seed/api\n  Author: Symaira Vault <symvault@example.com>\n0382ee4  2026-11-01  Update seed/cert\n  Author: Symaira Vault <symvault@example.com>\n",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "template_generate__eof",
+   "args": [
+    "template",
+    "generate",
+    "--type",
+    "env"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "template_generate__n",
+   "args": [
+    "template",
+    "generate",
+    "--type",
+    "env"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "template_generate__n_n",
+   "args": [
+    "template",
+    "generate",
+    "--type",
+    "env"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "template_generate__empty_line_n",
+   "args": [
+    "template",
+    "generate",
+    "--type",
+    "env"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "template_generate__word_n",
+   "args": [
+    "template",
+    "generate",
+    "--type",
+    "env"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "template_generate__y",
+   "args": [
+    "template",
+    "generate",
+    "--type",
+    "env"
+   ],
+   "stdin": "y\n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: no secret references provided: use positional KEY=ref arguments or --prefix\nError: no secret references provided: use positional KEY=ref arguments or --prefix\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "template_generate__upper_y",
+   "args": [
+    "template",
+    "generate",
+    "--type",
+    "env"
+   ],
+   "stdin": "Y\n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: no secret references provided: use positional KEY=ref arguments or --prefix\nError: no secret references provided: use positional KEY=ref arguments or --prefix\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "template_generate__padded_y",
+   "args": [
+    "template",
+    "generate",
+    "--type",
+    "env"
+   ],
+   "stdin": "  y  \n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: no secret references provided: use positional KEY=ref arguments or --prefix\nError: no secret references provided: use positional KEY=ref arguments or --prefix\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "template_generate__yes_word",
+   "args": [
+    "template",
+    "generate",
+    "--type",
+    "env"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "template_generate__n_then_y",
+   "args": [
+    "template",
+    "generate",
+    "--type",
+    "env"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "template_generate__y_without_newline",
+   "args": [
+    "template",
+    "generate",
+    "--type",
+    "env"
+   ],
+   "stdin": "y",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: no secret references provided: use positional KEY=ref arguments or --prefix\nError: no secret references provided: use positional KEY=ref arguments or --prefix\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "device_revoke__eof",
+   "args": [
+    "device",
+    "revoke",
+    "x"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "device_revoke__n",
+   "args": [
+    "device",
+    "revoke",
+    "x"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "device_revoke__n_n",
+   "args": [
+    "device",
+    "revoke",
+    "x"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "device_revoke__empty_line_n",
+   "args": [
+    "device",
+    "revoke",
+    "x"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "device_revoke__word_n",
+   "args": [
+    "device",
+    "revoke",
+    "x"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "device_revoke__y",
+   "args": [
+    "device",
+    "revoke",
+    "x"
+   ],
+   "stdin": "y\n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: device \"x\" not found in device registry\nError: device \"x\" not found in device registry\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "device_revoke__upper_y",
+   "args": [
+    "device",
+    "revoke",
+    "x"
+   ],
+   "stdin": "Y\n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: device \"x\" not found in device registry\nError: device \"x\" not found in device registry\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "device_revoke__padded_y",
+   "args": [
+    "device",
+    "revoke",
+    "x"
+   ],
+   "stdin": "  y  \n",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: device \"x\" not found in device registry\nError: device \"x\" not found in device registry\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "device_revoke__yes_word",
+   "args": [
+    "device",
+    "revoke",
+    "x"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "device_revoke__n_then_y",
+   "args": [
+    "device",
+    "revoke",
+    "x"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "device_revoke__y_without_newline",
+   "args": [
+    "device",
+    "revoke",
+    "x"
+   ],
+   "stdin": "y",
+   "exit_code": 1,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: device \"x\" not found in device registry\nError: device \"x\" not found in device registry\n",
+   "config_after_id": 1
+  },
+  {
+   "name": "intake_file__eof",
+   "args": [
+    "intake",
+    "creds.env"
+   ],
+   "stdin": "",
+   "files": {
+    "creds.env": "API_KEY=abc123\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "intake_file__n",
+   "args": [
+    "intake",
+    "creds.env"
+   ],
+   "stdin": "n\n",
+   "files": {
+    "creds.env": "API_KEY=abc123\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "intake_file__n_n",
+   "args": [
+    "intake",
+    "creds.env"
+   ],
+   "stdin": "n\nn\n",
+   "files": {
+    "creds.env": "API_KEY=abc123\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "intake_file__empty_line_n",
+   "args": [
+    "intake",
+    "creds.env"
+   ],
+   "stdin": "\nn\n",
+   "files": {
+    "creds.env": "API_KEY=abc123\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "intake_file__word_n",
+   "args": [
+    "intake",
+    "creds.env"
+   ],
+   "stdin": "no\nno\n",
+   "files": {
+    "creds.env": "API_KEY=abc123\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "intake_file__yes_word",
+   "args": [
+    "intake",
+    "creds.env"
+   ],
+   "stdin": "yes\nyes\n",
+   "files": {
+    "creds.env": "API_KEY=abc123\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "intake_file__n_then_y",
+   "args": [
+    "intake",
+    "creds.env"
+   ],
+   "stdin": "n\ny\n",
+   "files": {
+    "creds.env": "API_KEY=abc123\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "intake_dir__eof",
+   "args": [
+    "intake",
+    "stage"
+   ],
+   "stdin": "",
+   "files": {
+    "stage/creds.env": "API_KEY=abc123\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "intake_dir__n",
+   "args": [
+    "intake",
+    "stage"
+   ],
+   "stdin": "n\n",
+   "files": {
+    "stage/creds.env": "API_KEY=abc123\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "intake_dir__n_n",
+   "args": [
+    "intake",
+    "stage"
+   ],
+   "stdin": "n\nn\n",
+   "files": {
+    "stage/creds.env": "API_KEY=abc123\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "intake_dir__empty_line_n",
+   "args": [
+    "intake",
+    "stage"
+   ],
+   "stdin": "\nn\n",
+   "files": {
+    "stage/creds.env": "API_KEY=abc123\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "intake_dir__word_n",
+   "args": [
+    "intake",
+    "stage"
+   ],
+   "stdin": "no\nno\n",
+   "files": {
+    "stage/creds.env": "API_KEY=abc123\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "intake_dir__yes_word",
+   "args": [
+    "intake",
+    "stage"
+   ],
+   "stdin": "yes\nyes\n",
+   "files": {
+    "stage/creds.env": "API_KEY=abc123\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "intake_dir__n_then_y",
+   "args": [
+    "intake",
+    "stage"
+   ],
+   "stdin": "n\ny\n",
+   "files": {
+    "stage/creds.env": "API_KEY=abc123\n"
+   },
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "broker__eof",
+   "args": [
+    "broker"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "broker__n",
+   "args": [
+    "broker"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "broker__n_n",
+   "args": [
+    "broker"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "broker__empty_line_n",
+   "args": [
+    "broker"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "broker__word_n",
+   "args": [
+    "broker"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "broker__yes_word",
+   "args": [
+    "broker"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "broker__n_then_y",
+   "args": [
+    "broker"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "ui__eof",
+   "args": [
+    "ui"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "ui__n",
+   "args": [
+    "ui"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "ui__n_n",
+   "args": [
+    "ui"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "ui__empty_line_n",
+   "args": [
+    "ui"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "ui__word_n",
+   "args": [
+    "ui"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "ui__yes_word",
+   "args": [
+    "ui"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "ui__n_then_y",
+   "args": [
+    "ui"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "mcp_serve_http__eof",
+   "args": [
+    "mcp",
+    "serve"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "mcp_serve_http__n",
+   "args": [
+    "mcp",
+    "serve"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "mcp_serve_http__n_n",
+   "args": [
+    "mcp",
+    "serve"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "mcp_serve_http__empty_line_n",
+   "args": [
+    "mcp",
+    "serve"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "mcp_serve_http__word_n",
+   "args": [
+    "mcp",
+    "serve"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "mcp_serve_http__yes_word",
+   "args": [
+    "mcp",
+    "serve"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "mcp_serve_http__n_then_y",
+   "args": [
+    "mcp",
+    "serve"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "generate_store__eof",
+   "args": [
+    "generate",
+    "--store",
+    "x"
+   ],
+   "stdin": "",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "generate_store__n",
+   "args": [
+    "generate",
+    "--store",
+    "x"
+   ],
+   "stdin": "n\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "generate_store__n_n",
+   "args": [
+    "generate",
+    "--store",
+    "x"
+   ],
+   "stdin": "n\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "generate_store__empty_line_n",
+   "args": [
+    "generate",
+    "--store",
+    "x"
+   ],
+   "stdin": "\nn\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "generate_store__word_n",
+   "args": [
+    "generate",
+    "--store",
+    "x"
+   ],
+   "stdin": "no\nno\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "generate_store__yes_word",
+   "args": [
+    "generate",
+    "--store",
+    "x"
+   ],
+   "stdin": "yes\nyes\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  },
+  {
+   "name": "generate_store__n_then_y",
+   "args": [
+    "generate",
+    "--store",
+    "x"
+   ],
+   "stdin": "n\ny\n",
+   "exit_code": 6,
+   "stdout": "",
+   "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+   "config_after_id": 0
+  }
+ ]
+}

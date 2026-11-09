@@ -380,6 +380,13 @@
    "ref": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
    "value": "6db442c8271aa31ebb1f3a7e94645fa842bbdf5d6eafbec4caa92faa871381ae"
   },
+  "testdata/port/cli/config-prompts.json#/oracle#program_sha256": {
+   "kind": "other",
+   "class": "recorded",
+   "algo": "claimed",
+   "ref": null,
+   "value": "5b747e023d3da55e3e6961f24554899a41b952019b88f688a7a5ed5f6d2685b4"
+  },
   "testdata/port/cli/config-yaml-syntax.json#/oracle#generator_digest": {
    "kind": "generator",
    "class": "recorded",

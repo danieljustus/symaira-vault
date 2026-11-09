@@ -19,7 +19,7 @@
 
 use std::{
     env, fs,
-    io::{self, BufRead, IsTerminal, Write},
+    io::{self, IsTerminal, Write},
     path::{Path, PathBuf},
     process::Command,
     time::Duration,
@@ -195,6 +195,42 @@ fn report_errors(path: &Path, load_error: Option<&str>, validation_error: Option
     let _ = err.flush();
 }
 
+/// One prompt answer, read like Go's `bufio.NewReader(os.Stdin).ReadString('\n')`
+/// on a fresh reader: `read(2)` of up to 4096 bytes until a newline arrives or
+/// the stream ends, and whatever the read fetched beyond the first line is
+/// dropped. A script piped in one write (`n\ny\n`) therefore answers only the
+/// first prompt and the next one sees EOF, exactly as Go. `None` is Go's
+/// "no answer and an error" (EOF, read failure).
+#[cfg(unix)]
+fn read_prompt_line() -> Option<Vec<u8>> {
+    let stdin = rustix::stdio::stdin();
+    let mut answer = Vec::new();
+    let mut chunk = [0_u8; 4096];
+    loop {
+        match rustix::io::read(stdin, &mut chunk) {
+            Ok(0) => break,
+            Ok(n) => {
+                if let Some(newline) = chunk[..n].iter().position(|byte| *byte == b'\n') {
+                    answer.extend_from_slice(&chunk[..=newline]);
+                    return Some(answer);
+                }
+                answer.extend_from_slice(&chunk[..n]);
+            }
+            Err(rustix::io::Errno::INTR) => {}
+            Err(_) => break,
+        }
+    }
+    // EOF or an error: the text read so far still counts (Go: `err != nil && answer == ""`).
+    (!answer.is_empty()).then_some(answer)
+}
+
+#[cfg(not(unix))]
+fn read_prompt_line() -> Option<Vec<u8>> {
+    let mut answer = Vec::new();
+    let read = std::io::BufRead::read_until(&mut io::stdin().lock(), b'\n', &mut answer);
+    (!(read.is_err() && answer.is_empty())).then_some(answer)
+}
+
 /// Go's `ConfirmInteractive(prompt, false)`: a `y/N` prompt on stderr, one line
 /// from stdin; only `y` (any case, trimmed) confirms, EOF and errors decline.
 fn confirm(prompt: &str) -> bool {
@@ -203,11 +239,10 @@ fn confirm(prompt: &str) -> bool {
         let _ = write!(err, "{prompt} (y/N): ");
         let _ = err.flush();
     }
-    let mut answer = Vec::new();
-    let read = io::stdin().lock().read_until(b'\n', &mut answer);
-    if read.is_err() && answer.is_empty() {
+    let answer = read_prompt_line();
+    let Some(answer) = answer else {
         return false;
-    }
+    };
     String::from_utf8_lossy(&answer).trim().to_lowercase() == "y"
 }
 
