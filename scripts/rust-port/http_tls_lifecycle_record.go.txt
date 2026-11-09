@@ -1,0 +1,348 @@
+package serverbootstrap
+
+// ADR 0037 R18 (HTTP-004): TLS server identity rotation, client certificate
+// revocation and client certificate expiration, observed through the production
+// RunHTTPServerOnListener with real certificate files. Capture only:
+//
+//	R18_OUT=/path/out.json R18_ORACLE_COMMIT=<sha> go test ./internal/mcp/serverbootstrap -run ^TestRecordR18TLSLifecycle$ -count=1
+//
+// The server loads its key pair and the client CA pool once at start (no
+// reload, no CRL/OCSP); the cases pin what that means for a running server and
+// after a restart.
+
+import (
+	"bufio"
+	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/json"
+	"encoding/pem"
+	"fmt"
+	"math/big"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/danieljustus/symaira-vault/internal/config"
+	mcpserver "github.com/danieljustus/symaira-vault/internal/mcp/server"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
+)
+
+type r18Ident struct {
+	cert    *x509.Certificate
+	key     *ecdsa.PrivateKey
+	certPEM []byte
+	keyPEM  []byte
+}
+
+func r18Make(t *testing.T, name string, ca *r18Ident, isCA bool, server bool, notBefore, notAfter time.Time) *r18Ident {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 100))
+	tmpl := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: name}, NotBefore: notBefore, NotAfter: notAfter, BasicConstraintsValid: true, IsCA: isCA, KeyUsage: x509.KeyUsageDigitalSignature}
+	switch {
+	case isCA:
+		tmpl.KeyUsage |= x509.KeyUsageCertSign
+		tmpl.MaxPathLen = 0
+		tmpl.MaxPathLenZero = true
+	case server:
+		tmpl.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
+		tmpl.DNSNames = []string{"localhost"}
+		tmpl.IPAddresses = []net.IP{net.ParseIP("127.0.0.1")}
+	default:
+		tmpl.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
+	}
+	parent, signer := tmpl, key
+	if ca != nil {
+		parent, signer = ca.cert, ca.key
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, parent, &key.PublicKey, signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert, _ := x509.ParseCertificate(der)
+	pk, _ := x509.MarshalPKCS8PrivateKey(key)
+	return &r18Ident{cert, key, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pk})}
+}
+
+func (i *r18Ident) pair(t *testing.T) tls.Certificate {
+	p, err := tls.X509KeyPair(i.certPEM, i.keyPEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+type r18Obs struct {
+	ID      string         `json:"id"`
+	Stage   string         `json:"stage"`
+	Outcome string         `json:"outcome"`
+	Detail  map[string]any `json:"detail,omitempty"`
+}
+
+func r18Alert(err error) string {
+	text := err.Error()
+	if i := strings.Index(text, "remote error: tls: "); i >= 0 {
+		return text[i+len("remote error: tls: "):]
+	}
+	if strings.Contains(text, "EOF") || strings.Contains(text, "reset") || strings.Contains(text, "broken pipe") {
+		return "connection-closed"
+	}
+	return "other"
+}
+
+type r18Server struct {
+	addr   string
+	cancel context.CancelFunc
+	done   chan error
+}
+
+func r18Start(t *testing.T, addr string, v *vaultpkg.Vault) *r18Server {
+	factory := func(*vaultpkg.Vault, string, string) (*mcpserver.Server, error) {
+		return nil, fmt.Errorf("no credential handler in this probe")
+	}
+	var listener net.Listener
+	var err error
+	for i := 0; i < 50; i++ {
+		listener, err = net.Listen("tcp", addr)
+		if err == nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	s := &r18Server{addr: listener.Addr().String(), cancel: cancel, done: make(chan error, 1)}
+	go func() { s.done <- RunHTTPServerOnListener(ctx, listener, v, v.Dir, "dev", factory) }()
+	return s
+}
+
+func (s *r18Server) stop() {
+	s.cancel()
+	<-s.done
+}
+
+type r18Client struct {
+	roots *x509.CertPool
+	names map[[32]byte]string
+}
+
+func (c *r18Client) cfg(client *tls.Certificate, maxVersion uint16) *tls.Config {
+	cfg := &tls.Config{RootCAs: c.roots, ServerName: "localhost", MinVersion: tls.VersionTLS12, MaxVersion: maxVersion}
+	// Offer the certificate regardless of the server's acceptable-CA list
+	// (rustls clients do), or send an empty Certificate when there is none:
+	// otherwise Go's client silently withholds a foreign-CA certificate.
+	cfg.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+		if client == nil {
+			return &tls.Certificate{}, nil
+		}
+		return client, nil
+	}
+	return cfg
+}
+
+// request performs one handshake and (optionally) reuses conn.
+func (c *r18Client) request(addr string, cfg *tls.Config, reuse *tls.Conn, id string) (r18Obs, *tls.Conn) {
+	obs := r18Obs{ID: id, Detail: map[string]any{}}
+	conn := reuse
+	if conn == nil {
+		d := &net.Dialer{Timeout: 3 * time.Second}
+		var err error
+		conn, err = tls.DialWithDialer(d, "tcp", addr, cfg)
+		if err != nil {
+			obs.Stage, obs.Outcome = "handshake", "alert:"+r18Alert(err)
+			return obs, nil
+		}
+		state := conn.ConnectionState()
+		sum := sha256.Sum256(state.PeerCertificates[0].Raw)
+		obs.Detail["server_identity"] = c.names[sum]
+		obs.Detail["tls_version"] = tls.VersionName(state.Version)
+	}
+	_ = conn.SetDeadline(time.Now().Add(4 * time.Second))
+	if _, err := fmt.Fprintf(conn, "GET /.well-known/oauth-protected-resource HTTP/1.1\r\nHost: %s\r\n\r\n", addr); err != nil {
+		obs.Stage, obs.Outcome = "first-write", "alert:"+r18Alert(err)
+		return obs, nil
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		obs.Stage, obs.Outcome = "first-read", "alert:"+r18Alert(err)
+		_ = conn.Close()
+		return obs, nil
+	}
+	_ = resp.Body.Close()
+	obs.Stage, obs.Outcome = "response", fmt.Sprintf("status:%d", resp.StatusCode)
+	return obs, conn
+}
+
+func TestRecordR18TLSLifecycle(t *testing.T) {
+	out := os.Getenv("R18_OUT")
+	if out == "" {
+		t.Skip("capture only: set R18_OUT")
+	}
+	now := time.Now()
+	hour := time.Hour
+	serverCA := r18Make(t, "r18-server-ca", nil, true, false, now.Add(-hour), now.Add(48*hour))
+	srvA := r18Make(t, "r18-server-a", serverCA, false, true, now.Add(-hour), now.Add(48*hour))
+	srvB := r18Make(t, "r18-server-b", serverCA, false, true, now.Add(-hour), now.Add(48*hour))
+	clientCA1 := r18Make(t, "r18-client-ca-1", nil, true, false, now.Add(-hour), now.Add(48*hour))
+	clientCA2 := r18Make(t, "r18-client-ca-2", nil, true, false, now.Add(-hour), now.Add(48*hour))
+	otherCA := r18Make(t, "r18-other-ca", nil, true, false, now.Add(-hour), now.Add(48*hour))
+	good1 := r18Make(t, "r18-client-good-1", clientCA1, false, false, now.Add(-hour), now.Add(24*hour))
+	good2 := r18Make(t, "r18-client-good-2", clientCA2, false, false, now.Add(-hour), now.Add(24*hour))
+	expired := r18Make(t, "r18-client-expired", clientCA1, false, false, now.Add(-2*hour), now.Add(-hour))
+	future := r18Make(t, "r18-client-not-yet-valid", clientCA1, false, false, now.Add(hour), now.Add(2*hour))
+	foreign := r18Make(t, "r18-client-foreign", otherCA, false, false, now.Add(-hour), now.Add(24*hour))
+	short := r18Make(t, "r18-client-short", clientCA1, false, false, now.Add(-hour), now.Add(3*time.Second))
+
+	roots := x509.NewCertPool()
+	roots.AddCert(serverCA.cert)
+	client := &r18Client{roots: roots, names: map[[32]byte]string{sha256.Sum256(srvA.cert.Raw): "server-a", sha256.Sum256(srvB.cert.Raw): "server-b"}}
+	p := func(i *r18Ident) *tls.Certificate { c := i.pair(t); return &c }
+
+	var obs []r18Obs
+	add := func(o r18Obs) { obs = append(obs, o) }
+	write := func(path string, data []byte) {
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	newVault := func(mtls bool, dir string) *vaultpkg.Vault {
+		v := newTestVault(t)
+		v.Config.MCP = &config.MCPConfig{RateLimit: -1, TLSCertFile: filepath.Join(dir, "server.pem"), TLSKeyFile: filepath.Join(dir, "server.key"), MTLSEnabled: mtls}
+		if mtls {
+			v.Config.MCP.TLSClientCAFile = filepath.Join(dir, "client-ca.pem")
+		}
+		return v
+	}
+
+	for _, mtls := range []bool{false, true} {
+		mode := "tls"
+		if mtls {
+			mode = "mtls"
+		}
+		dir := t.TempDir()
+		write(filepath.Join(dir, "server.pem"), srvA.certPEM)
+		write(filepath.Join(dir, "server.key"), srvA.keyPEM)
+		write(filepath.Join(dir, "client-ca.pem"), clientCA1.certPEM)
+		var cc *tls.Certificate
+		if mtls {
+			cc = p(good1)
+		}
+		v := newVault(mtls, dir)
+		s := r18Start(t, "127.0.0.1:0", v)
+		// identity rotation while running
+		o, kept := client.request(s.addr, client.cfg(cc, tls.VersionTLS13), nil, mode+"/server-identity-initial")
+		add(o)
+		write(filepath.Join(dir, "server.pem"), srvB.certPEM)
+		write(filepath.Join(dir, "server.key"), srvB.keyPEM)
+		o, _ = client.request(s.addr, client.cfg(cc, tls.VersionTLS13), nil, mode+"/server-identity-new-handshake-after-files-replaced")
+		add(o)
+		o, _ = client.request(s.addr, client.cfg(cc, tls.VersionTLS13), kept, mode+"/server-identity-established-connection-after-files-replaced")
+		add(o)
+		_ = kept.Close()
+		addr := s.addr
+		s.stop()
+		s = r18Start(t, addr, newVault(mtls, dir))
+		o, _ = client.request(s.addr, client.cfg(cc, tls.VersionTLS13), nil, mode+"/server-identity-after-restart")
+		add(o)
+		s.stop()
+		// the replaced files are unreadable as a pair: restart must fail closed
+		write(filepath.Join(dir, "server.pem"), srvA.certPEM) // key is B's: mismatch
+		bad := make(chan error, 1)
+		listener, _ := net.Listen("tcp", "127.0.0.1:0")
+		go func() {
+			bad <- RunHTTPServerOnListener(context.Background(), listener, newVault(mtls, dir), dir, "dev", func(*vaultpkg.Vault, string, string) (*mcpserver.Server, error) { return nil, nil })
+		}()
+		select {
+		case err := <-bad:
+			add(r18Obs{ID: mode + "/server-identity-mismatched-pair-on-restart", Stage: "startup", Outcome: "error", Detail: map[string]any{"go_error": err.Error()}})
+		case <-time.After(3 * time.Second):
+			add(r18Obs{ID: mode + "/server-identity-mismatched-pair-on-restart", Stage: "startup", Outcome: "serving"})
+		}
+		_ = listener.Close()
+	}
+
+	// ---- mTLS client revocation and expiration -----------------------------
+	dir := t.TempDir()
+	write(filepath.Join(dir, "server.pem"), srvA.certPEM)
+	write(filepath.Join(dir, "server.key"), srvA.keyPEM)
+	write(filepath.Join(dir, "client-ca.pem"), clientCA1.certPEM)
+	s := r18Start(t, "127.0.0.1:0", newVault(true, dir))
+	addr := s.addr
+	o, c1 := client.request(addr, client.cfg(p(good1), tls.VersionTLS13), nil, "mtls/client-valid")
+	add(o)
+	for _, tc := range []struct {
+		id string
+		c  *tls.Certificate
+		v  uint16
+	}{
+		{"mtls/client-none", nil, tls.VersionTLS13},
+		{"mtls/client-none-tls12", nil, tls.VersionTLS12},
+		{"mtls/client-expired", p(expired), tls.VersionTLS13},
+		{"mtls/client-expired-tls12", p(expired), tls.VersionTLS12},
+		{"mtls/client-not-yet-valid", p(future), tls.VersionTLS13},
+		{"mtls/client-unknown-ca", p(foreign), tls.VersionTLS13},
+		{"mtls/client-unknown-ca-tls12", p(foreign), tls.VersionTLS12},
+	} {
+		o, _ = client.request(addr, client.cfg(tc.c, tc.v), nil, tc.id)
+		add(o)
+	}
+	// expiry while the connection is up
+	o, shortConn := client.request(addr, client.cfg(p(short), tls.VersionTLS13), nil, "mtls/client-expiring-in-3s-before-expiry")
+	add(o)
+	// "revocation": the trust file now names a different CA
+	write(filepath.Join(dir, "client-ca.pem"), clientCA2.certPEM)
+	o, _ = client.request(addr, client.cfg(p(good1), tls.VersionTLS13), nil, "mtls/client-ca-file-replaced-old-client-new-handshake")
+	add(o)
+	o, _ = client.request(addr, client.cfg(p(good2), tls.VersionTLS13), nil, "mtls/client-ca-file-replaced-new-client-new-handshake")
+	add(o)
+	o, _ = client.request(addr, client.cfg(p(good1), tls.VersionTLS13), c1, "mtls/client-ca-file-replaced-old-client-established-connection")
+	add(o)
+	time.Sleep(3500 * time.Millisecond)
+	o, _ = client.request(addr, client.cfg(p(short), tls.VersionTLS13), shortConn, "mtls/client-expiring-in-3s-established-connection-after-expiry")
+	add(o)
+	o, _ = client.request(addr, client.cfg(p(short), tls.VersionTLS13), nil, "mtls/client-expiring-in-3s-new-handshake-after-expiry")
+	add(o)
+	s.stop()
+	s = r18Start(t, addr, newVault(true, dir))
+	o, _ = client.request(addr, client.cfg(p(good1), tls.VersionTLS13), nil, "mtls/after-restart-old-client")
+	add(o)
+	o, _ = client.request(addr, client.cfg(p(good2), tls.VersionTLS13), nil, "mtls/after-restart-new-client")
+	add(o)
+	s.stop()
+
+	doc := map[string]any{
+		"schema":        "symvault.port.http-tls-lifecycle/1",
+		"adr":           "0037 R18 / HTTP-004",
+		"oracle_commit": os.Getenv("R18_ORACLE_COMMIT"),
+		"source":        "legacy/go-oracle internal/mcp/serverbootstrap/http.go (RunHTTPServerOnListener, tls.LoadX509KeyPair and ClientCAs read once)",
+		"notes": []string{
+			"alert texts are Go crypto/tls descriptions of the peer alert (remote error: tls: <text>)",
+			"stage: handshake = tls.Dial failed; first-read = TLS 1.3 client saw the server's rejection only on its first read; response = HTTP status",
+			"no CRL/OCSP option exists: revocation is only expressible by replacing the client CA file and restarting",
+		},
+		"cases": obs,
+	}
+	enc, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(out, append(enc, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
