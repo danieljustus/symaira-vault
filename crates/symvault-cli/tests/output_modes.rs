@@ -1142,6 +1142,39 @@ fn sha_hex(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
+/// Rust-only local flags (#1554, `cli_artifacts::RUST_ONLY_FLAGS`) add one
+/// option block to two generated manual pages that the frozen Go recording
+/// predates. The block is removed exactly once before hashing so the rest of
+/// the page still has to equal Go byte for byte; a missing or doubled block
+/// leaves the page unchanged and its hash differs. `cli_generate_manpages`
+/// pins the same lines (`DECLARED_ADDITIONS`).
+const RUST_ONLY_MAN_BLOCKS: [(&str, &str); 2] = [
+    (
+        "/symvault-run.1",
+        "\\fB--broker-templates\\fP=[]\n\tWith --broker: inject credentials only for these templates (comma-separated, built-in or vault-local names); other template hosts are treated as hosts without a template\n\n.PP\n",
+    ),
+    (
+        "/symvault-broker.1",
+        ".PP\n\\fB--templates\\fP=[]\n\tInject credentials only for these templates (comma-separated, built-in or vault-local names); other template hosts are treated as hosts without a template\n\n",
+    ),
+];
+
+fn without_rust_only_man_flags(path: &str, content: &[u8]) -> Vec<u8> {
+    let Some((_, block)) = RUST_ONLY_MAN_BLOCKS
+        .iter()
+        .find(|(suffix, _)| path.ends_with(suffix))
+    else {
+        return content.to_vec();
+    };
+    let Ok(text) = std::str::from_utf8(content) else {
+        return content.to_vec();
+    };
+    if text.matches(block).count() != 1 {
+        return content.to_vec();
+    }
+    text.replacen(block, "", 1).into_bytes()
+}
+
 fn diff_trees(
     before: &BTreeMap<String, TreeNode>,
     after: &BTreeMap<String, TreeNode>,
@@ -1150,7 +1183,9 @@ fn diff_trees(
     let mut out = Vec::new();
     for (path, node) in after {
         let sha = match &node.content {
-            Some(content) if !volatile.is_opaque(path) => sha_hex(&volatile.apply(content)),
+            Some(content) if !volatile.is_opaque(path) => {
+                sha_hex(&volatile.apply(&without_rust_only_man_flags(path, content)))
+            }
             _ => String::new(),
         };
         let change = match before.get(path) {

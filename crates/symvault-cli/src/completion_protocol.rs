@@ -753,12 +753,20 @@ mod tests {
                     format!("[Debug] [Error] {error}\n"),
                 ),
             };
-            assert_eq!(
-                actual.stdout(true),
-                case["stdout"].as_str().unwrap(),
-                "{}",
-                case["name"]
-            );
+            // Rust-only local flags (#1554) are completed in addition to the
+            // frozen Go candidates; each must appear exactly once and the rest
+            // must equal Go's recording.
+            let mut stdout = actual.stdout(true);
+            let name = case["name"].as_str().unwrap();
+            for extra in crate::cli_artifacts::RUST_ONLY_FLAGS
+                .iter()
+                .filter(|extra| name == format!("{}/-", extra.path))
+            {
+                let line = format!("--{}\t{}\n", extra.name, extra.usage);
+                assert_eq!(stdout.matches(&line).count(), 1, "{name}: {line}");
+                stdout = stdout.replace(&line, "");
+            }
+            assert_eq!(stdout, case["stdout"].as_str().unwrap(), "{}", name);
             assert!(!actual.stdout(true).contains("public-fixture"));
             let label = match actual.directive {
                 4 => "ShellCompDirectiveNoFileComp",
