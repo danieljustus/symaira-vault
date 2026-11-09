@@ -1444,6 +1444,13 @@
    "ref": "861ad93813e3ee43c4ec989f45940d14b05b6eaf",
    "value": "4d1fdfc355dcbd719f9c4a7c02777b42d090d15dc620a59128090ffe7482d407"
   },
+  "testdata/port/platform/clipboard_spawn_errors.json#/oracle#program_sha256": {
+   "kind": "other",
+   "class": "recorded",
+   "algo": "claimed",
+   "ref": null,
+   "value": "fbe1078d958ffc8f32d8bd56e442d4964fba0616a15e307e600d98aa26d13416"
+  },
   "testdata/port/platform/contract.json#/oracle#generator_digest": {
    "kind": "generator",
    "class": "recorded",
