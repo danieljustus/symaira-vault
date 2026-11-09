@@ -292,7 +292,8 @@ pub(crate) fn run_with_challenger(
     };
 
     let config_path = vault.join("config.yaml");
-    let mut cfg = Config::load(&config_path).map_err(|error| format!("load config: {error}"))?;
+    let mut cfg = Config::load(&config_path)
+        .map_err(|error| crate::config::go_load_config_error(&config_path, &error))?;
     let Some(mut profile) = cfg.agents.get(agent_name).cloned() else {
         return Err(format!("agent {agent_name:?} not found in config"));
     };

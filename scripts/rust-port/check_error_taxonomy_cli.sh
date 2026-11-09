@@ -7,8 +7,9 @@ set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 cd "$repo_root"
-python3 -B scripts/rust-port/fixtures_verify.py testdata/port/cli/error-taxonomy.json
+python3 -B scripts/rust-port/fixtures_verify.py testdata/port/cli/error-taxonomy.json \
+    testdata/port/cli-transcripts/cli_error_residuals.json
 "${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" \
     -p symvault-cli --bin symvault --locked cobra_usage
 "${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" \
-    -p symvault-cli --test error_taxonomy --locked
+    -p symvault-cli --test error_taxonomy --test cli_error_residuals --locked

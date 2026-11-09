@@ -84,6 +84,11 @@ pub(crate) fn go_load_config_error(
     path: &Path,
     error: &symvault_core::config::ConfigError,
 ) -> String {
+    format!("load config: {}", go_config_cause(path, error))
+}
+
+/// The cause of a failed `config.Load` as Go words it, without the caller's prefix.
+pub(crate) fn go_config_cause(path: &Path, error: &symvault_core::config::ConfigError) -> String {
     if let symvault_core::config::ConfigError::Read(io_error) = error
         && let Some(path_error) = go_path_error(
             &crate::agent_list_commands::clean_path(path),
@@ -91,9 +96,9 @@ pub(crate) fn go_load_config_error(
             true,
         )
     {
-        return format!("load config: {path_error}");
+        return path_error;
     }
-    format!("load config: {error}")
+    error.to_string()
 }
 
 /// Go's wording of a failed read of the config file: `os.ReadFile` fails with

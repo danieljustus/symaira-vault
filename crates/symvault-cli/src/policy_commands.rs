@@ -15,7 +15,11 @@ use symvault_core::policy::Policy;
 use symvault_sync::safeio;
 
 fn load(path: &Path) -> Result<(Policy, Vec<u8>), String> {
-    let bytes = fs::read(path).map_err(|error| format!("read policy file: {error}"))?;
+    let bytes = fs::read(path).map_err(|error| {
+        let cause =
+            crate::config::go_path_error(path, &error, true).unwrap_or_else(|| error.to_string());
+        format!("read policy file: {cause}")
+    })?;
     let policy: Policy =
         serde_yaml_ng::from_slice(&bytes).map_err(|error| format!("parse policy file: {error}"))?;
     policy
