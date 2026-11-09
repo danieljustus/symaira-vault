@@ -1,0 +1,394 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "ce2390d748818a4beb413e97183b7795efa99411",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "tests": {
+    "broker_passthrough_literals_match_go": {
+      "backslash-and-tab": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:<PORT>\nCA certificate written to <CA>\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:<PORT>\n  HTTP_PROXY=http://127.0.0.1:<PORT>\n  SSL_CERT_FILE=<CA>\n  NODE_EXTRA_CA_CERTS=<CA>\n  REQUESTS_CA_BUNDLE=<CA>\n  NO_PROXY=127.0.0.1,localhost\nPassthrough hosts (no TLS interception): [a\\b c\td]\n",
+        "terminated_by_signal": null
+      },
+      "bare-quote-in-field": {
+        "exit_code": 1,
+        "signalled": false,
+        "stderr": "Error: invalid argument \"a\\\"b\" for \"--passthrough\" flag: parse error on line 1, column 2: bare \" in non-quoted-field\nError: invalid argument \"a\\\"b\" for \"--passthrough\" flag: parse error on line 1, column 2: bare \" in non-quoted-field\n",
+        "stdout": "",
+        "terminated_by_signal": null
+      },
+      "doubled-quote": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:<PORT>\nCA certificate written to <CA>\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:<PORT>\n  HTTP_PROXY=http://127.0.0.1:<PORT>\n  SSL_CERT_FILE=<CA>\n  NODE_EXTRA_CA_CERTS=<CA>\n  REQUESTS_CA_BUNDLE=<CA>\n  NO_PROXY=127.0.0.1,localhost\nPassthrough hosts (no TLS interception): [a\"b]\n",
+        "terminated_by_signal": null
+      },
+      "empty": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:<PORT>\nCA certificate written to <CA>\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:<PORT>\n  HTTP_PROXY=http://127.0.0.1:<PORT>\n  SSL_CERT_FILE=<CA>\n  NODE_EXTRA_CA_CERTS=<CA>\n  REQUESTS_CA_BUNDLE=<CA>\n  NO_PROXY=127.0.0.1,localhost\n",
+        "terminated_by_signal": null
+      },
+      "equals-empty": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:<PORT>\nCA certificate written to <CA>\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:<PORT>\n  HTTP_PROXY=http://127.0.0.1:<PORT>\n  SSL_CERT_FILE=<CA>\n  NODE_EXTRA_CA_CERTS=<CA>\n  REQUESTS_CA_BUNDLE=<CA>\n  NO_PROXY=127.0.0.1,localhost\n",
+        "terminated_by_signal": null
+      },
+      "equals-form": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:<PORT>\nCA certificate written to <CA>\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:<PORT>\n  HTTP_PROXY=http://127.0.0.1:<PORT>\n  SSL_CERT_FILE=<CA>\n  NODE_EXTRA_CA_CERTS=<CA>\n  REQUESTS_CA_BUNDLE=<CA>\n  NO_PROXY=127.0.0.1,localhost\nPassthrough hosts (no TLS interception): [a.example]\n",
+        "terminated_by_signal": null
+      },
+      "many": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:<PORT>\nCA certificate written to <CA>\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:<PORT>\n  HTTP_PROXY=http://127.0.0.1:<PORT>\n  SSL_CERT_FILE=<CA>\n  NODE_EXTRA_CA_CERTS=<CA>\n  REQUESTS_CA_BUNDLE=<CA>\n  NO_PROXY=127.0.0.1,localhost\nPassthrough hosts (no TLS interception): [h0 h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11]\n",
+        "terminated_by_signal": null
+      },
+      "one-comma": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:<PORT>\nCA certificate written to <CA>\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:<PORT>\n  HTTP_PROXY=http://127.0.0.1:<PORT>\n  SSL_CERT_FILE=<CA>\n  NODE_EXTRA_CA_CERTS=<CA>\n  REQUESTS_CA_BUNDLE=<CA>\n  NO_PROXY=127.0.0.1,localhost\nPassthrough hosts (no TLS interception): [ ]\n",
+        "terminated_by_signal": null
+      },
+      "only-commas": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:<PORT>\nCA certificate written to <CA>\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:<PORT>\n  HTTP_PROXY=http://127.0.0.1:<PORT>\n  SSL_CERT_FILE=<CA>\n  NODE_EXTRA_CA_CERTS=<CA>\n  REQUESTS_CA_BUNDLE=<CA>\n  NO_PROXY=127.0.0.1,localhost\nPassthrough hosts (no TLS interception): [  ]\n",
+        "terminated_by_signal": null
+      },
+      "plain": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:<PORT>\nCA certificate written to <CA>\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:<PORT>\n  HTTP_PROXY=http://127.0.0.1:<PORT>\n  SSL_CERT_FILE=<CA>\n  NODE_EXTRA_CA_CERTS=<CA>\n  REQUESTS_CA_BUNDLE=<CA>\n  NO_PROXY=127.0.0.1,localhost\nPassthrough hosts (no TLS interception): [a.example b.example]\n",
+        "terminated_by_signal": null
+      },
+      "quoted-comma": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:<PORT>\nCA certificate written to <CA>\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:<PORT>\n  HTTP_PROXY=http://127.0.0.1:<PORT>\n  SSL_CERT_FILE=<CA>\n  NODE_EXTRA_CA_CERTS=<CA>\n  REQUESTS_CA_BUNDLE=<CA>\n  NO_PROXY=127.0.0.1,localhost\nPassthrough hosts (no TLS interception): [a b,c]\n",
+        "terminated_by_signal": null
+      },
+      "repeated": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:<PORT>\nCA certificate written to <CA>\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:<PORT>\n  HTTP_PROXY=http://127.0.0.1:<PORT>\n  SSL_CERT_FILE=<CA>\n  NODE_EXTRA_CA_CERTS=<CA>\n  REQUESTS_CA_BUNDLE=<CA>\n  NO_PROXY=127.0.0.1,localhost\nPassthrough hosts (no TLS interception): [a b c]\n",
+        "terminated_by_signal": null
+      },
+      "sigterm": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:<PORT>\nCA certificate written to <CA>\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:<PORT>\n  HTTP_PROXY=http://127.0.0.1:<PORT>\n  SSL_CERT_FILE=<CA>\n  NODE_EXTRA_CA_CERTS=<CA>\n  REQUESTS_CA_BUNDLE=<CA>\n  NO_PROXY=127.0.0.1,localhost\nPassthrough hosts (no TLS interception): [a.example]\n",
+        "terminated_by_signal": null
+      },
+      "spaces": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:<PORT>\nCA certificate written to <CA>\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:<PORT>\n  HTTP_PROXY=http://127.0.0.1:<PORT>\n  SSL_CERT_FILE=<CA>\n  NODE_EXTRA_CA_CERTS=<CA>\n  REQUESTS_CA_BUNDLE=<CA>\n  NO_PROXY=127.0.0.1,localhost\nPassthrough hosts (no TLS interception): [ a   b ]\n",
+        "terminated_by_signal": null
+      },
+      "strict-and-list": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:<PORT>\nCA certificate written to <CA>\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:<PORT>\n  HTTP_PROXY=http://127.0.0.1:<PORT>\n  SSL_CERT_FILE=<CA>\n  NODE_EXTRA_CA_CERTS=<CA>\n  REQUESTS_CA_BUNDLE=<CA>\n  NO_PROXY=127.0.0.1,localhost\nStrict mode: requests to hosts without a template are rejected with 403.\nPassthrough hosts (no TLS interception): [a.example]\n",
+        "terminated_by_signal": null
+      },
+      "unicode": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:<PORT>\nCA certificate written to <CA>\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:<PORT>\n  HTTP_PROXY=http://127.0.0.1:<PORT>\n  SSL_CERT_FILE=<CA>\n  NODE_EXTRA_CA_CERTS=<CA>\n  REQUESTS_CA_BUNDLE=<CA>\n  NO_PROXY=127.0.0.1,localhost\nPassthrough hosts (no TLS interception): [bücher.example 例え.jp]\n",
+        "terminated_by_signal": null
+      },
+      "unterminated-quote": {
+        "exit_code": 1,
+        "signalled": false,
+        "stderr": "Error: invalid argument \"\\\"un\" for \"--passthrough\" flag: parse error on line 1, column 4: extraneous or missing \" in quoted-field\nError: invalid argument \"\\\"un\" for \"--passthrough\" flag: parse error on line 1, column 4: extraneous or missing \" in quoted-field\n",
+        "stdout": "",
+        "terminated_by_signal": null
+      },
+      "wildcard-and-case": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:<PORT>\nCA certificate written to <CA>\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:<PORT>\n  HTTP_PROXY=http://127.0.0.1:<PORT>\n  SSL_CERT_FILE=<CA>\n  NODE_EXTRA_CA_CERTS=<CA>\n  REQUESTS_CA_BUNDLE=<CA>\n  NO_PROXY=127.0.0.1,localhost\nPassthrough hosts (no TLS interception): [*.Example.COM EXAMPLE.com]\n",
+        "terminated_by_signal": null
+      },
+      "with-port-and-path": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:<PORT>\nCA certificate written to <CA>\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:<PORT>\n  HTTP_PROXY=http://127.0.0.1:<PORT>\n  SSL_CERT_FILE=<CA>\n  NODE_EXTRA_CA_CERTS=<CA>\n  REQUESTS_CA_BUNDLE=<CA>\n  NO_PROXY=127.0.0.1,localhost\nPassthrough hosts (no TLS interception): [host:443 host/path]\n",
+        "terminated_by_signal": null
+      }
+    },
+    "intake_watch_interval_literals_match_go": {
+      "both": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 1.5ms, debounce 2m30s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "compound": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 1h2m3.5s, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "days-unit": {
+        "exit_code": 1,
+        "signalled": false,
+        "stderr": "Error: invalid argument \"1d\" for \"--interval\" flag: time: unknown unit \"d\" in duration \"1d\"\nError: invalid argument \"1d\" for \"--interval\" flag: time: unknown unit \"d\" in duration \"1d\"\n",
+        "stdout": "",
+        "terminated_by_signal": null
+      },
+      "debounce-fraction": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 10s, debounce 15m0s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "debounce-negative": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 10s, debounce -1s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "debounce-unitless": {
+        "exit_code": 1,
+        "signalled": false,
+        "stderr": "Error: invalid argument \"3\" for \"--debounce\" flag: time: missing unit in duration \"3\"\nError: invalid argument \"3\" for \"--debounce\" flag: time: missing unit in duration \"3\"\n",
+        "stdout": "",
+        "terminated_by_signal": null
+      },
+      "debounce-zero": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 10s, debounce 0s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "default": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 10s, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "default-sigterm": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 10s, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "empty": {
+        "exit_code": 1,
+        "signalled": false,
+        "stderr": "Error: invalid argument \"\" for \"--interval\" flag: time: invalid duration \"\"\nError: invalid argument \"\" for \"--interval\" flag: time: invalid duration \"\"\n",
+        "stdout": "",
+        "terminated_by_signal": null
+      },
+      "equals-form": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 7s, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "explicit-plus": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 5s, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "exponent": {
+        "exit_code": 1,
+        "signalled": false,
+        "stderr": "Error: invalid argument \"1e3s\" for \"--interval\" flag: time: unknown unit \"e\" in duration \"1e3s\"\nError: invalid argument \"1e3s\" for \"--interval\" flag: time: unknown unit \"e\" in duration \"1e3s\"\n",
+        "stdout": "",
+        "terminated_by_signal": null
+      },
+      "fraction": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 1.5s, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "fraction-leading-dot": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 500ms, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "fraction-trailing-dot": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 5s, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "huge-hours": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 100000h0m0s, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "inner-space": {
+        "exit_code": 1,
+        "signalled": false,
+        "stderr": "Error: invalid argument \"1m 5s\" for \"--interval\" flag: time: unknown unit \"m \" in duration \"1m 5s\"\nError: invalid argument \"1m 5s\" for \"--interval\" flag: time: unknown unit \"m \" in duration \"1m 5s\"\n",
+        "stdout": "",
+        "terminated_by_signal": null
+      },
+      "last-wins": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 2s, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "max-nanos": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 2562047h47m16.854775807s, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "max-text": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 2562047h47m16.854775807s, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "micro-ascii": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 1µs, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "micro-greek": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 1µs, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "milli": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 1ms, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "negative": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval -5s, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "negative-nano": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval -1ns, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "negative-zero": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 0s, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "outer-space": {
+        "exit_code": 1,
+        "signalled": false,
+        "stderr": "Error: invalid argument \" 5s\" for \"--interval\" flag: time: invalid duration \" 5s\"\nError: invalid argument \" 5s\" for \"--interval\" flag: time: invalid duration \" 5s\"\n",
+        "stdout": "",
+        "terminated_by_signal": null
+      },
+      "overflow-hours": {
+        "exit_code": 1,
+        "signalled": false,
+        "stderr": "Error: invalid argument \"9999999h\" for \"--interval\" flag: time: invalid duration \"9999999h\"\nError: invalid argument \"9999999h\" for \"--interval\" flag: time: invalid duration \"9999999h\"\n",
+        "stdout": "",
+        "terminated_by_signal": null
+      },
+      "overflow-nanos": {
+        "exit_code": 1,
+        "signalled": false,
+        "stderr": "Error: invalid argument \"9223372036854775808ns\" for \"--interval\" flag: time: invalid duration \"9223372036854775808ns\"\nError: invalid argument \"9223372036854775808ns\" for \"--interval\" flag: time: invalid duration \"9223372036854775808ns\"\n",
+        "stdout": "",
+        "terminated_by_signal": null
+      },
+      "sub-nano": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 1ns, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "sub-nano-truncated": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 0s, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "unitless": {
+        "exit_code": 1,
+        "signalled": false,
+        "stderr": "Error: invalid argument \"5\" for \"--interval\" flag: time: missing unit in duration \"5\"\nError: invalid argument \"5\" for \"--interval\" flag: time: missing unit in duration \"5\"\n",
+        "stdout": "",
+        "terminated_by_signal": null
+      },
+      "zero-bare": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 0s, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      },
+      "zero-seconds": {
+        "exit_code": 0,
+        "signalled": true,
+        "stderr": "",
+        "stdout": "Watching <HOME>/watched (interval 0s, debounce 5s). Ctrl-C to stop.\n",
+        "terminated_by_signal": null
+      }
+    }
+  }
+}

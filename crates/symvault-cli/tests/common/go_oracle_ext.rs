@@ -113,6 +113,13 @@ impl Observations {
     /// recapturing.
     pub fn stable_under(&self, _normalize: Normalizer) {}
 
+    /// Always false: there is no capture mode in this tree. The method exists so
+    /// a test file can be shared with the archived tree, where a capture only
+    /// records Go and leaves the Rust comparison to the replay.
+    pub fn capturing(&self) -> bool {
+        false
+    }
+
     /// Path of the Go oracle binary (always a sentinel: nothing runs Go).
     pub fn binary(&self) -> PathBuf {
         self.inner.lock().unwrap().go_path.clone()
