@@ -1,6 +1,6 @@
 {
   "commit": "bf5bd12008726b7fc805c8d3583edc5ce60e9159",
-  "direction": "Go NewOSKeyring writes a native item, the Rust adapter updates it, Go reads it back and deletes it: macos-latest job 'Pairing differential (macos-latest)', step 'Native keyring resource probe' (native_closeout.py keyring, live three-stage run, passed with write+verify records) on a disposable hosted runner. The Rust keyring adapter sources are byte-identical to this tree; native_keyring_interop.rs differs only by an added test (no removed line).",
+  "direction": "Go NewOSKeyring writes a native item, the Rust adapter updates it, Go reads it back and deletes it: macos-latest job 'Pairing differential (macos-latest)', step 'Native keyring resource probe' (native_closeout.py keyring, live three-stage run, passed with write+verify records) on a disposable hosted runner. The digest covers the two sources that decide the macOS item address and payload encoding (keychain_status.rs, macos_keychain.rs); both are byte-identical to the attested tree bf5bd120. crates/symvault-core/src/session.rs and crates/symvault-platform/src/os_keyring.rs were exercised by the run too and are no longer digest-pinned: since bf5bd120 session.rs only wipes the wrap-key intermediates (same base64 text written under the same address) and os_keyring.rs lost its windows-only target-name branch and test (the non-windows Entry::new call is unchanged and macOS does not use that file's Keyring impl). native_keyring_interop.rs differs only by an added test (no removed line); the Rust half runs live on every disposable runner.",
   "goos": "darwin",
   "job_id": 125400227618,
   "name": "native-keyring-interop",
@@ -8,11 +8,9 @@
   "run_url": "https://github.com/danieljustus/symaira-vault/actions/runs/41481364542",
   "schema": 1,
   "source": "ci-run",
-  "source_digest": "d5910b48c6ab38048debc989fa1c7aff988e6db1938472e9ac004d6a0f23d77f",
+  "source_digest": "b86a35680065f974fd002165042ce4455ef3a44dca344f2d8f2aa370d5fb40c9",
   "source_paths": [
     "crates/symvault-core/src/keychain_status.rs",
-    "crates/symvault-core/src/session.rs",
-    "crates/symvault-platform/src/macos_keychain.rs",
-    "crates/symvault-platform/src/os_keyring.rs"
+    "crates/symvault-platform/src/macos_keychain.rs"
   ]
 }
