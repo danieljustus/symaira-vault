@@ -47,7 +47,9 @@ fn apply_with_validator(
         .assets
         .iter()
         .find(|item| item.name.to_ascii_lowercase().contains("checksums"))
-        .ok_or_else(|| "updateapply: release has no checksums.txt asset".to_owned())?;
+        .ok_or_else(|| {
+            "updateapply: fetch checksums: release has no checksums.txt asset".to_owned()
+        })?;
 
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(15 * 60))
@@ -79,6 +81,7 @@ fn apply_with_validator(
     let signature = download_named(
         &client,
         "Cosign signature",
+        "fetch cosign signature",
         &signature_url,
         MAX_COSIGN_BYTES,
     )
@@ -86,6 +89,7 @@ fn apply_with_validator(
     let certificate = download_named(
         &client,
         "Cosign certificate",
+        "fetch cosign certificate",
         &certificate_url,
         MAX_COSIGN_BYTES,
     )
@@ -213,22 +217,24 @@ fn download(
     url: &reqwest::Url,
     limit: u64,
 ) -> Result<Vec<u8>, String> {
-    download_named(client, &asset.name, url, limit)
+    // Go: `request asset: <transport error>`.
+    download_named(client, &asset.name, "request asset", url, limit)
 }
 
 fn download_named(
     client: &reqwest::blocking::Client,
     name: &str,
+    request_label: &str,
     url: &reqwest::Url,
     limit: u64,
 ) -> Result<Vec<u8>, String> {
     let mut response = client
         .get(url.clone())
         .send()
-        .map_err(|error| format!("updateapply: request {name:?}: {error}"))?;
+        .map_err(|error| format!("{request_label}: {error}"))?;
     if response.status() != reqwest::StatusCode::OK {
         return Err(format!(
-            "updateapply: download {name:?}: HTTP {}",
+            "download {name:?}: HTTP {}",
             response.status().as_u16()
         ));
     }
@@ -318,7 +324,7 @@ fn parse_checksums(bytes: &[u8]) -> Result<std::collections::HashMap<String, Str
         result.insert(name.to_owned(), sum.to_owned());
     }
     if result.is_empty() {
-        return Err("updateapply: checksums.txt contained no parseable entries".into());
+        return Err("checksums.txt contained no parseable entries".into());
     }
     Ok(result)
 }
