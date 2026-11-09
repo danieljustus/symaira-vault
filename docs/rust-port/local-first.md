@@ -88,6 +88,15 @@ requests and per-slice hosted CI runs are suspended for the port.
   (`symvault-gate-target-<sha256(root)[:12]>`); a shared volume reused test
   binaries with another worktree's compile-time fixture paths. Old volumes
   of removed worktrees are caches and may be deleted with `docker volume rm`.
+- Disk (#1582): the gate refuses to start with less than
+  `LOCAL_GATE_MIN_FREE_GB` (default 40) free on the cargo target filesystem
+  and on `LOCAL_GATE_DOCKER_DATA` (default `~/.orbstack`). After a successful
+  lane it drops artifacts no build touched for more than two days: `deps/`
+  files by atime in the Linux volume, whole `debug/incremental` crate dirs by
+  mtime natively. Recovery when a volume still grew too large (it reached
+  84 GB once): `docker volume ls | grep symvault-gate-target` and
+  `docker volume rm symvault-gate-target-<hash>`; the next Linux lane
+  rebuilds it cold.
 - The area process contracts run locally (next section), but their hosted
   receipts, artifact uploads and the Windows legs do not exist locally;
   differences are listed there. `keychain-native` (hosted macOS keychain) and

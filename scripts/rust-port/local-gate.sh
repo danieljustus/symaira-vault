@@ -17,7 +17,10 @@
 #      LOCAL_GATE_MOUNT_AS (linux lane: absolute path to mount this worktree
 #      at inside the container, and to derive the cargo target volume from;
 #      point it at another worktree's path to reuse that worktree's existing
-#      volume instead of creating a new multi-GB one when disk is tight).
+#      volume instead of creating a new multi-GB one when disk is tight),
+#      LOCAL_GATE_MIN_FREE_GB (default 40: refuse to start below this much free
+#      space on the cargo target filesystem and on LOCAL_GATE_DOCKER_DATA,
+#      default ~/.orbstack when it exists; #1582).
 set -euo pipefail
 
 mode="${1:-all}"
@@ -43,6 +46,37 @@ mkdir -p "$log_dir" "$(dirname "$receipts")"
 # share one docker daemon, and a plain `:1` tag was retagged under a running
 # lane by another worktree's concurrent build.
 image="symvault-local-gate:1-$(shasum -a 256 "$root/scripts/rust-port/local-gate/Dockerfile" | cut -c1-12)"
+
+# Disk preflight (#1582): a full lane writes tens of GB; running out midway
+# failed both lanes with errno 28 / exit 125 and left nothing usable.
+min_free_gb="${LOCAL_GATE_MIN_FREE_GB:-40}"
+free_gb() { df -Pk "$1" | awk 'NR == 2 { print int($4 / 1048576) }'; }
+native_target="${CARGO_TARGET_DIR:-$root/target}"
+mkdir -p "$native_target"
+docker_data="${LOCAL_GATE_DOCKER_DATA:-$HOME/.orbstack}"
+for fs in "$native_target" "$docker_data"; do
+  [ -e "$fs" ] || continue
+  free="$(free_gb "$fs")"
+  if [ "$free" -lt "$min_free_gb" ]; then
+    echo "local-gate: only ${free} GB free on the filesystem of $fs (need ${min_free_gb}; LOCAL_GATE_MIN_FREE_GB)." >&2
+    echo "local-gate: free space first, e.g. docker volume rm symvault-gate-target-<hash> (docs/rust-port/local-first.md)" >&2
+    exit 2
+  fi
+done
+
+# Cache bound (#1582), after a lane succeeded: artifacts no build touched for
+# more than two days are stale (each new SHA adds fresh ones; nothing evicts
+# them). Linux uses atime (relatime updates it at least daily on every read);
+# macOS drops whole incremental crate dirs whose mtime is that old.
+# shellcheck disable=SC2329 # called from the lane loop
+prune_native_cache() {
+  [ -d "$native_target/debug/incremental" ] || return 0
+  find "$native_target/debug/incremental" -mindepth 1 -maxdepth 1 -mtime +2 -exec rm -rf {} + || true
+}
+# Only deps/ (cargo rebuilds a unit whose output is missing); build/ OUT_DIR
+# files are read only on recompiles, so deleting them by atime would break one.
+# shellcheck disable=SC2016 # expands inside the container
+linux_prune='find /home/dev/target -type d -name deps -path "*/debug/deps" -exec find {} -type f -atime +2 -delete \; ; true'
 
 # shellcheck source=scripts/rust-port/local-gate-receipt.sh
 . "$root/scripts/rust-port/local-gate-receipt.sh"
@@ -105,7 +139,7 @@ run_linux() {
   targets="rust-gates-core port-contract mcp-approval-pty-acceptance"
   # local-area runs target by target (local-gate-area.sh) so the log names
   # each one; set -e stops the lane at the first failing make above it.
-  cmd="set -e; make $targets; LOCAL_AREA_FULL=1 scripts/rust-port/local-gate-area.sh linux"
+  cmd="set -e; make $targets; LOCAL_AREA_FULL=1 scripts/rust-port/local-gate-area.sh linux; $linux_prune"
   # ponytail: Miri takes about an hour; opt in for slices touching
   # symvault-core. The closing hosted CI run always includes it.
   [ "${RUN_MIRI:-0}" = 1 ] && cmd="$cmd; make rust-miri MIRI_TARGET_DIR=/home/dev/target/miri"
@@ -128,5 +162,6 @@ for target in $( [ "$mode" = all ] && echo "macos linux" || echo "$mode" ); do
   receipt "$target" "$ec" "$started" "$log"
   echo "local-gate: $target exit=$ec"
   [ "$ec" = 0 ] || { status=1; tail -n 40 "$log"; }
+  case "$target:$ec" in macos:0) prune_native_cache ;; esac
 done
 exit "$status"
