@@ -147,6 +147,69 @@ const ADDRESSES_IN_BLOCK: usize = 128;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 cpufeatures::new!(avx2_cpuid, "avx2");
 
+/// Block access of one segment fill.
+///
+/// Indices are absolute positions in the lane-major memory matrix.
+trait SegmentMemory {
+    /// Block that may be read while filling the segment.
+    fn block(&self, index: usize) -> &Block;
+
+    /// Block of the segment being filled.
+    fn block_mut(&mut self, index: usize) -> &mut Block;
+}
+
+/// The whole matrix: used when lanes are filled one after the other.
+impl SegmentMemory for [Block] {
+    #[inline(always)]
+    fn block(&self, index: usize) -> &Block {
+        &self[index]
+    }
+
+    #[inline(always)]
+    fn block_mut(&mut self, index: usize) -> &mut Block {
+        &mut self[index]
+    }
+}
+
+/// What a single lane may touch while a slice is filled concurrently: its
+/// own current segment (read/write) and every segment of the other slices
+/// (read-only). The current segments of the other lanes are not reachable.
+#[cfg(feature = "std")]
+struct LaneView<'a> {
+    /// Chunk index (`lane * SYNC_POINTS + slice`) of the current segment.
+    own_chunk: usize,
+    segment_length: usize,
+    current: &'a mut [Block],
+    /// Segment chunks by index; `None` for the current slice of all lanes.
+    frozen: &'a [Option<&'a [Block]>],
+}
+
+#[cfg(feature = "std")]
+impl SegmentMemory for LaneView<'_> {
+    #[inline(always)]
+    fn block(&self, index: usize) -> &Block {
+        let (chunk, offset) = (index / self.segment_length, index % self.segment_length);
+        if chunk == self.own_chunk {
+            &self.current[offset]
+        } else {
+            // Out of range (and a bug) if the chunk is another lane's
+            // current segment: the specification never references it.
+            &self.frozen[chunk].unwrap_or(&[])[offset]
+        }
+    }
+
+    #[inline(always)]
+    fn block_mut(&mut self, index: usize) -> &mut Block {
+        let (chunk, offset) = (index / self.segment_length, index % self.segment_length);
+        let segment: &mut [Block] = if chunk == self.own_chunk {
+            &mut *self.current
+        } else {
+            &mut []
+        };
+        &mut segment[offset]
+    }
+}
+
 /// Argon2 context.
 ///
 /// This is the primary type of this crate's API, and contains the following:
@@ -283,18 +346,28 @@ impl<'key> Argon2<'key> {
         self.fill_blocks(memory_blocks.as_mut(), initial_hash)
     }
 
-    #[allow(clippy::cast_possible_truncation, unused_mut)]
     fn fill_blocks(
         &self,
         memory_blocks: &mut [Block],
+        initial_hash: digest::Output<Blake2b512>,
+    ) -> Result<()> {
+        self.fill_blocks_with(memory_blocks, initial_hash, true)
+    }
+
+    /// Fill the memory; `parallel` allows lanes of a slice to run on threads
+    /// (only effective with the `std` feature and more than one lane).
+    #[allow(clippy::cast_possible_truncation, unused_mut, unused_variables)]
+    fn fill_blocks_with(
+        &self,
+        memory_blocks: &mut [Block],
         mut initial_hash: digest::Output<Blake2b512>,
+        parallel: bool,
     ) -> Result<()> {
         let block_count = self.params.block_count();
         let memory_blocks = memory_blocks
             .get_mut(..block_count)
             .ok_or(Error::MemoryTooLittle)?;
 
-        let segment_length = self.params.segment_length();
         let iterations = self.params.t_cost() as usize;
         let lane_length = self.params.lane_length();
         let lanes = self.params.lanes();
@@ -325,135 +398,215 @@ impl<'key> Argon2<'key> {
         // Run passes on blocks
         for pass in 0..iterations {
             for slice in 0..SYNC_POINTS {
-                let data_independent_addressing = self.algorithm == Algorithm::Argon2i
-                    || (self.algorithm == Algorithm::Argon2id
-                        && pass == 0
-                        && slice < SYNC_POINTS / 2);
+                // Lanes only depend on each other across slice boundaries
+                // (RFC 9106 section 3.4), so the lanes of one slice can be
+                // filled concurrently, like Go's `x/crypto/argon2` does.
+                #[cfg(feature = "std")]
+                if parallel && lanes > 1 {
+                    self.fill_slice_parallel(memory_blocks, pass, slice);
+                    continue;
+                }
 
                 for lane in 0..lanes {
-                    let mut address_block = Block::default();
-                    let mut input_block = Block::default();
-                    let zero_block = Block::default();
-
-                    if data_independent_addressing {
-                        input_block.as_mut()[..6].copy_from_slice(&[
-                            pass as u64,
-                            lane as u64,
-                            slice as u64,
-                            memory_blocks.len() as u64,
-                            iterations as u64,
-                            self.algorithm as u64,
-                        ]);
-                    }
-
-                    let first_block = if pass == 0 && slice == 0 {
-                        if data_independent_addressing {
-                            // Generate first set of addresses
-                            self.update_address_block(
-                                &mut address_block,
-                                &mut input_block,
-                                &zero_block,
-                            );
-                        }
-
-                        // The first two blocks of each lane are already initialized
-                        2
-                    } else {
-                        0
-                    };
-
-                    let mut cur_index = lane * lane_length + slice * segment_length + first_block;
-                    let mut prev_index = if slice == 0 && first_block == 0 {
-                        // Last block in current lane
-                        cur_index + lane_length - 1
-                    } else {
-                        // Previous block
-                        cur_index - 1
-                    };
-
-                    // Fill blocks in the segment
-                    for block in first_block..segment_length {
-                        // Extract entropy
-                        let rand = if data_independent_addressing {
-                            let addres_index = block % ADDRESSES_IN_BLOCK;
-
-                            if addres_index == 0 {
-                                self.update_address_block(
-                                    &mut address_block,
-                                    &mut input_block,
-                                    &zero_block,
-                                );
-                            }
-
-                            address_block.as_ref()[addres_index]
-                        } else {
-                            memory_blocks[prev_index].as_ref()[0]
-                        };
-
-                        // Calculate source block index for compress function
-                        let ref_lane = if pass == 0 && slice == 0 {
-                            // Cannot reference other lanes yet
-                            lane
-                        } else {
-                            (rand >> 32) as usize % lanes
-                        };
-
-                        let reference_area_size = if pass == 0 {
-                            // First pass
-                            if slice == 0 {
-                                // First slice
-                                block - 1 // all but the previous
-                            } else if ref_lane == lane {
-                                // The same lane => add current segment
-                                slice * segment_length + block - 1
-                            } else {
-                                slice * segment_length - if block == 0 { 1 } else { 0 }
-                            }
-                        } else {
-                            // Second pass
-                            if ref_lane == lane {
-                                lane_length - segment_length + block - 1
-                            } else {
-                                lane_length - segment_length - if block == 0 { 1 } else { 0 }
-                            }
-                        };
-
-                        // 1.2.4. Mapping rand to 0..<reference_area_size-1> and produce
-                        // relative position
-                        let mut map = rand & 0xFFFFFFFF;
-                        map = (map * map) >> 32;
-                        let relative_position = reference_area_size
-                            - 1
-                            - ((reference_area_size as u64 * map) >> 32) as usize;
-
-                        // 1.2.5 Computing starting position
-                        let start_position = if pass != 0 && slice != SYNC_POINTS - 1 {
-                            (slice + 1) * segment_length
-                        } else {
-                            0
-                        };
-
-                        let lane_index = (start_position + relative_position) % lane_length;
-                        let ref_index = ref_lane * lane_length + lane_index;
-
-                        // Calculate new block
-                        let result =
-                            self.compress(&memory_blocks[prev_index], &memory_blocks[ref_index]);
-
-                        if self.version == Version::V0x10 || pass == 0 {
-                            memory_blocks[cur_index] = result;
-                        } else {
-                            memory_blocks[cur_index] ^= &result;
-                        };
-
-                        prev_index = cur_index;
-                        cur_index += 1;
-                    }
+                    self.fill_segment(&mut *memory_blocks, pass, slice, lane);
                 }
             }
         }
 
         Ok(())
+    }
+
+    /// Fill the segment of `lane` in `slice` of `pass`.
+    ///
+    /// Reads reference blocks from, and writes the new blocks to, `memory`.
+    #[allow(clippy::cast_possible_truncation)]
+    fn fill_segment<M: SegmentMemory + ?Sized>(
+        &self,
+        memory: &mut M,
+        pass: usize,
+        slice: usize,
+        lane: usize,
+    ) {
+        let segment_length = self.params.segment_length();
+        let iterations = self.params.t_cost() as usize;
+        let lane_length = self.params.lane_length();
+        let lanes = self.params.lanes();
+        let block_count = self.params.block_count();
+
+        let data_independent_addressing = self.algorithm == Algorithm::Argon2i
+            || (self.algorithm == Algorithm::Argon2id && pass == 0 && slice < SYNC_POINTS / 2);
+
+        let mut address_block = Block::default();
+        let mut input_block = Block::default();
+        let zero_block = Block::default();
+
+        if data_independent_addressing {
+            input_block.as_mut()[..6].copy_from_slice(&[
+                pass as u64,
+                lane as u64,
+                slice as u64,
+                block_count as u64,
+                iterations as u64,
+                self.algorithm as u64,
+            ]);
+        }
+
+        let first_block = if pass == 0 && slice == 0 {
+            if data_independent_addressing {
+                // Generate first set of addresses
+                self.update_address_block(&mut address_block, &mut input_block, &zero_block);
+            }
+
+            // The first two blocks of each lane are already initialized
+            2
+        } else {
+            0
+        };
+
+        let mut cur_index = lane * lane_length + slice * segment_length + first_block;
+        let mut prev_index = if slice == 0 && first_block == 0 {
+            // Last block in current lane
+            cur_index + lane_length - 1
+        } else {
+            // Previous block
+            cur_index - 1
+        };
+
+        // Fill blocks in the segment
+        for block in first_block..segment_length {
+            // Extract entropy
+            let rand = if data_independent_addressing {
+                let addres_index = block % ADDRESSES_IN_BLOCK;
+
+                if addres_index == 0 {
+                    self.update_address_block(&mut address_block, &mut input_block, &zero_block);
+                }
+
+                address_block.as_ref()[addres_index]
+            } else {
+                memory.block(prev_index).as_ref()[0]
+            };
+
+            // Calculate source block index for compress function
+            let ref_lane = if pass == 0 && slice == 0 {
+                // Cannot reference other lanes yet
+                lane
+            } else {
+                (rand >> 32) as usize % lanes
+            };
+
+            let reference_area_size = if pass == 0 {
+                // First pass
+                if slice == 0 {
+                    // First slice
+                    block - 1 // all but the previous
+                } else if ref_lane == lane {
+                    // The same lane => add current segment
+                    slice * segment_length + block - 1
+                } else {
+                    slice * segment_length - if block == 0 { 1 } else { 0 }
+                }
+            } else {
+                // Second pass
+                if ref_lane == lane {
+                    lane_length - segment_length + block - 1
+                } else {
+                    lane_length - segment_length - if block == 0 { 1 } else { 0 }
+                }
+            };
+
+            // 1.2.4. Mapping rand to 0..<reference_area_size-1> and produce
+            // relative position
+            let mut map = rand & 0xFFFFFFFF;
+            map = (map * map) >> 32;
+            let relative_position =
+                reference_area_size - 1 - ((reference_area_size as u64 * map) >> 32) as usize;
+
+            // 1.2.5 Computing starting position
+            let start_position = if pass != 0 && slice != SYNC_POINTS - 1 {
+                (slice + 1) * segment_length
+            } else {
+                0
+            };
+
+            let lane_index = (start_position + relative_position) % lane_length;
+            let ref_index = ref_lane * lane_length + lane_index;
+
+            // Calculate new block
+            let result = self.compress(memory.block(prev_index), memory.block(ref_index));
+
+            if self.version == Version::V0x10 || pass == 0 {
+                *memory.block_mut(cur_index) = result;
+            } else {
+                *memory.block_mut(cur_index) ^= &result;
+            };
+
+            prev_index = cur_index;
+            cur_index += 1;
+        }
+    }
+
+    /// Fill all lanes of `slice` concurrently, one thread per extra lane.
+    ///
+    /// Within a slice a lane writes only its own segment and, by the
+    /// specification, never reads the current segment of another lane, so the
+    /// memory is split into `lanes * SYNC_POINTS` segment chunks (chunk index
+    /// `lane * SYNC_POINTS + slice`). Every lane gets its own current chunk
+    /// mutably and all chunks of other slices read-only; the current chunks of
+    /// the other lanes are simply not reachable from it.
+    #[cfg(feature = "std")]
+    fn fill_slice_parallel(&self, memory_blocks: &mut [Block], pass: usize, slice: usize) {
+        use std::{sync::Mutex, thread, vec::Vec};
+
+        let segment_length = self.params.segment_length();
+
+        let mut current: Vec<&mut [Block]> = Vec::new();
+        let mut frozen: Vec<Option<&[Block]>> = Vec::new();
+        for (index, chunk) in memory_blocks.chunks_mut(segment_length).enumerate() {
+            if index % SYNC_POINTS == slice {
+                current.push(chunk);
+                frozen.push(None);
+            } else {
+                frozen.push(Some(&*chunk));
+            }
+        }
+
+        let frozen = &frozen[..];
+        let jobs: Vec<Mutex<Option<LaneView<'_>>>> = current
+            .into_iter()
+            .enumerate()
+            .map(|(lane, current)| {
+                Mutex::new(Some(LaneView {
+                    own_chunk: lane * SYNC_POINTS + slice,
+                    segment_length,
+                    current,
+                    frozen,
+                }))
+            })
+            .collect();
+
+        // Take a lane's view (each is taken exactly once) and fill it.
+        let run = |lane: usize| {
+            let view = jobs[lane]
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take();
+            if let Some(mut view) = view {
+                self.fill_segment(&mut view, pass, slice, lane);
+            }
+        };
+
+        thread::scope(|scope| {
+            for lane in 1..jobs.len() {
+                let run = &run;
+                let spawned = thread::Builder::new().spawn_scoped(scope, move || run(lane));
+                if spawned.is_err() {
+                    // Cannot get a thread: fill that lane here instead.
+                    run(lane);
+                }
+            }
+            run(0);
+        });
     }
 
     fn compress(&self, rhs: &Block, lhs: &Block) -> Block {
@@ -666,6 +819,79 @@ mod tests {
                 password_hash::errors::InvalidValue::TooShort
             ))
         );
+    }
+
+    /// Threaded lane filling must reproduce the sequential matrix exactly.
+    #[cfg(feature = "std")]
+    #[test]
+    fn parallel_lanes_match_sequential_memory() {
+        use crate::Block;
+
+        // (m, t, p): includes lane counts that do not divide the memory evenly,
+        // two and many lanes, and the memory minimum of 8 blocks per lane.
+        let cases = [
+            (8, 1, 1),
+            (16, 2, 2),
+            (24, 3, 3),
+            (32, 3, 4),
+            (64, 2, 8),
+            (100, 3, 3),
+            (4096, 2, 4),
+            (1024, 3, 16),
+        ];
+        let algorithms = [Algorithm::Argon2d, Algorithm::Argon2i, Algorithm::Argon2id];
+        let versions = [Version::V0x10, Version::V0x13];
+
+        for (m_cost, t_cost, p_cost) in cases {
+            let params = Params::new(m_cost, t_cost, p_cost, None).unwrap();
+            for algorithm in algorithms {
+                for version in versions {
+                    let argon2 = Argon2::new(algorithm, version, params.clone());
+                    let mut sequential = vec![Block::default(); params.block_count()];
+                    let mut threaded = vec![Block::default(); params.block_count()];
+
+                    let hash = argon2.initial_hash(EXAMPLE_PASSWORD, b"examplesalt!!!!!", &[0; 32]);
+                    argon2
+                        .fill_blocks_with(&mut sequential, hash, false)
+                        .unwrap();
+                    let hash = argon2.initial_hash(EXAMPLE_PASSWORD, b"examplesalt!!!!!", &[0; 32]);
+                    argon2.fill_blocks_with(&mut threaded, hash, true).unwrap();
+
+                    for (i, (a, b)) in sequential.iter().zip(&threaded).enumerate() {
+                        assert_eq!(
+                            a.as_ref(),
+                            b.as_ref(),
+                            "block {i} differs (m={m_cost} t={t_cost} p={p_cost} {algorithm:?} {version:?})"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Go-legacy memory (below `8 * lanes` blocks) must also be unaffected.
+    #[cfg(feature = "std")]
+    #[test]
+    fn parallel_lanes_match_sequential_go_legacy_memory() {
+        use crate::Block;
+
+        for (m_cost, p_cost) in [(8u32, 2u32), (15, 2), (16, 4), (31, 4), (20, 5), (64, 16)] {
+            let params = Params::new_go_legacy_memory(m_cost, 2, p_cost, Some(32)).unwrap();
+            let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params.clone());
+            let mut sequential = vec![Block::default(); params.block_count()];
+            let mut threaded = vec![Block::default(); params.block_count()];
+
+            let hash = argon2.initial_hash(EXAMPLE_PASSWORD, b"examplesalt!!!!!", &[0; 32]);
+            argon2
+                .fill_blocks_with(&mut sequential, hash, false)
+                .unwrap();
+            let hash = argon2.initial_hash(EXAMPLE_PASSWORD, b"examplesalt!!!!!", &[0; 32]);
+            argon2.fill_blocks_with(&mut threaded, hash, true).unwrap();
+
+            for (a, b) in sequential.iter().zip(&threaded) {
+                assert_eq!(a.as_ref(), b.as_ref(), "m={m_cost} p={p_cost}");
+            }
+        }
     }
 
     #[test]

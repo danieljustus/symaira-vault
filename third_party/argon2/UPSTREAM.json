@@ -19,5 +19,15 @@
     "src/version.rs": "f6d0cadcfc094d4050b2075384795da1415d2d1490f90d9dd52c4c395245f6e9",
     "tests/kat.rs": "5d37362a512d8563c4523f9bde563ff043e88291857bc7dc97bba997404275c5",
     "tests/phc_strings.rs": "75ffd36929bd1103565e08da36979e67cfd067ef2654a70854a6d3e838326c21"
+  },
+  "local_patches": {
+    "src/lib.rs": {
+      "description": "fill the lanes of each slice in parallel (std::thread::scope, safe Rust, bit-identical, gated on the std feature)",
+      "upstream_sha256": "c1ed703c605d55d4b82f807a891bb3eb9d79e061bf129ac5637ab41325817a9a",
+      "patched_sha256": "37d14391c00d1d1491d14b41230494279cf988a0ba8d09b4ab77ab62eb7ebaf8"
+    },
+    "src/params.rs": {
+      "description": "Params::new_go_legacy_memory (excised before hashing)"
+    }
   }
 }
