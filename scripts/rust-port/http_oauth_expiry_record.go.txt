@@ -1,0 +1,337 @@
+package serverbootstrap
+
+// ADR 0037 R16 (HTTP-003): recording of the OAuth expiry boundaries from the
+// real Go handlers. Capture only:
+//
+//	R16_OUT=/path/out.json go test ./internal/mcp/serverbootstrap -run ^TestRecordR16OAuthExpiryBoundaries$ -count=1
+//
+// Go has no clock injection for these boundaries (time.Now().After(expiry)
+// everywhere), so "before" and "after" are recorded with controlled short TTLs
+// (400ms, observed again after 900ms) or with absolute offsets of one hour.
+// The exact-equality instant cannot be reached on the wall clock; only its
+// classification (strict After => still valid at equality) is source-derived.
+
+import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"testing"
+	"time"
+
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
+)
+
+const (
+	r16Short = 400 * time.Millisecond
+	r16Wait  = 900 * time.Millisecond
+)
+
+type r16Case struct {
+	ID       string         `json:"id"`
+	Boundary string         `json:"boundary"`
+	Position string         `json:"position"`
+	Status   int            `json:"status"`
+	Header   map[string]any `json:"headers,omitempty"`
+	Body     any            `json:"body"`
+	Notes    map[string]any `json:"notes,omitempty"`
+}
+
+func r16Verifier(v string) string {
+	h := sha256.Sum256([]byte(v))
+	return base64.RawURLEncoding.EncodeToString(h[:])
+}
+
+// r16Body normalizes secrets: token-like fields become shape descriptors.
+func r16Body(raw []byte) any {
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return string(raw)
+	}
+	for _, key := range []string{"access_token", "refresh_token"} {
+		if v, ok := m[key].(string); ok {
+			m[key] = map[string]any{"shape": "hex", "len": len(v)}
+		}
+	}
+	return m
+}
+
+func r16Do(h http.Handler, method, target, ctype string, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	if ctype != "" {
+		req.Header.Set("Content-Type", ctype)
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	return w
+}
+
+func r16Token(h http.Handler, form url.Values) *httptest.ResponseRecorder {
+	return r16Do(h, http.MethodPost, "/mcp/oauth/token", "application/x-www-form-urlencoded", form.Encode())
+}
+
+func r16Rec(id, boundary, position string, w *httptest.ResponseRecorder) r16Case {
+	c := r16Case{ID: id, Boundary: boundary, Position: position, Status: w.Code, Body: r16Body(w.Body.Bytes())}
+	c.Header = map[string]any{"content_type": w.Header().Get("Content-Type")}
+	if v := w.Header().Get("Www-Authenticate"); v != "" {
+		c.Header["www_authenticate"] = v
+	}
+	return c
+}
+
+func TestRecordR16OAuthExpiryBoundaries(t *testing.T) {
+	out := os.Getenv("R16_OUT")
+	if out == "" {
+		t.Skip("capture only: set R16_OUT")
+	}
+	var cases []r16Case
+	add := func(c r16Case) { cases = append(cases, c) }
+
+	// ---- authorization code -------------------------------------------------
+	codeForm := func(code string) url.Values {
+		return url.Values{"grant_type": {"authorization_code"}, "code": {code}, "code_verifier": {"verifier"}}
+	}
+	newCodeFlow := func() (*oauthCodeStore, *auth.TokenRegistry, http.Handler) {
+		reg := auth.NewTokenRegistry(filepath.Join(t.TempDir(), "tokens.json"))
+		store := newOAuthCodeStore()
+		return store, reg, handleOAuthToken(store, reg, time.Hour, 24*time.Hour)
+	}
+	putCode := func(store *oauthCodeStore, code string, expires time.Time) {
+		store.put(code, &pendingCode{clientID: "0123456789abcdef", redirectURI: "http://localhost:9999/cb", codeChallenge: r16Verifier("verifier"), challengeMethod: "S256", expiresAt: expires})
+	}
+
+	// the real issuer sets the lifetime
+	{
+		store := newOAuthCodeStore()
+		before := time.Now()
+		w := httptest.NewRecorder()
+		issueAuthCode(w, httptest.NewRequest(http.MethodGet, "/", nil), store, "0123456789abcdef", "http://localhost:9999/cb", "", r16Verifier("verifier"), "S256")
+		var p *pendingCode
+		for _, v := range store.codes {
+			p = v
+		}
+		ttl := p.expiresAt.Sub(before)
+		add(r16Case{ID: "code-issuer-ttl", Boundary: "authorization_code", Position: "issue", Status: w.Code,
+			Notes: map[string]any{"ttl_seconds_rounded": int(ttl.Round(time.Second) / time.Second)}})
+	}
+	{
+		store, reg, h := newCodeFlow()
+		putCode(store, "c-valid", time.Now().Add(time.Hour))
+		add(r16Case{}.with(r16Rec("code-valid-long", "authorization_code", "before", r16Token(h, codeForm("c-valid")))))
+		_ = reg
+	}
+	{
+		store, _, h := newCodeFlow()
+		putCode(store, "c-short", time.Now().Add(r16Short))
+		add(r16Rec("code-short-immediate", "authorization_code", "before", r16Token(h, codeForm("c-short"))))
+	}
+	{
+		store, reg, h := newCodeFlow()
+		putCode(store, "c-short2", time.Now().Add(r16Short))
+		time.Sleep(r16Wait)
+		c := r16Rec("code-short-after-wait", "authorization_code", "after", r16Token(h, codeForm("c-short2")))
+		c.Notes = map[string]any{"tokens_minted": len(reg.List())}
+		again := r16Token(h, codeForm("c-short2"))
+		c.Notes["replay_status"] = again.Code
+		c.Notes["replay_body"] = r16Body(again.Body.Bytes())
+		add(c)
+	}
+	{
+		store, _, h := newCodeFlow()
+		putCode(store, "c-past", time.Now().Add(-time.Nanosecond))
+		add(r16Rec("code-expired-by-1ns", "authorization_code", "after", r16Token(h, codeForm("c-past"))))
+	}
+
+	// ---- access token (bearer middleware) -----------------------------------
+	bearer := func(reg *auth.TokenRegistry) http.Handler {
+		return auth.BearerAuthMiddlewareWithRateLimit("", reg, nil, nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = w.Write([]byte("ok"))
+		}))
+	}
+	callBearer := func(h http.Handler, raw string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+		req.Header.Set("Authorization", "Bearer "+raw)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		return w
+	}
+	rawRec := func(id, boundary, position string, w *httptest.ResponseRecorder) r16Case {
+		return r16Case{ID: id, Boundary: boundary, Position: position, Status: w.Code, Body: w.Body.String(),
+			Header: map[string]any{"content_type": w.Header().Get("Content-Type")}}
+	}
+	{
+		reg := auth.NewTokenRegistry(filepath.Join(t.TempDir(), "tokens.json"))
+		_, raw, _, err := reg.CreateWithRefresh("l", []string{"*"}, "oauth", r16Short, time.Hour)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h := bearer(reg)
+		add(rawRec("access-short-immediate", "access_token", "before", callBearer(h, raw)))
+		time.Sleep(r16Wait)
+		add(rawRec("access-short-after-wait", "access_token", "after", callBearer(h, raw)))
+	}
+	{
+		reg := auth.NewTokenRegistry(filepath.Join(t.TempDir(), "tokens.json"))
+		_, raw, _, err := reg.CreateWithRefresh("l", []string{"*"}, "oauth", 0, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(r16Short)
+		add(rawRec("access-no-ttl-never-expires", "access_token", "before", callBearer(bearer(reg), raw)))
+	}
+
+	// ---- refresh token ------------------------------------------------------
+	refreshForm := func(raw string) url.Values {
+		return url.Values{"grant_type": {"refresh_token"}, "refresh_token": {raw}}
+	}
+	mkPair := func(access, refresh time.Duration) (*auth.TokenRegistry, http.Handler, *auth.ScopedToken, string, string) {
+		reg := auth.NewTokenRegistry(filepath.Join(t.TempDir(), "tokens.json"))
+		tok, a, r, err := reg.CreateWithRefresh("oauth-0123456789abcdef", []string{"*"}, "oauth", access, refresh)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return reg, handleOAuthToken(newOAuthCodeStore(), reg, time.Hour, 24*time.Hour), tok, a, r
+	}
+	{
+		reg, h, old, _, raw := mkPair(time.Hour, r16Short)
+		w := r16Token(h, refreshForm(raw))
+		c := r16Rec("refresh-short-immediate", "refresh_token", "before", w)
+		var resp map[string]any
+		_ = json.Unmarshal(w.Body.Bytes(), &resp)
+		var newTok *auth.ScopedToken
+		for _, tk := range reg.List() {
+			if !tk.Revoked {
+				newTok = tk
+			}
+		}
+		dRefresh := newTok.RefreshExpiresAt.Sub(*old.RefreshExpiresAt)
+		dAccess := newTok.ExpiresAt.Sub(*old.ExpiresAt)
+		c.Notes = map[string]any{
+			"refresh_deadline_preserved_within_50ms": dRefresh < 50*time.Millisecond && dRefresh > -50*time.Millisecond,
+			"access_deadline_preserved_within_50ms":  dAccess < 50*time.Millisecond && dAccess > -50*time.Millisecond,
+			"old_pair_revoked":                       old.Revoked,
+		}
+		add(c)
+	}
+	{
+		_, h, _, _, raw := mkPair(time.Hour, r16Short)
+		time.Sleep(r16Wait)
+		add(r16Rec("refresh-short-after-wait", "refresh_token", "after", r16Token(h, refreshForm(raw))))
+	}
+	{
+		// Access token expired, refresh still valid: Go rejects (ADR 0019).
+		_, h, _, _, raw := mkPair(r16Short, time.Hour)
+		time.Sleep(r16Wait)
+		add(r16Rec("refresh-valid-but-access-expired", "refresh_token", "access_expired_refresh_valid", r16Token(h, refreshForm(raw))))
+	}
+	{
+		reg, h, _, _, raw := mkPair(time.Hour, 0)
+		w := r16Token(h, refreshForm(raw))
+		c := r16Rec("refresh-no-ttl-never-expires", "refresh_token", "before", w)
+		var newTok *auth.ScopedToken
+		for _, tk := range reg.List() {
+			if !tk.Revoked {
+				newTok = tk
+			}
+		}
+		c.Notes = map[string]any{"rotated_refresh_expires_at_is_null": newTok.RefreshExpiresAt == nil}
+		add(c)
+	}
+
+	// ---- DCR client registration --------------------------------------------
+	authQuery := func(clientID string) string {
+		q := url.Values{"response_type": {"code"}, "client_id": {clientID}, "redirect_uri": {"http://localhost:9999/cb"}, "code_challenge": {r16Verifier("v")}, "code_challenge_method": {"S256"}, "state": {"s"}}
+		return "/mcp/oauth/authorize?" + q.Encode()
+	}
+	authz := func(cs *oauthClientStore, id string) r16Case2 {
+		w := r16Do(handleOAuthAuthorize(newOAuthCodeStore(), cs), http.MethodGet, authQuery(id), "", "")
+		return r16Case2{w}
+	}
+	rec2 := func(id, position string, c r16Case2) r16Case {
+		r := r16Case{ID: id, Boundary: "dcr_client", Position: position, Status: c.Code,
+			Header: map[string]any{"content_type": c.Header().Get("Content-Type")}}
+		if v := c.Header().Get("Www-Authenticate"); v != "" {
+			r.Header["www_authenticate"] = v
+		}
+		if strings.Contains(c.Header().Get("Content-Type"), "json") {
+			r.Body = r16Body(c.Body.Bytes())
+		} else {
+			r.Body = map[string]any{"consent_page": strings.Contains(c.Body.String(), "Symaira Vault OAuth Authorization")}
+		}
+		return r
+	}
+	dir := t.TempDir()
+	past := time.Now().Add(-time.Hour)
+	future := time.Now().Add(time.Hour)
+	fileClients := map[string]*registeredClient{
+		"aaaaaaaaaaaaaaaa": {ClientID: "aaaaaaaaaaaaaaaa", RedirectURIs: []string{"http://localhost:9999/cb"}, CreatedAt: past, ExpiresAt: &future},
+		"bbbbbbbbbbbbbbbb": {ClientID: "bbbbbbbbbbbbbbbb", RedirectURIs: []string{"http://localhost:9999/cb"}, CreatedAt: past, ExpiresAt: &past},
+		"cccccccccccccccc": {ClientID: "cccccccccccccccc", RedirectURIs: []string{"http://localhost:9999/cb"}, CreatedAt: past, TTL: func() *int64 { v := int64(1); return &v }()},
+	}
+	data, _ := json.Marshal(oauthClientStoreFile{Version: oauthClientsFileVersion, Clients: fileClients})
+	if err := os.WriteFile(filepath.Join(dir, oauthClientsFileName), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cs, err := loadOAuthClientStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	add(rec2("dcr-persisted-expires-in-future", "before", authz(cs, "aaaaaaaaaaaaaaaa")))
+	add(rec2("dcr-persisted-expires-in-past", "after", authz(cs, "bbbbbbbbbbbbbbbb")))
+	add(rec2("dcr-ttl-seconds-without-expires-at", "before", authz(cs, "cccccccccccccccc")))
+	{
+		cs2, _ := loadOAuthClientStore("")
+		exp := time.Now().Add(r16Short)
+		cs2.put(&registeredClient{ClientID: "dddddddddddddddd", RedirectURIs: []string{"http://localhost:9999/cb"}, CreatedAt: time.Now(), ExpiresAt: &exp})
+		add(rec2("dcr-short-immediate", "before", authz(cs2, "dddddddddddddddd")))
+		time.Sleep(r16Wait)
+		add(rec2("dcr-short-after-wait", "after", authz(cs2, "dddddddddddddddd")))
+	}
+	{
+		// What the real registration handler stores: no expiry at all.
+		d2 := t.TempDir()
+		cs3, _ := loadOAuthClientStore(d2)
+		w := r16Do(handleOAuthRegister(cs3), http.MethodPost, "/oauth/register", "application/json", `{"redirect_uris":["http://localhost:9999/cb"]}`)
+		var reg map[string]any
+		_ = json.Unmarshal(w.Body.Bytes(), &reg)
+		raw, _ := os.ReadFile(filepath.Join(d2, oauthClientsFileName))
+		var file map[string]any
+		_ = json.Unmarshal(raw, &file)
+		stored := file["clients"].(map[string]any)[reg["client_id"].(string)].(map[string]any)
+		keys := []string{}
+		for k := range stored {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		add(r16Case{ID: "dcr-register-stores-no-expiry", Boundary: "dcr_client", Position: "issue", Status: w.Code,
+			Notes: map[string]any{"stored_client_keys": keys, "client_secret_expires_at": reg["client_secret_expires_at"]}})
+	}
+
+	doc := map[string]any{
+		"schema":        "symvault.port.http-oauth-expiry/1",
+		"oracle_commit": os.Getenv("R16_ORACLE_COMMIT"),
+		"adr":           "0037 R16 / HTTP-003",
+		"source":        "legacy/go-oracle internal/mcp/serverbootstrap/oauth.go, internal/mcp/auth/{token,auth}.go",
+		"clock":         "wall clock (no injection in Go); short cases use a 400ms TTL observed immediately and again after 900ms; long cases use absolute offsets of one hour",
+		"equality":      "Go compares with time.Now().After(expiry): a value is still valid at exactly its expiry. The equality instant is not reachable on the wall clock and is not recorded.",
+		"cases":         cases,
+	}
+	enc, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(out, append(enc, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type r16Case2 struct{ *httptest.ResponseRecorder }
+
+func (c r16Case) with(o r16Case) r16Case { return o }

@@ -1,0 +1,5 @@
+title=title,username=username,password=password,url=url
+title,username,password,url,notes
+"GitHub, Personal",user@example.com,mysecretpassword,https://github.com/login,"Primary account, includes comma in title"
+"Bank ""Checking""",bank.user@example.com,"p@ss,with,commas",https://bank.example.com/login,"Security questions: mother's maiden name? Use generated answers."
+"Work AWS",admin@company.com,work-aws-secret,https://aws.amazon.com,"TOTP enabled; owner: Cloud Team"

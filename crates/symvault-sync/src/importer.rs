@@ -149,6 +149,33 @@ pub fn apply_prefix(prefix: &str, path: &str) -> String {
     }
 }
 
+/// Parses Go's `field=column,field2=column2` mapping syntax.
+pub fn parse_mapping(value: &str) -> Result<BTreeMap<String, String>, String> {
+    if value.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let mut mapping = BTreeMap::new();
+    for raw_pair in value.split(',') {
+        let pair = raw_pair.trim();
+        if pair.is_empty() {
+            continue;
+        }
+        let (field, column) = pair
+            .split_once('=')
+            .ok_or_else(|| format!("invalid mapping pair: {}", symvault_core::go_quote(pair)))?;
+        let field = field.trim();
+        let column = column.trim();
+        if field.is_empty() || column.is_empty() {
+            return Err(format!(
+                "empty field or column in mapping: {}",
+                symvault_core::go_quote(pair)
+            ));
+        }
+        mapping.insert(field.to_owned(), column.to_owned());
+    }
+    Ok(mapping)
+}
+
 pub fn parse(format: Format, bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
     if bytes.len() > MAX_IMPORT_BYTES {
         return Err(ImportError::Limit(MAX_IMPORT_BYTES));
@@ -642,13 +669,6 @@ fn validate_csv_quotes(bytes: &[u8]) -> Result<(), ImportError> {
 /// ` (os error N)` suffix.
 #[must_use]
 pub fn go_io_reason(error: &std::io::Error) -> String {
-    #[cfg(windows)]
-    match error.raw_os_error() {
-        Some(2) => return "The system cannot find the file specified.".to_owned(),
-        Some(3) => return "The system cannot find the path specified.".to_owned(),
-        Some(5) => return "Access is denied.".to_owned(),
-        _ => {}
-    }
     use std::io::ErrorKind;
     match error.kind() {
         ErrorKind::NotFound => "no such file or directory".to_owned(),

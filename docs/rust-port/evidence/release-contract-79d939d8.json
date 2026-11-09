@@ -1,0 +1,824 @@
+{
+  "sha": "79d939d803355eef06e375ead2005a542fa338d1",
+  "command": "make release-contract (CARGO_TARGET_DIR unset)",
+  "dist": "<DIST>",
+  "version": "0.23.3-next",
+  "artifacts": [
+    "symaira-vault_0.23.3-next_checksums.txt",
+    "symaira-vault_0.23.3-next_darwin_arm64.tar.gz",
+    "symaira-vault_0.23.3-next_darwin_arm64.tar.gz.sbom.json",
+    "symaira-vault_0.23.3-next_linux_amd64.tar.gz",
+    "symaira-vault_0.23.3-next_linux_amd64.tar.gz.sbom.json",
+    "symaira-vault_0.23.3-next_linux_arm64.tar.gz",
+    "symaira-vault_0.23.3-next_linux_arm64.tar.gz.sbom.json",
+    "symvault_0.23.3-next_darwin_arm64.mcpb",
+    "symvault_0.23.3-next_linux_amd64.apk",
+    "symvault_0.23.3-next_linux_amd64.deb",
+    "symvault_0.23.3-next_linux_amd64.mcpb",
+    "symvault_0.23.3-next_linux_amd64.rpm",
+    "symvault_0.23.3-next_linux_arm64.apk",
+    "symvault_0.23.3-next_linux_arm64.deb",
+    "symvault_0.23.3-next_linux_arm64.mcpb",
+    "symvault_0.23.3-next_linux_arm64.rpm"
+  ],
+  "runs": [
+    {
+      "target": "darwin_arm64",
+      "mode": "native",
+      "op": "version",
+      "stdout": "symvault 0.23.3-next"
+    },
+    {
+      "target": "darwin_arm64",
+      "mode": "native",
+      "op": "init/set/get",
+      "ok": true
+    },
+    {
+      "target": "linux_arm64",
+      "mode": "native-container (linux/arm64 on Apple silicon host)",
+      "op": "version",
+      "image": "ubuntu:24.04",
+      "stdout": "symvault 0.23.3-next"
+    },
+    {
+      "target": "linux_arm64",
+      "mode": "native-container (linux/arm64 on Apple silicon host)",
+      "op": "init/set/get",
+      "image": "alpine:3.21",
+      "ok": true
+    },
+    {
+      "target": "linux_arm64",
+      "mode": "native-container (linux/arm64 on Apple silicon host)",
+      "op": "init-without-git",
+      "image": "alpine:3.21"
+    },
+    {
+      "target": "linux_amd64",
+      "mode": "EMULATED (QEMU/Rosetta linux/amd64)",
+      "op": "version",
+      "image": "ubuntu:24.04",
+      "stdout": "symvault 0.23.3-next"
+    },
+    {
+      "target": "linux_amd64",
+      "mode": "EMULATED (QEMU/Rosetta linux/amd64)",
+      "op": "init/set/get",
+      "image": "alpine:3.21",
+      "ok": true
+    },
+    {
+      "target": "linux_amd64",
+      "mode": "EMULATED (QEMU/Rosetta linux/amd64)",
+      "op": "init-without-git",
+      "image": "alpine:3.21"
+    }
+  ],
+  "checks": [
+    {
+      "check": "checksums file present",
+      "ok": true,
+      "detail": "['symaira-vault_0.23.3-next_checksums.txt']"
+    },
+    {
+      "check": "snapshot version shape",
+      "ok": true,
+      "detail": "0.23.3-next"
+    },
+    {
+      "check": "archive set is exactly darwin_arm64+linux_amd64+linux_arm64",
+      "ok": true,
+      "detail": "missing=[] extra=[]"
+    },
+    {
+      "check": "dist listing is exactly the 16 expected release files",
+      "ok": true,
+      "detail": "missing=[] extra_files=[] extra_dirs=[]"
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_darwin_arm64.tar.gz: single wrapper dir symaira-vault_0.23.3-next_darwin_arm64/",
+      "ok": true,
+      "detail": "['symaira-vault_0.23.3-next_darwin_arm64']"
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_darwin_arm64.tar.gz: members symvault, LICENSE, README.md, completions/symvault.bash, completions/symvault.zsh, completions/symvault.fish",
+      "ok": true,
+      "detail": "missing=[]"
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_darwin_arm64.tar.gz: docs/man has ['symvault.1'] (+118 more)",
+      "ok": true,
+      "detail": "119 pages"
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_darwin_arm64.tar.gz: symvault is executable",
+      "ok": true,
+      "detail": "0o755"
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_linux_amd64.tar.gz: single wrapper dir symaira-vault_0.23.3-next_linux_amd64/",
+      "ok": true,
+      "detail": "['symaira-vault_0.23.3-next_linux_amd64']"
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_linux_amd64.tar.gz: members symvault, LICENSE, README.md, completions/symvault.bash, completions/symvault.zsh, completions/symvault.fish",
+      "ok": true,
+      "detail": "missing=[]"
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_linux_amd64.tar.gz: docs/man has ['symvault.1'] (+118 more)",
+      "ok": true,
+      "detail": "119 pages"
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_linux_amd64.tar.gz: symvault is executable",
+      "ok": true,
+      "detail": "0o755"
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_linux_arm64.tar.gz: single wrapper dir symaira-vault_0.23.3-next_linux_arm64/",
+      "ok": true,
+      "detail": "['symaira-vault_0.23.3-next_linux_arm64']"
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_linux_arm64.tar.gz: members symvault, LICENSE, README.md, completions/symvault.bash, completions/symvault.zsh, completions/symvault.fish",
+      "ok": true,
+      "detail": "missing=[]"
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_linux_arm64.tar.gz: docs/man has ['symvault.1'] (+118 more)",
+      "ok": true,
+      "detail": "119 pages"
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_linux_arm64.tar.gz: symvault is executable",
+      "ok": true,
+      "detail": "0o755"
+    },
+    {
+      "check": "man page set identical across archives",
+      "ok": true,
+      "detail": "{'darwin_arm64': 119, 'linux_amd64': 119, 'linux_arm64': 119}"
+    },
+    {
+      "check": "darwin_arm64: Mach-O arm64",
+      "ok": true,
+      "detail": "cputype=0x100000c magic=0xfeedfacf"
+    },
+    {
+      "check": "linux_amd64: ELF machine",
+      "ok": true,
+      "detail": "{'machine': 62, 'dynamic_interp': False}"
+    },
+    {
+      "check": "linux_amd64: static (no PT_INTERP, musl)",
+      "ok": true,
+      "detail": "{'machine': 62, 'dynamic_interp': False}"
+    },
+    {
+      "check": "linux_arm64: ELF machine",
+      "ok": true,
+      "detail": "{'machine': 183, 'dynamic_interp': False}"
+    },
+    {
+      "check": "linux_arm64: static (no PT_INTERP, musl)",
+      "ok": true,
+      "detail": "{'machine': 183, 'dynamic_interp': False}"
+    },
+    {
+      "check": "checksums list symaira-vault_0.23.3-next_darwin_arm64.tar.gz",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "checksums list symaira-vault_0.23.3-next_linux_amd64.tar.gz",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "checksums list symaira-vault_0.23.3-next_linux_arm64.tar.gz",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "all 12 checksum lines match files on disk",
+      "ok": true,
+      "detail": "bad=[]"
+    },
+    {
+      "check": "checksums file lists exactly the 12 archives, packages and SBOMs",
+      "ok": true,
+      "detail": "missing=[] extra=[]"
+    },
+    {
+      "check": "package symvault_0.23.3-next_linux_amd64.deb exists",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "checksums list symvault_0.23.3-next_linux_amd64.deb",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.deb: name",
+      "ok": true,
+      "detail": "symvault"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.deb: version contains 0.23.3",
+      "ok": true,
+      "detail": "0.23.3~next"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.deb: arch",
+      "ok": true,
+      "detail": "amd64"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.deb: maintainer",
+      "ok": true,
+      "detail": "danieljustus <88160656+danieljustus@users.noreply.github.com>"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.deb: description",
+      "ok": true,
+      "detail": "Secure password management CLI tool"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.deb: hard dependency on git (ADR 0033)",
+      "ok": true,
+      "detail": "['git']"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.deb: installs usr/bin/symvault",
+      "ok": true,
+      "detail": "['usr/bin/symvault']"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.deb: packaged binary == archive binary",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.deb: packaged binary mode 0755",
+      "ok": true,
+      "detail": "0o755"
+    },
+    {
+      "check": "package symvault_0.23.3-next_linux_amd64.rpm exists",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "checksums list symvault_0.23.3-next_linux_amd64.rpm",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.rpm: name",
+      "ok": true,
+      "detail": "symvault"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.rpm: version contains 0.23.3",
+      "ok": true,
+      "detail": "0.23.3~next"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.rpm: arch",
+      "ok": true,
+      "detail": "x86_64"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.rpm: license Apache-2.0",
+      "ok": true,
+      "detail": "Apache-2.0"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.rpm: maintainer",
+      "ok": true,
+      "detail": "danieljustus"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.rpm: description",
+      "ok": true,
+      "detail": "Secure password management CLI tool"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.rpm: hard dependency on git (ADR 0033)",
+      "ok": true,
+      "detail": "['git', 'rpmlib(CompressedFileNames)', 'rpmlib(FileDigests)', 'rpmlib(PayloadFilesHavePrefix)']"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.rpm: installs usr/bin/symvault",
+      "ok": true,
+      "detail": "['usr/bin/symvault']"
+    },
+    {
+      "check": "package symvault_0.23.3-next_linux_amd64.apk exists",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "checksums list symvault_0.23.3-next_linux_amd64.apk",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.apk: name",
+      "ok": true,
+      "detail": "symvault"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.apk: version contains 0.23.3",
+      "ok": true,
+      "detail": "0.23.3_next"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.apk: arch",
+      "ok": true,
+      "detail": "x86_64"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.apk: license Apache-2.0",
+      "ok": true,
+      "detail": "Apache-2.0"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.apk: maintainer",
+      "ok": true,
+      "detail": "danieljustus <88160656+danieljustus@users.noreply.github.com>"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.apk: description",
+      "ok": true,
+      "detail": "Secure password management CLI tool"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.apk: hard dependency on git (ADR 0033)",
+      "ok": true,
+      "detail": "['git']"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.apk: installs usr/bin/symvault",
+      "ok": true,
+      "detail": "['usr/bin/symvault']"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.apk: packaged binary == archive binary",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.apk: packaged binary mode 0755",
+      "ok": true,
+      "detail": "0o755"
+    },
+    {
+      "check": "package symvault_0.23.3-next_linux_arm64.deb exists",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "checksums list symvault_0.23.3-next_linux_arm64.deb",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.deb: name",
+      "ok": true,
+      "detail": "symvault"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.deb: version contains 0.23.3",
+      "ok": true,
+      "detail": "0.23.3~next"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.deb: arch",
+      "ok": true,
+      "detail": "arm64"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.deb: maintainer",
+      "ok": true,
+      "detail": "danieljustus <88160656+danieljustus@users.noreply.github.com>"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.deb: description",
+      "ok": true,
+      "detail": "Secure password management CLI tool"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.deb: hard dependency on git (ADR 0033)",
+      "ok": true,
+      "detail": "['git']"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.deb: installs usr/bin/symvault",
+      "ok": true,
+      "detail": "['usr/bin/symvault']"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.deb: packaged binary == archive binary",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.deb: packaged binary mode 0755",
+      "ok": true,
+      "detail": "0o755"
+    },
+    {
+      "check": "package symvault_0.23.3-next_linux_arm64.rpm exists",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "checksums list symvault_0.23.3-next_linux_arm64.rpm",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.rpm: name",
+      "ok": true,
+      "detail": "symvault"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.rpm: version contains 0.23.3",
+      "ok": true,
+      "detail": "0.23.3~next"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.rpm: arch",
+      "ok": true,
+      "detail": "aarch64"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.rpm: license Apache-2.0",
+      "ok": true,
+      "detail": "Apache-2.0"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.rpm: maintainer",
+      "ok": true,
+      "detail": "danieljustus"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.rpm: description",
+      "ok": true,
+      "detail": "Secure password management CLI tool"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.rpm: hard dependency on git (ADR 0033)",
+      "ok": true,
+      "detail": "['git', 'rpmlib(CompressedFileNames)', 'rpmlib(FileDigests)', 'rpmlib(PayloadFilesHavePrefix)']"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.rpm: installs usr/bin/symvault",
+      "ok": true,
+      "detail": "['usr/bin/symvault']"
+    },
+    {
+      "check": "package symvault_0.23.3-next_linux_arm64.apk exists",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "checksums list symvault_0.23.3-next_linux_arm64.apk",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.apk: name",
+      "ok": true,
+      "detail": "symvault"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.apk: version contains 0.23.3",
+      "ok": true,
+      "detail": "0.23.3_next"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.apk: arch",
+      "ok": true,
+      "detail": "aarch64"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.apk: license Apache-2.0",
+      "ok": true,
+      "detail": "Apache-2.0"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.apk: maintainer",
+      "ok": true,
+      "detail": "danieljustus <88160656+danieljustus@users.noreply.github.com>"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.apk: description",
+      "ok": true,
+      "detail": "Secure password management CLI tool"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.apk: hard dependency on git (ADR 0033)",
+      "ok": true,
+      "detail": "['git']"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.apk: installs usr/bin/symvault",
+      "ok": true,
+      "detail": "['usr/bin/symvault']"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.apk: packaged binary == archive binary",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.apk: packaged binary mode 0755",
+      "ok": true,
+      "detail": "0o755"
+    },
+    {
+      "check": "mcpb symvault_0.23.3-next_darwin_arm64.mcpb exists",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "symvault_0.23.3-next_darwin_arm64.mcpb: manifest.json",
+      "ok": true,
+      "detail": "{'manifest_version': '0.3', 'name': 'symvault', 'version': '0.23.3-next', 'description': 'Secure password manager MCP server', 'author': {'name': 'danieljustus'}, 'server': {'type': 'binary', 'entry_point': 'server/symvault', 'mcp_config': {'command': '${__dirname}/server/symvault', 'args': ['serve', '--stdio']}}}"
+    },
+    {
+      "check": "symvault_0.23.3-next_darwin_arm64.mcpb: server/symvault executable",
+      "ok": true,
+      "detail": "0o100755"
+    },
+    {
+      "check": "symvault_0.23.3-next_darwin_arm64.mcpb: server binary == archive binary",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mcpb symvault_0.23.3-next_linux_amd64.mcpb exists",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.mcpb: manifest.json",
+      "ok": true,
+      "detail": "{'manifest_version': '0.3', 'name': 'symvault', 'version': '0.23.3-next', 'description': 'Secure password manager MCP server', 'author': {'name': 'danieljustus'}, 'server': {'type': 'binary', 'entry_point': 'server/symvault', 'mcp_config': {'command': '${__dirname}/server/symvault', 'args': ['serve', '--stdio']}}}"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.mcpb: server/symvault executable",
+      "ok": true,
+      "detail": "0o100755"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_amd64.mcpb: server binary == archive binary",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mcpb symvault_0.23.3-next_linux_arm64.mcpb exists",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.mcpb: manifest.json",
+      "ok": true,
+      "detail": "{'manifest_version': '0.3', 'name': 'symvault', 'version': '0.23.3-next', 'description': 'Secure password manager MCP server', 'author': {'name': 'danieljustus'}, 'server': {'type': 'binary', 'entry_point': 'server/symvault', 'mcp_config': {'command': '${__dirname}/server/symvault', 'args': ['serve', '--stdio']}}}"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.mcpb: server/symvault executable",
+      "ok": true,
+      "detail": "0o100755"
+    },
+    {
+      "check": "symvault_0.23.3-next_linux_arm64.mcpb: server binary == archive binary",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "sbom symaira-vault_0.23.3-next_darwin_arm64.tar.gz.sbom.json exists",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_darwin_arm64.tar.gz.sbom.json: CycloneDX with components",
+      "ok": true,
+      "detail": "specVersion=1.7 components=370"
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_darwin_arm64.tar.gz.sbom.json: lists the binary's Rust crates (age, clap, symvault-cli, symvault-core, zeroize)",
+      "ok": true,
+      "detail": "missing=[] crates=333"
+    },
+    {
+      "check": "sbom symaira-vault_0.23.3-next_linux_amd64.tar.gz.sbom.json exists",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_linux_amd64.tar.gz.sbom.json: CycloneDX with components",
+      "ok": true,
+      "detail": "specVersion=1.7 components=402"
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_linux_amd64.tar.gz.sbom.json: lists the binary's Rust crates (age, clap, symvault-cli, symvault-core, zeroize)",
+      "ok": true,
+      "detail": "missing=[] crates=366"
+    },
+    {
+      "check": "sbom symaira-vault_0.23.3-next_linux_arm64.tar.gz.sbom.json exists",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_linux_arm64.tar.gz.sbom.json: CycloneDX with components",
+      "ok": true,
+      "detail": "specVersion=1.7 components=401"
+    },
+    {
+      "check": "symaira-vault_0.23.3-next_linux_arm64.tar.gz.sbom.json: lists the binary's Rust crates (age, clap, symvault-cli, symvault-core, zeroize)",
+      "ok": true,
+      "detail": "missing=[] crates=365"
+    },
+    {
+      "check": "host is darwin/arm64 (native run possible)",
+      "ok": true,
+      "detail": "darwin/arm64"
+    },
+    {
+      "check": "darwin_arm64 `symvault version` (native) exit 0 + version",
+      "ok": true,
+      "detail": "rc=0 out='symvault 0.23.3-next' err=''"
+    },
+    {
+      "check": "darwin_arm64 init/set/get round trip (native, git on host)",
+      "ok": true,
+      "detail": "init=0 set=0 get=0 out_matches=True"
+    },
+    {
+      "check": "darwin_arm64 `init` without git fails with the clear message (native)",
+      "ok": true,
+      "detail": "rc=1 err='Error: cannot initialize git: git is required but was not found in PATH; install git and retry'"
+    },
+    {
+      "check": "linux_arm64 `symvault version` in ubuntu:24.04 [native-container (linux/arm64 on Apple silicon host)]",
+      "ok": true,
+      "detail": "rc=0 out='symvault 0.23.3-next' err=''"
+    },
+    {
+      "check": "linux_arm64 init/set/get round trip in alpine:3.21 with git [native-container (linux/arm64 on Apple silicon host)]",
+      "ok": true,
+      "detail": "rc=0 out_matches=True err=''"
+    },
+    {
+      "check": "linux_arm64 `init` without git fails with the clear message in alpine:3.21 [native-container (linux/arm64 on Apple silicon host)]",
+      "ok": true,
+      "detail": "rc=1 err='Error: cannot initialize git: git is required but was not found in PATH; install git and retry'"
+    },
+    {
+      "check": "linux_amd64 `symvault version` in ubuntu:24.04 [EMULATED (QEMU/Rosetta linux/amd64)]",
+      "ok": true,
+      "detail": "rc=0 out='symvault 0.23.3-next' err=''"
+    },
+    {
+      "check": "linux_amd64 init/set/get round trip in alpine:3.21 with git [EMULATED (QEMU/Rosetta linux/amd64)]",
+      "ok": true,
+      "detail": "rc=0 out_matches=True err=''"
+    },
+    {
+      "check": "linux_amd64 `init` without git fails with the clear message in alpine:3.21 [EMULATED (QEMU/Rosetta linux/amd64)]",
+      "ok": true,
+      "detail": "rc=1 err='Error: cannot initialize git: git is required but was not found in PATH; install git and retry'"
+    }
+  ],
+  "skipped": [],
+  "negative_controls": [
+    {
+      "control": "archive missing LICENSE",
+      "rejected": true,
+      "recomputes_checksums": false,
+      "first_failure": "symaira-vault_0.23.3-next_linux_amd64.tar.gz: members symvault, LICENSE, README.md, completions/symvault.bash, completions/symvault.zsh, completions/symvault.fish",
+      "failures": 2
+    },
+    {
+      "control": "archive missing completions/symvault.zsh",
+      "rejected": true,
+      "recomputes_checksums": false,
+      "first_failure": "symaira-vault_0.23.3-next_darwin_arm64.tar.gz: members symvault, LICENSE, README.md, completions/symvault.bash, completions/symvault.zsh, completions/symvault.fish",
+      "failures": 2
+    },
+    {
+      "control": "flipped byte in archive (checksum mismatch)",
+      "rejected": true,
+      "recomputes_checksums": false,
+      "first_failure": "all 12 checksum lines match files on disk",
+      "failures": 4
+    },
+    {
+      "control": "missing SBOM",
+      "rejected": true,
+      "recomputes_checksums": false,
+      "first_failure": "dist listing is exactly the 16 expected release files",
+      "failures": 3
+    },
+    {
+      "control": "missing deb package",
+      "rejected": true,
+      "recomputes_checksums": false,
+      "first_failure": "dist listing is exactly the 16 expected release files",
+      "failures": 3
+    },
+    {
+      "control": "missing MCPB bundle",
+      "rejected": true,
+      "recomputes_checksums": false,
+      "first_failure": "dist listing is exactly the 16 expected release files",
+      "failures": 2
+    },
+    {
+      "control": "extra archive for an unsupported platform",
+      "rejected": true,
+      "recomputes_checksums": false,
+      "first_failure": "archive set is exactly darwin_arm64+linux_amd64+linux_arm64",
+      "failures": 2
+    },
+    {
+      "control": "extra mcpb for an unsupported platform",
+      "rejected": true,
+      "recomputes_checksums": false,
+      "first_failure": "dist listing is exactly the 16 expected release files",
+      "failures": 1
+    },
+    {
+      "control": "extra deb for an unsupported platform",
+      "rejected": true,
+      "recomputes_checksums": false,
+      "first_failure": "dist listing is exactly the 16 expected release files",
+      "failures": 1
+    },
+    {
+      "control": "extra sbom for an unsupported platform",
+      "rejected": true,
+      "recomputes_checksums": false,
+      "first_failure": "dist listing is exactly the 16 expected release files",
+      "failures": 1
+    },
+    {
+      "control": "extra stray file",
+      "rejected": true,
+      "recomputes_checksums": false,
+      "first_failure": "dist listing is exactly the 16 expected release files",
+      "failures": 1
+    },
+    {
+      "control": "extra stray directory",
+      "rejected": true,
+      "recomputes_checksums": false,
+      "first_failure": "dist listing is exactly the 16 expected release files",
+      "failures": 1
+    },
+    {
+      "control": "checksum line for an unexpected file (file present, digest correct)",
+      "rejected": true,
+      "recomputes_checksums": false,
+      "first_failure": "dist listing is exactly the 16 expected release files",
+      "failures": 2
+    },
+    {
+      "control": "checksum line removed",
+      "rejected": true,
+      "recomputes_checksums": false,
+      "first_failure": "checksums list symaira-vault_0.23.3-next_linux_arm64.tar.gz",
+      "failures": 2
+    },
+    {
+      "control": "SBOM edited (symvault-cli component removed), checksums recomputed",
+      "rejected": true,
+      "recomputes_checksums": true,
+      "first_failure": "symaira-vault_0.23.3-next_linux_amd64.tar.gz.sbom.json: lists the binary's Rust crates (age, clap, symvault-cli, symvault-core, zeroize)",
+      "failures": 1
+    },
+    {
+      "control": "binary swapped inside an mcpb, checksums recomputed",
+      "rejected": true,
+      "recomputes_checksums": true,
+      "first_failure": "symvault_0.23.3-next_linux_amd64.mcpb: server binary == archive binary",
+      "failures": 1
+    },
+    {
+      "control": "binary swapped inside a deb, checksums recomputed",
+      "rejected": true,
+      "recomputes_checksums": true,
+      "first_failure": "symvault_0.23.3-next_linux_amd64.deb: packaged binary == archive binary",
+      "failures": 1
+    }
+  ],
+  "status": "pass",
+  "ok": true
+}

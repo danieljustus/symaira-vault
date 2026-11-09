@@ -1,0 +1,209 @@
+package main
+
+// ADR 0037 R9 (PLATFORM-001): scripted answers to the prompts of Go's
+// resolveConfig (internal/cli/unlock.go -> InteractiveFixConfig) for the
+// vault-opening commands. Detached oracle program: run it from a worktree of
+// the tag legacy/go-oracle with
+//
+//	R9_GO_BINARY=<oracle symvault> R9_SEED=<error-taxonomy.json with vault_seed> \
+//	R9_OUT=<observation.json> go test ./scripts/rust-port/cmd/errtaxgen -run TestR9ConfigPromptAnswers
+//
+// The vault is the frozen Go-made tree of error-taxonomy.json (vault_seed) with
+// an invalid clipboard.auto_clear_duration appended to config.yaml; stdin is the
+// scripted answer; SYMVAULT_PASSPHRASE opts in so a repaired configuration
+// opens the vault and the command body runs.
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+)
+
+type r9Command struct {
+	Name string
+	Args []string
+	// BodyRuns marks the commands that are recorded with the answers that let
+	// the command body run ("y" answers). Commands with side effects outside the
+	// sandbox (desktop notifications, listeners, a TUI), random output
+	// (generate --store) or a body that is outside this residual (add on a
+	// non-terminal stdin: Go prompts line by line, Rust refuses) are recorded
+	// with the declining answers only.
+	BodyRuns bool
+	Files    map[string]string
+}
+
+var r9Commands = []r9Command{
+	{"find", []string{"find", "x"}, true, nil},
+	{"add", []string{"add", "x"}, false, nil},
+	{"delete", []string{"delete", "x"}, true, nil},
+	{"edit", []string{"edit", "x"}, true, nil},
+	{"set_value", []string{"set", "x", "--value", "v", "--force"}, true, nil},
+	{"recipients_add", []string{"recipients", "add", "x"}, true, nil},
+	{"recipients_remove", []string{"recipients", "remove", "x"}, true, nil},
+	{"run", []string{"run", "--", "x"}, true, nil},
+	{"file_use", []string{"file", "use", seedFileEntry, "x"}, true, nil},
+	{"file_get", []string{"file", "get", seedFileEntry, "--out", "o"}, true, nil},
+	{"file_add", []string{"file", "add", "x", "--field", "f", "--from", importSourceFile}, true, importSourceFiles},
+	{"import_review_list", []string{"import", "review", "list"}, true, nil},
+	{"import_review_promote", []string{"import", "review", "promote", "x"}, true, nil},
+	{"export_csv_yes", []string{"export", "--format", "csv", "--yes"}, true, nil},
+	{"git_log", []string{"git", "log"}, true, nil},
+	{"template_generate", []string{"template", "generate", "--type", "env"}, true, nil},
+	{"device_revoke", []string{"device", "revoke", "x"}, true, nil},
+	{"intake_file", []string{"intake", intakeSourceFile}, false, intakeFileFiles},
+	{"intake_dir", []string{"intake", intakeSourceDir}, false, intakeStageFiles},
+	{"broker", []string{"broker"}, false, nil},
+	{"ui", []string{"ui"}, false, nil},
+	{"mcp_serve_http", []string{"mcp", "serve"}, false, nil},
+	{"generate_store", []string{"generate", "--store", "x"}, false, nil},
+}
+
+// r9Answers are the stdin scripts. They are plain bytes: Go reads one line per
+// prompt through a fresh bufio.Reader over os.Stdin.
+var r9Answers = []struct {
+	Name     string
+	Stdin    string
+	BodyRuns bool // the script contains an accepted fix
+}{
+	{"eof", "", false},
+	{"n", "n\n", false},
+	{"n_n", "n\nn\n", false},
+	{"empty_line_n", "\nn\n", false},
+	{"word_n", "no\nno\n", false},
+	{"y", "y\n", true},
+	{"upper_y", "Y\n", true},
+	{"padded_y", "  y  \n", true},
+	{"yes_word", "yes\nyes\n", false},
+	{"n_then_y", "n\ny\n", false},
+	{"y_without_newline", "y", true},
+}
+
+type r9Observation struct {
+	Name        string            `json:"name"`
+	Args        []string          `json:"args"`
+	Stdin       string            `json:"stdin"`
+	Files       map[string]string `json:"files,omitempty"`
+	ExitCode    int               `json:"exit_code"`
+	Stdout      string            `json:"stdout"`
+	Stderr      string            `json:"stderr"`
+	ConfigAfter string            `json:"-"`
+	ConfigID    int               `json:"config_after_id"`
+	TimedOut    bool              `json:"timed_out,omitempty"`
+}
+
+func r9Run(t *testing.T, binary string, seed []seedFile, c r9Command, stdin string) r9Observation {
+	t.Helper()
+	box, err := newSandbox()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(box.root) }()
+	// Only the system directories: nothing of the developer's PATH is visible
+	// and no stand-in is needed (no scenario reaches a service manager).
+	for i, e := range box.env {
+		if strings.HasPrefix(e, "PATH=") {
+			box.env[i] = "PATH=/usr/bin:/bin"
+		}
+	}
+	editor := filepath.Join(box.root, "editor.sh")
+	if err := os.WriteFile(editor, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	box.env = append(box.env, initializedEnv()...)
+	box.env = append(box.env, "EDITOR="+editor)
+	if err := box.writeSeed(withConfigSuffix(seed, clipboardInvalidConfigSuffix)); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range c.Files {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(box.root, name)), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(box.root, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, c.Args...)
+	cmd.Dir = box.root
+	cmd.Env = box.env
+	cmd.WaitDelay = time.Second
+	cmd.Stdin = strings.NewReader(stdin)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	runErr := cmd.Run()
+	obs := r9Observation{Name: c.Name, Args: c.Args, Stdin: stdin, Files: c.Files}
+	if ctx.Err() != nil {
+		obs.TimedOut = true
+		obs.ExitCode = -1
+	} else if runErr != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(runErr, &exitErr) {
+			t.Fatal(runErr)
+		}
+		obs.ExitCode = exitErr.ExitCode()
+	}
+	obs.Stdout = box.normalize(stdout.String())
+	obs.Stderr = box.normalize(stderr.String())
+	for _, f := range seed {
+		if f.Kind == "file" && strings.HasSuffix(f.Path, "/config.yaml") {
+			raw, _ := os.ReadFile(filepath.Join(box.root, f.Path))
+			obs.ConfigAfter = box.normalize(string(raw))
+		}
+	}
+	return obs
+}
+
+func TestR9ConfigPromptAnswers(t *testing.T) {
+	binary, seedPath, out := os.Getenv("R9_GO_BINARY"), os.Getenv("R9_SEED"), os.Getenv("R9_OUT")
+	if binary == "" || seedPath == "" || out == "" {
+		t.Skip("R9_GO_BINARY, R9_SEED and R9_OUT are required")
+	}
+	seed := existingSeed(seedPath)
+	if len(seed) == 0 {
+		t.Fatal("no vault_seed in " + seedPath)
+	}
+	var cases []r9Observation
+	var configs []string
+	configID := map[string]int{}
+	for _, c := range r9Commands {
+		for _, a := range r9Answers {
+			if a.BodyRuns && !c.BodyRuns {
+				continue
+			}
+			obs := r9Run(t, binary, seed, c, a.Stdin)
+			obs.Name = fmt.Sprintf("%s__%s", c.Name, a.Name)
+			id, ok := configID[obs.ConfigAfter]
+			if !ok {
+				id = len(configs)
+				configs = append(configs, obs.ConfigAfter)
+				configID[obs.ConfigAfter] = id
+			}
+			obs.ConfigID = id
+			cases = append(cases, obs)
+		}
+	}
+	doc := map[string]any{
+		"schema_version": 1,
+		"goos":           runtime.GOOS,
+		"goarch":         runtime.GOARCH,
+		"configs":        configs,
+		"cases":          cases,
+	}
+	raw, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(out, append(raw, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}

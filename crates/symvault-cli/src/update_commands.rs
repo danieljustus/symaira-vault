@@ -846,7 +846,12 @@ fn apply_stable_update(info: &InstallInfo, force: bool, want_json: bool) -> Exit
             return ExitCode::from(1);
         };
         if let Err(error) = update_apply::apply(release, &binary_path) {
-            let _ = writeln!(std::io::stderr(), "Error: apply update: {error}");
+            // Go wraps twice: `internal/update.Apply` ("apply update: %w") and
+            // the command ("apply update: %w").
+            let _ = writeln!(
+                std::io::stderr(),
+                "Error: apply update: apply update: {error}"
+            );
             return ExitCode::from(1);
         }
     }
@@ -1375,6 +1380,52 @@ mod http_tests {
         }
     }
 
+    /// CLI-005: a newer published release makes `update check` exit 10 in every
+    /// output mode, and an up-to-date or older one exits 0. Hermetic: the release
+    /// comes from a loopback fake server and nothing is cached.
+    #[test]
+    fn update_available_exits_10_and_up_to_date_exits_0() {
+        let release = |tag: &str| {
+            format!(
+                r#"{{"tag_name":"{tag}","html_url":"https://example.com/releases/{tag}","draft":false,"prerelease":false,"body":"","assets":[]}}"#
+            )
+        };
+        let check = |current: &str, tag: &str| {
+            let (url, server) = serve_once(
+                "200 OK",
+                "Content-Type: application/json\r\n",
+                release(tag).as_bytes(),
+            );
+            let latest = fetch_latest_release_at(&url, current).expect("fetch fake release");
+            server.join().expect("fake release server");
+            let current = parse_stable_version(current).expect("stable current version");
+            result_from_latest_release(current, latest)
+                .expect("interpret fake release")
+                .0
+        };
+
+        let newer = check("1.0.0", "v1.2.0");
+        assert!(newer.update_available);
+        for (want_json, quiet) in [(false, false), (true, false), (false, true)] {
+            let output = render_check(&newer, want_json, quiet);
+            assert_eq!(
+                output.exit_code,
+                ExitCode::from(10),
+                "json={want_json} quiet={quiet}"
+            );
+            assert!(output.stderr.contains("Error: update available"));
+        }
+
+        for (current, tag) in [("1.2.0", "v1.2.0"), ("1.3.0", "v1.2.0")] {
+            let result = check(current, tag);
+            assert!(!result.update_available, "{current} vs {tag}");
+            let output = render_check(&result, false, false);
+            assert_eq!(output.exit_code, ExitCode::SUCCESS, "{current} vs {tag}");
+        }
+        assert_eq!(update_available_exit(true), ExitCode::from(10));
+        assert_eq!(update_available_exit(false), ExitCode::SUCCESS);
+    }
+
     #[test]
     fn release_http_rejects_non_github_redirects() {
         let (url, server) = serve_once(
@@ -1742,8 +1793,7 @@ fn detect_from_path(abs_path: &str) -> Option<&'static str> {
 }
 
 fn home_dir() -> Option<String> {
-    let name = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
-    std::env::var(name).ok().filter(|value| !value.is_empty())
+    std::env::var("HOME").ok().filter(|value| !value.is_empty())
 }
 
 /// Layer 3: Homebrew Cellar markers and dpkg receipt files.
@@ -1770,19 +1820,12 @@ fn detect_from_go_cache(abs_path: &str) -> Option<&'static str> {
     None
 }
 
-/// Layer 5: Windows never claims a writability fallback; elsewhere a
-/// user-writable parent directory means direct download.
-#[cfg(windows)]
-fn detect_from_writability(_abs_path: &str) -> &'static str {
-    BUILD_FROM_SOURCE
-}
-
+/// Layer 5: a user-writable parent directory means direct download.
 #[cfg(unix)]
 fn detect_from_writability(abs_path: &str) -> &'static str {
     use std::os::unix::fs::MetadataExt;
-    // Platform-gated: `Path` is only used on unix (windows takes &str),
-    // so the import lives inside this cfg to keep -D unused-imports green
-    // on every target.
+    // Platform-gated: `Path` is only used by this unix-only function, so the
+    // import lives inside this cfg to keep -D unused-imports green.
     use std::path::Path;
 
     let dir = Path::new(abs_path)
@@ -1825,15 +1868,6 @@ mod tests {
         assert_eq!(
             detect_from_writability(&probe.to_string_lossy()),
             DIRECT_DOWNLOAD
-        );
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn writability_is_build_from_source_on_windows() {
-        assert_eq!(
-            detect_from_writability("C:\\probe\\symvault"),
-            BUILD_FROM_SOURCE
         );
     }
 }

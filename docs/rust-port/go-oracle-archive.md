@@ -62,7 +62,8 @@ python3 scripts/rust-port/fixtures_verify.py --write   # then review `git diff -
 blobs they are recomputed from (`--generator-ref`, default tag
 `legacy/go-oracle`, else `HEAD`). Every pinned commit and that ref must be held
 by a branch or tag **before** any `git gc`; local `oracle/*` tags, `legacy/go-oracle`
-and `rust-port/local-history` are the holders.
+and `legacy/rust-port-history` are the holders (`rust-port/local-history` was the
+planned name; the tag created at the #1575 squash is `legacy/rust-port-history`).
 
 Negative controls (`python3 -B scripts/rust-port/test_fixtures_verify.py`): a
 flipped fixture byte, an unknown commit (even after a re-freeze), a deleted
@@ -73,11 +74,15 @@ exit 1.
 
 The Go backend, the generators and the tools that built them live at the tag
 `legacy/go-oracle`: the last pre-delete commit that contains every capture tool
-(integ8 plus the cap-proc merge). The annotated tag exists locally and points at
-`ce2390d7` (`chore(rust-port): freeze cap-proc observations in FROZEN.sha256`); the
-local-history tag `rust-port/local-history` marks the same line. The tag has not been
-pushed yet (the coordinator pushes it with the branch). The current tree replays what
-those tools recorded; it does not run them: since P40c-3 no script reads the old tree.
+(integ8 plus the cap-proc merge). The annotated tag points at `ce2390d7`
+(`chore(rust-port): freeze cap-proc observations in FROZEN.sha256`) and is pushed:
+`origin` holds `legacy/go-oracle` -> `ce2390d7`. The port history that the #1575
+squash removed from `main`'s ancestry is held by the pushed tag
+`legacy/rust-port-history` -> `69139e4d`, not by `rust-port/local-history` (that
+name was planned but never used; the squash commit is `a57f4cdf`). Closeout
+2026-11-08: the earlier sentence that the tag 'has not been pushed yet' is obsolete.
+The current tree replays what those tools recorded; it does not run them: since
+P40c-3 no script reads the old tree.
 
 ### Capture, attest and live-Go modes are gone (P40c-2, P40c-3)
 
@@ -213,6 +218,19 @@ digests of the overlaid oracle trees and the compiler adapter evidence (the reco
 step verdicts are replayed instead), and `validate_reference` (the corrected
 oracle's parent and changed-file set; `make oracle-reachability-check` keeps the pins
 reachable). Recapture = check out tag `legacy/go-oracle`.
+
+ADR 0037 R16 to R19 added four in-process recordings that need no process
+harness. Each generator is a `go test` file kept as `scripts/rust-port/*.go.txt`;
+copy it into the package named in its header at tag `legacy/go-oracle`, set the
+`R1x_OUT` / `R1x_ORACLE_COMMIT` variables its header lists and run the one test
+(`go1.26.6`; two captures are byte-identical):
+
+| Recording | Generator | Rust replay |
+|---|---|---|
+| `testdata/port/mcp/http-oauth-expiry.json` | `http_oauth_expiry_record.go.txt` (`internal/mcp/serverbootstrap`) | `oauth::expiry_replay`, `http::tests::access_token_expiry_matches_the_go_recording` |
+| `testdata/port/mcp/http-budget-combinations.json` | `http_budget_record.go.txt` (`internal/mcp/serverbootstrap`) | `crates/symvault-mcp/tests/http_budget_combinations.rs` |
+| `testdata/port/mcp/http-tls-lifecycle.json` | `http_tls_lifecycle_record.go.txt` (`internal/mcp/serverbootstrap`) | `crates/symvault-mcp/tests/http_tls_lifecycle.rs` |
+| `testdata/port/mcp/execute-api-diagnostics.json` | `execute_api_diagnostics_record.go.txt` (`internal/mcp/server`, `SYMVAULT_SECUREUI=none`) | `store_adapter::tests` (`r19_diagnostics_tests.rs`) |
 
 ## Go-free test replay: what the Rust tests replay, and what was retired
 

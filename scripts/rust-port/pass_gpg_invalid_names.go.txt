@@ -1,0 +1,192 @@
+//go:build linux
+
+package main
+
+// ADR 0037 R10 (IO-001): a pass store whose entry or directory name is not
+// valid UTF-8. Detached oracle program: run it on Linux (macOS refuses to
+// create such names, EILSEQ) from a worktree of the tag legacy/go-oracle:
+//
+//	R10_OUT=<observation.json> go test ./scripts/rust-port/cmd/passgpggen -run TestR10InvalidNames
+//
+// It reuses the generator's gpg environment, encryption and store
+// materialisation, drives the real importer.PassImporter with the system gpg
+// and records the raw bytes of every entry path, warning and error text.
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
+	"runtime/debug"
+	"strings"
+	"testing"
+
+	"github.com/danieljustus/symaira-vault/internal/importer"
+)
+
+type r10File struct {
+	PathB64       string `json:"path_b64"`
+	Kind          string `json:"kind"`
+	Mode          string `json:"mode,omitempty"`
+	ContentB64    string `json:"content_base64,omitempty"`
+	PlaintextB64  string `json:"plaintext_base64,omitempty"`
+	Decrypts      bool   `json:"decrypts,omitempty"`
+	PathLossyText string `json:"path_lossy"`
+}
+
+type r10Entry struct {
+	PathB64     string         `json:"path_b64"`
+	PathJSON    string         `json:"path_json"`
+	Data        map[string]any `json:"data"`
+	WarningsB64 []string       `json:"warnings_b64"`
+}
+
+type r10Case struct {
+	ID       string     `json:"id"`
+	Files    []r10File  `json:"files"`
+	Entries  []r10Entry `json:"entries"`
+	Failed   bool       `json:"failed"`
+	ErrorB64 string     `json:"error_b64,omitempty"`
+}
+
+func r10Cases() []genCase {
+	good := e("a-good.gpg", "good\n")
+	return []genCase{
+		{id: "invalid_name_entry", form: "plain", files: []genFile{good, e("bad\xff.gpg", "pw\nurl: https://example.invalid\n")}},
+		{id: "invalid_name_in_directory", form: "plain", files: []genFile{e("dir\xfe/leaf\xc3.gpg", "nested\n")}},
+		{id: "invalid_name_directory_only", form: "plain", files: []genFile{e("d\xff/ok.gpg", "inside\n")}},
+		{id: "invalid_name_decrypt_failure", form: "plain", files: []genFile{good, enc("bad\xff-foreign.gpg", "foreign", []byte("foreign\n"))}},
+		{id: "invalid_name_decrypt_failure_in_directory", form: "plain", files: []genFile{enc("d\xfe/x\xff.gpg", "foreign", []byte("foreign\n"))}},
+		{id: "invalid_names_collapse_in_json", form: "plain", files: []genFile{e("a\xfe.gpg", "one\n"), e("a\xff.gpg", "two\n")}},
+		{id: "invalid_name_plain_file_in_gpg", form: "plain", files: []genFile{raw("not-gpg\xff.gpg", "plain text\n")}},
+		{id: "invalid_name_not_gpg_ignored", form: "plain", files: []genFile{good, raw("note\xff.txt", "ignored\n")}},
+		{id: "invalid_name_overlong_sequence", form: "plain", files: []genFile{e("o\xc0\xaf.gpg", "overlong\n")}},
+		{id: "invalid_name_surrogate_encoding", form: "plain", files: []genFile{e("s\xed\xa0\x80.gpg", "surrogate\n")}},
+		{id: "invalid_name_truncated_sequence", form: "plain", files: []genFile{e("t\xe2\x82.gpg", "truncated\n")}},
+		{id: "valid_non_ascii_name", form: "plain", files: []genFile{e("caf\xc3\xa9/\xe2\x82\xac.gpg", "valid\n")}},
+	}
+}
+
+func mustJSON(t *testing.T, v any) string {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
+func TestR10InvalidNames(t *testing.T) {
+	out := os.Getenv("R10_OUT")
+	if out == "" {
+		t.Skip("R10_OUT is required")
+	}
+	env, err := newGPGEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer env.close()
+	cases, armor, err := encryptAll(env, r10Cases())
+	if err != nil {
+		t.Fatal(err)
+	}
+	version, err := gpgVersion()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := openSession(env, armor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.close()
+	evalAll := func() []r10Case {
+		var recorded []r10Case
+		for _, c := range cases {
+			if err := s.verifyPlaintexts(c); err != nil {
+				t.Fatal(err)
+			}
+			rc := r10Case{ID: c.ID}
+			for _, f := range c.Files {
+				rc.Files = append(rc.Files, r10File{
+					PathB64:       base64.StdEncoding.EncodeToString([]byte(f.Path)),
+					Kind:          f.Kind,
+					Mode:          f.Mode,
+					ContentB64:    f.ContentBase64,
+					PlaintextB64:  f.PlaintextBase64,
+					Decrypts:      f.Decrypts,
+					PathLossyText: strings.ToValidUTF8(f.Path, "\uFFFD"),
+				})
+			}
+			base, err := os.MkdirTemp(os.TempDir(), "r10-store-")
+			if err != nil {
+				t.Fatal(err)
+			}
+			store := filepath.Join(base, storeDirName)
+			if _, err := materialize(store, c.Files); err != nil {
+				t.Fatal(err)
+			}
+			parser, err := importer.New(importer.FormatPass)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f, err := os.Open(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			entries, perr := parser.Parse(f)
+			_ = f.Close()
+			if perr != nil {
+				rc.Failed = true
+				rc.ErrorB64 = base64.StdEncoding.EncodeToString([]byte(normalizeStore(perr.Error(), store)))
+			}
+			for _, item := range entries {
+				js, jerr := json.Marshal(item.Path)
+				if jerr != nil {
+					t.Fatal(jerr)
+				}
+				var pathJSON string
+				if jerr = json.Unmarshal(js, &pathJSON); jerr != nil {
+					t.Fatal(jerr)
+				}
+				re := r10Entry{PathB64: base64.StdEncoding.EncodeToString([]byte(item.Path)), PathJSON: pathJSON, Data: item.Data}
+				for _, w := range item.Warnings {
+					re.WarningsB64 = append(re.WarningsB64, base64.StdEncoding.EncodeToString([]byte(w)))
+				}
+				rc.Entries = append(rc.Entries, re)
+			}
+			_ = os.RemoveAll(base)
+			recorded = append(recorded, rc)
+		}
+		return recorded
+	}
+	recorded := evalAll()
+	// The recorded results must not depend on the run: evaluate twice.
+	if a, b := mustJSON(t, recorded), mustJSON(t, evalAll()); a != b {
+		t.Fatal("two evaluations of the same stores differ")
+	}
+	info, _ := debug.ReadBuildInfo()
+	settings := map[string]string{}
+	for _, st := range info.Settings {
+		settings[st.Key] = st.Value
+	}
+	doc := map[string]any{
+		"schema_version": 1,
+		"goos":           runtime.GOOS,
+		"goarch":         runtime.GOARCH,
+		"go_version":     runtime.Version(),
+		"gpg_version":    version,
+		"keyring": map[string]string{
+			"secret_key_armor": armor,
+			"agent_conf":       agentConf,
+		},
+		"cases": recorded,
+	}
+	raw, err := json.MarshalIndent(doc, "", " ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(out, append(raw, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}

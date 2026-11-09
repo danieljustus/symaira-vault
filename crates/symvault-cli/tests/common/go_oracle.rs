@@ -1386,12 +1386,6 @@ fn raw_status(code: Option<i32>, signal: Option<i32>) -> std::process::ExitStatu
             (None, None) => panic!("transcript response has neither exit code nor signal"),
         }
     }
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::ExitStatusExt;
-        let _ = signal;
-        std::process::ExitStatus::from_raw(code.expect("exit code") as u32)
-    }
 }
 
 fn status_parts(status: &std::process::ExitStatus) -> (Option<i32>, Option<i32>) {

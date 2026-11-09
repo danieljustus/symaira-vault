@@ -403,25 +403,27 @@ impl SystemHost {
                 ));
             }
         };
-        let mut command = Command::new(self.on_disk(&resolved));
+        let on_disk = self.on_disk(&resolved);
+        // Go's `fork/exec` returns ENOEXEC for a file that no kernel handler
+        // runs. libc's `execvp` (macOS, glibc) would instead hand such a file
+        // to /bin/sh, so a garbage or empty file would run as a shell script
+        // that receives the secret on stdin.
+        #[cfg(unix)]
+        if !looks_like_program(&on_disk) {
+            return Err(go_fork_exec_error(&resolved, "exec format error"));
+        }
+        let mut command = Command::new(on_disk);
         command.args(args);
         if let Some(cwd) = &self.cwd {
             command.current_dir(cwd);
         }
         command.env_clear();
         let base = self.base_env();
-        let mut passed: Vec<(String, String)> = base
+        let passed: Vec<(String, String)> = base
             .iter()
             .filter(|(key, _)| env.passes(key))
             .cloned()
             .collect();
-        if env == EnvPolicy::Whitelist {
-            let systemroot = base
-                .iter()
-                .find(|(k, _)| k.eq_ignore_ascii_case("SYSTEMROOT"))
-                .map(|(_, v)| v.clone());
-            add_critical_env(&mut passed, systemroot, cfg!(windows));
-        }
         command.envs(passed);
         command
             .stdin(Stdio::piped())
@@ -436,7 +438,9 @@ impl SystemHost {
             use std::os::unix::process::CommandExt;
             command.process_group(0);
         }
-        command.spawn().map_err(|error| error.to_string())
+        command
+            .spawn()
+            .map_err(|error| go_fork_exec_error(&resolved, &go_errno_text(&error)))
     }
 
     /// Drives a spawned tool to its end: writes `stdin` and reads stdout on
@@ -581,23 +585,6 @@ fn is_executable(path: &Path) -> bool {
     }
 }
 
-/// Go's `exec` re-adds `SYSTEMROOT` on Windows when `cmd.Env` is set without
-/// it (`addCriticalEnv`); the value is the host's, possibly empty.
-fn add_critical_env(
-    env: &mut Vec<(String, String)>,
-    host_systemroot: Option<String>,
-    windows: bool,
-) {
-    if !windows
-        || env
-            .iter()
-            .any(|(k, _)| k.eq_ignore_ascii_case("SYSTEMROOT"))
-    {
-        return;
-    }
-    env.push(("SYSTEMROOT".to_owned(), host_systemroot.unwrap_or_default()));
-}
-
 impl DesktopHost for SystemHost {
     fn env_var(&self, name: &str) -> Option<String> {
         match &self.env {
@@ -632,6 +619,51 @@ impl DesktopHost for SystemHost {
         let child = self.spawn_piped(program, args, false, env)?;
         self.drive(child, stdin, false, true)
     }
+}
+
+/// Whether the kernel can start `path` itself: a `#!` script, or an ELF,
+/// Mach-O or PE image. Anything else (including an empty file) is what Go's
+/// `fork/exec` reports as ENOEXEC. A file that cannot be read is left to the
+/// spawn so its own error is reported.
+#[cfg(unix)]
+fn looks_like_program(path: &Path) -> bool {
+    let mut head = [0_u8; 4];
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return true;
+    };
+    let mut filled = 0;
+    while filled < head.len() {
+        match file.read(&mut head[filled..]) {
+            Ok(0) => break,
+            Ok(n) => filled += n,
+            Err(_) => return true,
+        }
+    }
+    let head = &head[..filled];
+    head.starts_with(b"#!")
+        || head.starts_with(b"\x7fELF")
+        || head.starts_with(b"MZ")
+        || matches!(
+            head,
+            [0xfe, 0xed, 0xfa, 0xce | 0xcf]
+                | [0xce | 0xcf, 0xfa, 0xed, 0xfe]
+                | [0xca, 0xfe, 0xba, 0xbe | 0xbf]
+                | [0xbe | 0xbf, 0xba, 0xfe, 0xca]
+        )
+}
+
+/// Go's `*os.SyscallError`-free start failure of `exec.Cmd.Start`:
+/// `fork/exec <path>: <errno text>`.
+fn go_fork_exec_error(path: &Path, errno_text: &str) -> String {
+    format!("fork/exec {}: {errno_text}", path.display())
+}
+
+/// `syscall.Errno.Error()` for a failed start: the lowercase C library
+/// message without Rust's ` (os error N)` suffix.
+fn go_errno_text(error: &std::io::Error) -> String {
+    let text = error.to_string();
+    let text = text.split(" (os error").next().unwrap_or(&text);
+    text.to_lowercase()
 }
 
 /// Go's `*os.PathError` text for a failed write to the pipe `os.Pipe` made for
@@ -1124,23 +1156,6 @@ mod tests {
         let calls = host.calls.lock().unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].3, EnvPolicy::Whitelist);
-    }
-
-    #[test]
-    fn critical_env_readds_systemroot_only_on_windows_when_absent() {
-        let mut env = vec![("PATH".to_owned(), "x".to_owned())];
-        add_critical_env(&mut env, Some("C:\\Windows".to_owned()), false);
-        assert_eq!(env.len(), 1, "non-Windows must not add anything");
-        add_critical_env(&mut env, Some("C:\\Windows".to_owned()), true);
-        assert_eq!(env[1], ("SYSTEMROOT".to_owned(), "C:\\Windows".to_owned()));
-        add_critical_env(&mut env, Some("other".to_owned()), true);
-        assert_eq!(env.len(), 2, "already present");
-        let mut lower = vec![("SystemRoot".to_owned(), "a".to_owned())];
-        add_critical_env(&mut lower, None, true);
-        assert_eq!(lower.len(), 1, "case-insensitive match like Go EqualFold");
-        let mut empty = Vec::new();
-        add_critical_env(&mut empty, None, true);
-        assert_eq!(empty, [("SYSTEMROOT".to_owned(), String::new())]);
     }
 
     #[test]

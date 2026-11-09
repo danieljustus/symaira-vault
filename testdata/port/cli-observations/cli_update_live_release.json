@@ -1,0 +1,322 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "ce2390d748818a4beb413e97183b7795efa99411",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "tests": {
+    "update_live_release_matches_go": {
+      "apply-current": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 0,
+        "stderr": "Symaira Vault is already up to date (1.0.0).\n",
+        "stdout": ""
+      },
+      "apply-current-json": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\n  \"method\": \"direct-download\",\n  \"old_version\": \"1.0.0\",\n  \"new_version\": \"1.0.0\",\n  \"binary_path\": \"<HOME>/bin/symvault\",\n  \"dry_run\": false\n}\n"
+      },
+      "apply-dry-run-nocache": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: check for updates: request latest release: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "apply-dry-run-update": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 0,
+        "stderr": "Update available: 1.0.0 -> 2.0.0 (use --dry-run to preview)\n",
+        "stdout": ""
+      },
+      "apply-dry-run-update-json": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\n  \"method\": \"\",\n  \"old_version\": \"1.0.0\",\n  \"new_version\": \"1.5.0\",\n  \"binary_path\": \"\",\n  \"dry_run\": true\n}\n"
+      },
+      "apply-force-over-fresh": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: check for updates: request latest release: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "apply-github-assets": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: apply update: updateapply: fetch checksums: request <ASSET>: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "apply-github-assets-json": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: apply update: updateapply: fetch checksums: request <ASSET>: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "apply-github-assets-upper": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: apply update: updateapply: fetch checksums: request <ASSET>: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "apply-no-assets": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: apply update: updateapply: no release asset matches darwin/arm64\n",
+        "stdout": ""
+      },
+      "apply-no-assets-json": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: apply update: updateapply: no release asset matches darwin/arm64\n",
+        "stdout": ""
+      },
+      "apply-no-checksums-asset": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: apply update: updateapply: fetch checksums: release has no checksums.txt asset\n",
+        "stdout": ""
+      },
+      "apply-nocache": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: check for updates: request latest release: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "apply-nocache-json": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: check for updates: request latest release: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "apply-older-release": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 0,
+        "stderr": "Symaira Vault is already up to date (1.0.0).\n",
+        "stdout": ""
+      },
+      "apply-only-checksums-asset": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: apply update: updateapply: no release asset matches darwin/arm64\n",
+        "stdout": ""
+      },
+      "apply-other-host": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: apply update: updateapply: fetch checksums: request <ASSET>: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "apply-served-checksums-404": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: apply update: updateapply: fetch checksums: download \"checksums.txt\": HTTP 404\n",
+        "stdout": ""
+      },
+      "apply-served-checksums-empty": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: apply update: updateapply: fetch checksums: checksums.txt contained no parseable entries\n",
+        "stdout": ""
+      },
+      "apply-served-checksums-garbage": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: apply update: updateapply: fetch checksums: checksums.txt contained no parseable entries\n",
+        "stdout": ""
+      },
+      "apply-served-checksums-ok": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: apply update: updateapply: fetch cosign signature: fetch cosign signature: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "apply-served-checksums-ok-json": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: apply update: updateapply: fetch cosign signature: fetch cosign signature: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "apply-served-checksums-redirect": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: apply update: updateapply: fetch checksums: request <ASSET>: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "apply-wrong-arch": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: apply update: updateapply: no release asset matches darwin/arm64\n",
+        "stdout": ""
+      },
+      "apply-wrong-os": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: apply update: apply update: updateapply: no release asset matches darwin/arm64\n",
+        "stdout": ""
+      },
+      "check-current": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 0,
+        "stderr": "Symaira Vault is up to date (1.0.0).\n",
+        "stdout": ""
+      },
+      "check-current-json": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\n  \"current_version\": \"1.0.0\",\n  \"latest_version\": \"1.0.0\",\n  \"checkable\": true,\n  \"update_available\": false\n}\n"
+      },
+      "check-force-over-fresh": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: check for updates: request latest release: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "check-next-major": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 10,
+        "stderr": "Update available: 1.0.0 -> 2.0.0\nDownload: https://github.com/danieljustus/symaira-vault/releases/tag/v2.0.0\nError: update available\n",
+        "stdout": ""
+      },
+      "check-nocache": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: check for updates: request latest release: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "check-nocache-json": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: check for updates: request latest release: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "check-nocache-output-json": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: check for updates: request latest release: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "check-nocache-quiet": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: check for updates: request latest release: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "check-older-release": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 0,
+        "stderr": "Symaira Vault is up to date (1.0.0).\n",
+        "stdout": ""
+      },
+      "check-prerelease-tag": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: check for updates: request latest release: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "check-stale": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 1,
+        "stderr": "Error: check for updates: request latest release: <TRANSPORT>\n",
+        "stdout": ""
+      },
+      "check-update": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 10,
+        "stderr": "Update available: 1.0.0 -> 1.5.0\nDownload: https://github.com/danieljustus/symaira-vault/releases/tag/v1.5.0\nError: update available\n",
+        "stdout": ""
+      },
+      "check-update-json": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 10,
+        "stderr": "Error: update available\n",
+        "stdout": "{\n  \"current_version\": \"1.0.0\",\n  \"latest_version\": \"1.5.0\",\n  \"release_url\": \"https://github.com/danieljustus/symaira-vault/releases/tag/v1.5.0\",\n  \"checkable\": true,\n  \"update_available\": true\n}\n"
+      },
+      "check-update-output-json": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 10,
+        "stderr": "Error: update available\n",
+        "stdout": "{\n  \"current_version\": \"1.0.0\",\n  \"latest_version\": \"1.5.0\",\n  \"release_url\": \"https://github.com/danieljustus/symaira-vault/releases/tag/v1.5.0\",\n  \"checkable\": true,\n  \"update_available\": true\n}\n"
+      },
+      "check-update-quiet": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 10,
+        "stderr": "Error: update available\n",
+        "stdout": ""
+      },
+      "info-cached": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 0,
+        "stderr": "Installation method: direct-download\nBinary path: <HOME>/bin/symvault\nSelf-update: supported\nGuidance: Re-run the quick install script: curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh\n",
+        "stdout": ""
+      },
+      "info-json-nocache": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\n  \"method\": \"direct-download\",\n  \"binary_path\": \"<HOME>/bin/symvault\",\n  \"self_update_supported\": true,\n  \"guidance\": \"Re-run the quick install script: curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh\"\n}\n"
+      },
+      "info-nocache": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 0,
+        "stderr": "Installation method: direct-download\nBinary path: <HOME>/bin/symvault\nSelf-update: supported\nGuidance: Re-run the quick install script: curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh\n",
+        "stdout": ""
+      },
+      "info-output-json-cached": {
+        "binary_unchanged": true,
+        "cache_unchanged": true,
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\n  \"method\": \"direct-download\",\n  \"binary_path\": \"<HOME>/bin/symvault\",\n  \"self_update_supported\": true,\n  \"guidance\": \"Re-run the quick install script: curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh\"\n}\n"
+      }
+    }
+  }
+}

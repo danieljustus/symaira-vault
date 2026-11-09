@@ -1,6 +1,5 @@
 use std::{
     io,
-    ops::Not as _,
     path::{Component, Path, PathBuf},
 };
 
@@ -50,11 +49,7 @@ fn write_pages(output_dir: &Path, date: &str, history_date: &str) -> io::Result<
 /// still read from.
 fn default_config_path() -> PathBuf {
     let value = |name: &str| std::env::var(name).unwrap_or_default();
-    let home = if cfg!(windows) && value("USERPROFILE").is_empty().not() {
-        value("USERPROFILE")
-    } else {
-        value("HOME")
-    };
+    let home = value("HOME");
     symvault_core::config::resolve_paths(&symvault_core::config::PathEnvironment {
         home,
         xdg_config_home: value("XDG_CONFIG_HOME"),

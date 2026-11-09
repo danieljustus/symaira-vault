@@ -2,10 +2,7 @@
 
 use std::{io, path::Path};
 
-#[cfg(any(
-    test,
-    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
-))]
+#[cfg(any(test, not(any(target_os = "macos", target_os = "linux"))))]
 use std::fs;
 
 use symvault_core::session::Keyring;
@@ -14,18 +11,12 @@ use zeroize::Zeroizing;
 
 const KEYRING_SERVICE: &str = "symaira";
 const KEYRING_ACCOUNT_PREFIX: &str = "grant-signing-key:";
-#[cfg(any(
-    test,
-    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
-))]
+#[cfg(any(test, not(any(target_os = "macos", target_os = "linux"))))]
 const KEY_FILE_NAME: &str = "grant-signing-key";
 const KEY_BYTES: usize = 32;
 #[cfg(test)]
 const KEY_HEX_BYTES: usize = KEY_BYTES * 2;
-#[cfg(any(
-    test,
-    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
-))]
+#[cfg(any(test, not(any(target_os = "macos", target_os = "linux"))))]
 const AGE_HEADER: &[u8] = b"age-encryption.org/";
 
 /// Returns the keyring address used by Go's grant-sharing server.
@@ -49,7 +40,7 @@ pub fn grant_keyring_address(directory: &Path) -> io::Result<String> {
 
 /// Loads or creates the 32-byte grant HMAC key.
 ///
-/// On darwin, linux, and windows, persistence is delegated to the supplied
+/// On darwin and linux, persistence is delegated to the supplied
 /// keyring. The caller may provide the process-local fallback adapter used by
 /// the platform layer. Other targets use Go's encrypted file fallback.
 pub fn load_or_create_grant_signing_key(
@@ -64,13 +55,13 @@ pub fn load_or_create_grant_signing_key(
         ));
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = keyring;
         return load_or_create_file_key(directory, _identity);
     }
 
-    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         let address = grant_keyring_address(directory)?;
         if let Ok(encoded) = keyring.get(&address) {
@@ -136,10 +127,7 @@ fn hex_digit(byte: u8) -> Option<u8> {
     }
 }
 
-#[cfg(any(
-    test,
-    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
-))]
+#[cfg(any(test, not(any(target_os = "macos", target_os = "linux"))))]
 fn load_or_create_file_key(
     directory: &Path,
     identity: Option<&Identity>,
@@ -193,40 +181,25 @@ fn load_or_create_file_key(
     }
 }
 
-#[cfg(all(
-    unix,
-    any(
-        test,
-        not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
-    )
-))]
+#[cfg(all(unix, any(test, not(any(target_os = "macos", target_os = "linux")))))]
 fn read_file_key(root_cap: &fs::File, path: &Path) -> io::Result<Vec<u8>> {
     crate::rooted::read(root_cap, Path::new(KEY_FILE_NAME), path).map_err(store_error_to_io)
 }
 
 #[cfg(all(
     not(unix),
-    any(
-        test,
-        not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
-    )
+    any(test, not(any(target_os = "macos", target_os = "linux")))
 ))]
 fn read_file_key(_root_cap: &fs::File, path: &Path) -> io::Result<Vec<u8>> {
     crate::read_regular(path).map_err(store_error_to_io)
 }
 
-#[cfg(any(
-    test,
-    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
-))]
+#[cfg(any(test, not(any(target_os = "macos", target_os = "linux"))))]
 fn write_file_key(root_cap: &fs::File, path: &Path, bytes: &[u8]) -> io::Result<()> {
     crate::publication::replace(path, bytes, root_cap).map_err(store_error_to_io)
 }
 
-#[cfg(any(
-    test,
-    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
-))]
+#[cfg(any(test, not(any(target_os = "macos", target_os = "linux"))))]
 fn store_error_to_io(error: crate::StoreError) -> io::Error {
     match error {
         crate::StoreError::Read { source, .. } | crate::StoreError::Write { source, .. } => source,
@@ -246,10 +219,7 @@ fn store_error_to_io(error: crate::StoreError) -> io::Error {
     }
 }
 
-#[cfg(any(
-    test,
-    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
-))]
+#[cfg(any(test, not(any(target_os = "macos", target_os = "linux"))))]
 fn encrypt_file_key(bytes: &[u8], identity: Option<&Identity>) -> io::Result<Zeroizing<Vec<u8>>> {
     let Some(identity) = identity else {
         return Ok(Zeroizing::new(bytes.to_vec()));

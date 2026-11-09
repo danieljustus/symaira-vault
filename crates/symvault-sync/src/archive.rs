@@ -388,15 +388,10 @@ fn go_safe_mkdir_all(path: &Path, mode: u32) -> Result<(), (PathBuf, String)> {
     Ok(())
 }
 
-/// Go's reason when a path component exists but is not a directory. Unix
-/// reports `syscall.ENOTDIR`; the Windows `SafeMkdirAll` (corekit
-/// `fsutil/safewrite_windows.go`) returns `errUnsafePath` instead.
+/// Go's reason when a path component exists but is not a directory: Unix
+/// reports `syscall.ENOTDIR`.
 const fn not_a_directory_reason() -> &'static str {
-    if cfg!(windows) {
-        "path is not a regular file"
-    } else {
-        "not a directory"
-    }
+    "not a directory"
 }
 
 fn make_dir(path: &Path, mode: u32) -> io::Result<()> {

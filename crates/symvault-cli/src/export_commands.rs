@@ -87,32 +87,7 @@ pub(crate) fn go_timestamp_seconds() -> String {
         .unwrap_or(value)
 }
 
-/// Parses Go's `field=column,field2=column2` mapping syntax.
-pub fn parse_mapping(value: &str) -> Result<BTreeMap<String, String>, String> {
-    if value.is_empty() {
-        return Ok(BTreeMap::new());
-    }
-    let mut mapping = BTreeMap::new();
-    for raw_pair in value.split(',') {
-        let pair = raw_pair.trim();
-        if pair.is_empty() {
-            continue;
-        }
-        let (field, column) = pair
-            .split_once('=')
-            .ok_or_else(|| format!("invalid mapping pair: {}", symvault_core::go_quote(pair)))?;
-        let field = field.trim();
-        let column = column.trim();
-        if field.is_empty() || column.is_empty() {
-            return Err(format!(
-                "empty field or column in mapping: {}",
-                symvault_core::go_quote(pair)
-            ));
-        }
-        mapping.insert(field.to_owned(), column.to_owned());
-    }
-    Ok(mapping)
-}
+pub use symvault_sync::importer::parse_mapping;
 
 /// Renders the same JSON or CSV byte contract as the sync exporter.
 ///

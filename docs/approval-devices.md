@@ -34,8 +34,11 @@ vault entries and never touches vault content.
 ## Pairing a phone
 
 ```bash
-# Server must already be running with TLS (the default):
-symvault mcp --bind 0.0.0.0 --port 8443
+# Server must already be running with TLS. Bind a concrete LAN IP -- wildcard
+# binds (0.0.0.0, ::) are refused. Find the Mac's Wi-Fi/Ethernet address first
+# (en0 is Wi-Fi on most Macs; try en1 if it prints nothing):
+LAN=$(ipconfig getifaddr en0)
+symvault mcp --bind "$LAN" --port 8443
 
 # In a separate terminal:
 symvault device approval-pair
@@ -44,6 +47,12 @@ symvault device approval-pair
 - `approval-pair` auto-detects a LAN IPv4 address to embed in the QR payload.
   If more than one is found, or the wrong one is picked, pass `--host
   <ip>` explicitly.
+- Off loopback the server requires TLS. With no TLS flags it generates and
+  reuses a self-signed vault certificate (the one whose fingerprint goes into
+  the QR code), so the command above is enough. To serve your own certificate
+  instead, add `--tls-cert <file> --tls-key <file>` (both are required
+  together); `--tls-ca <file>` additionally enables client-certificate (mTLS)
+  verification when `MCP.mtls_enabled` is set.
 - The server must be reachable from the phone's network. If it is bound to
   `127.0.0.1` (the default — see `--bind` on `symvault mcp`), `approval-pair`
   refuses with an actionable error instead of producing a QR code the phone
@@ -51,12 +60,12 @@ symvault device approval-pair
 
   ```text
   Error: 'symvault serve' is bound to 127.0.0.1 (loopback-only) — a phone on
-  the LAN cannot reach it. Restart the server with --bind 0.0.0.0 (all
-  interfaces) or --bind <lan-ip>, then run 'approval-pair' again
+  the LAN cannot reach it. Restart the server with --bind <lan-ip> (wildcard
+  binds such as 0.0.0.0 are refused), then run 'approval-pair' again
   ```
 
-  Restart the server with `--bind 0.0.0.0` (all interfaces) or `--bind
-  <lan-ip>` (a specific interface), then run `approval-pair` again.
+  Restart it with `--bind "$(ipconfig getifaddr en0)"` (the Mac's concrete LAN
+  IP), then run `approval-pair` again.
 
 ## Listing and revoking
 
@@ -107,9 +116,10 @@ vault entry. Don't confuse the two.
 
 ## LAN exposure implications
 
-Binding with `--bind 0.0.0.0` or a specific LAN IP does not expose only the
-approval endpoints — it exposes the **entire** MCP HTTP server to that
+Binding to a LAN IP (wildcard binds such as `0.0.0.0` are refused) does not
+expose only the approval endpoints — it exposes the **entire** MCP HTTP server to that
 network, including the bearer-authenticated `/mcp` endpoint. Only bind
 beyond loopback on a network you trust (e.g. a home LAN, not a shared
-coworking or conference network), and prefer a specific `--bind <lan-ip>`
-over `0.0.0.0` when the machine has more than one network interface.
+coworking or conference network). Because a concrete `--bind <lan-ip>` is
+mandatory, only the chosen interface is exposed, even when the machine has
+more than one network interface.

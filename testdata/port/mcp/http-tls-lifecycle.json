@@ -1,0 +1,217 @@
+{
+  "adr": "0037 R18 / HTTP-004",
+  "cases": [
+    {
+      "id": "tls/server-identity-initial",
+      "stage": "response",
+      "outcome": "status:200",
+      "detail": {
+        "server_identity": "server-a",
+        "tls_version": "TLS 1.3"
+      }
+    },
+    {
+      "id": "tls/server-identity-new-handshake-after-files-replaced",
+      "stage": "response",
+      "outcome": "status:200",
+      "detail": {
+        "server_identity": "server-a",
+        "tls_version": "TLS 1.3"
+      }
+    },
+    {
+      "id": "tls/server-identity-established-connection-after-files-replaced",
+      "stage": "response",
+      "outcome": "status:200"
+    },
+    {
+      "id": "tls/server-identity-after-restart",
+      "stage": "response",
+      "outcome": "status:200",
+      "detail": {
+        "server_identity": "server-b",
+        "tls_version": "TLS 1.3"
+      }
+    },
+    {
+      "id": "tls/server-identity-mismatched-pair-on-restart",
+      "stage": "startup",
+      "outcome": "error",
+      "detail": {
+        "go_error": "tls: private key does not match public key"
+      }
+    },
+    {
+      "id": "mtls/server-identity-initial",
+      "stage": "response",
+      "outcome": "status:200",
+      "detail": {
+        "server_identity": "server-a",
+        "tls_version": "TLS 1.3"
+      }
+    },
+    {
+      "id": "mtls/server-identity-new-handshake-after-files-replaced",
+      "stage": "response",
+      "outcome": "status:200",
+      "detail": {
+        "server_identity": "server-a",
+        "tls_version": "TLS 1.3"
+      }
+    },
+    {
+      "id": "mtls/server-identity-established-connection-after-files-replaced",
+      "stage": "response",
+      "outcome": "status:200"
+    },
+    {
+      "id": "mtls/server-identity-after-restart",
+      "stage": "response",
+      "outcome": "status:200",
+      "detail": {
+        "server_identity": "server-b",
+        "tls_version": "TLS 1.3"
+      }
+    },
+    {
+      "id": "mtls/server-identity-mismatched-pair-on-restart",
+      "stage": "startup",
+      "outcome": "error",
+      "detail": {
+        "go_error": "load server TLS key pair failed"
+      }
+    },
+    {
+      "id": "mtls/client-valid",
+      "stage": "response",
+      "outcome": "status:200",
+      "detail": {
+        "server_identity": "server-a",
+        "tls_version": "TLS 1.3"
+      }
+    },
+    {
+      "id": "mtls/client-none",
+      "stage": "first-read",
+      "outcome": "alert:certificate required",
+      "detail": {
+        "server_identity": "server-a",
+        "tls_version": "TLS 1.3"
+      }
+    },
+    {
+      "id": "mtls/client-none-tls12",
+      "stage": "handshake",
+      "outcome": "alert:handshake failure"
+    },
+    {
+      "id": "mtls/client-expired",
+      "stage": "first-read",
+      "outcome": "alert:expired certificate",
+      "detail": {
+        "server_identity": "server-a",
+        "tls_version": "TLS 1.3"
+      }
+    },
+    {
+      "id": "mtls/client-expired-tls12",
+      "stage": "handshake",
+      "outcome": "alert:expired certificate"
+    },
+    {
+      "id": "mtls/client-not-yet-valid",
+      "stage": "first-read",
+      "outcome": "alert:expired certificate",
+      "detail": {
+        "server_identity": "server-a",
+        "tls_version": "TLS 1.3"
+      }
+    },
+    {
+      "id": "mtls/client-unknown-ca",
+      "stage": "first-read",
+      "outcome": "alert:unknown certificate authority",
+      "detail": {
+        "server_identity": "server-a",
+        "tls_version": "TLS 1.3"
+      }
+    },
+    {
+      "id": "mtls/client-unknown-ca-tls12",
+      "stage": "handshake",
+      "outcome": "alert:unknown certificate authority"
+    },
+    {
+      "id": "mtls/client-expiring-in-3s-before-expiry",
+      "stage": "response",
+      "outcome": "status:200",
+      "detail": {
+        "server_identity": "server-a",
+        "tls_version": "TLS 1.3"
+      }
+    },
+    {
+      "id": "mtls/client-ca-file-replaced-old-client-new-handshake",
+      "stage": "response",
+      "outcome": "status:200",
+      "detail": {
+        "server_identity": "server-a",
+        "tls_version": "TLS 1.3"
+      }
+    },
+    {
+      "id": "mtls/client-ca-file-replaced-new-client-new-handshake",
+      "stage": "first-read",
+      "outcome": "alert:unknown certificate authority",
+      "detail": {
+        "server_identity": "server-a",
+        "tls_version": "TLS 1.3"
+      }
+    },
+    {
+      "id": "mtls/client-ca-file-replaced-old-client-established-connection",
+      "stage": "response",
+      "outcome": "status:200"
+    },
+    {
+      "id": "mtls/client-expiring-in-3s-established-connection-after-expiry",
+      "stage": "response",
+      "outcome": "status:200"
+    },
+    {
+      "id": "mtls/client-expiring-in-3s-new-handshake-after-expiry",
+      "stage": "first-read",
+      "outcome": "alert:expired certificate",
+      "detail": {
+        "server_identity": "server-a",
+        "tls_version": "TLS 1.3"
+      }
+    },
+    {
+      "id": "mtls/after-restart-old-client",
+      "stage": "first-read",
+      "outcome": "alert:unknown certificate authority",
+      "detail": {
+        "server_identity": "server-a",
+        "tls_version": "TLS 1.3"
+      }
+    },
+    {
+      "id": "mtls/after-restart-new-client",
+      "stage": "response",
+      "outcome": "status:200",
+      "detail": {
+        "server_identity": "server-a",
+        "tls_version": "TLS 1.3"
+      }
+    }
+  ],
+  "notes": [
+    "alert texts are Go crypto/tls descriptions of the peer alert (remote error: tls: \u003ctext\u003e)",
+    "stage: handshake = tls.Dial failed; first-read = TLS 1.3 client saw the server's rejection only on its first read; response = HTTP status",
+    "no CRL/OCSP option exists: revocation is only expressible by replacing the client CA file and restarting"
+  ],
+  "oracle_commit": "ce2390d748818a4beb413e97183b7795efa99411",
+  "schema": "symvault.port.http-tls-lifecycle/1",
+  "source": "legacy/go-oracle internal/mcp/serverbootstrap/http.go (RunHTTPServerOnListener, tls.LoadX509KeyPair and ClientCAs read once)"
+}

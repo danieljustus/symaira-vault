@@ -37,11 +37,7 @@ fn apply_with_validator(
     if release.tag_name.trim().is_empty() {
         return Err("updateapply: release tag is empty".into());
     }
-    let binary_name = if cfg!(windows) {
-        "symvault.exe"
-    } else {
-        "symvault"
-    };
+    let binary_name = "symvault";
     let asset = select_asset(
         &release.assets,
         std::env::consts::OS,
@@ -51,7 +47,9 @@ fn apply_with_validator(
         .assets
         .iter()
         .find(|item| item.name.to_ascii_lowercase().contains("checksums"))
-        .ok_or_else(|| "updateapply: release has no checksums.txt asset".to_owned())?;
+        .ok_or_else(|| {
+            "updateapply: fetch checksums: release has no checksums.txt asset".to_owned()
+        })?;
 
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(15 * 60))
@@ -83,6 +81,7 @@ fn apply_with_validator(
     let signature = download_named(
         &client,
         "Cosign signature",
+        "fetch cosign signature",
         &signature_url,
         MAX_COSIGN_BYTES,
     )
@@ -90,6 +89,7 @@ fn apply_with_validator(
     let certificate = download_named(
         &client,
         "Cosign certificate",
+        "fetch cosign certificate",
         &certificate_url,
         MAX_COSIGN_BYTES,
     )
@@ -126,13 +126,6 @@ fn apply_with_validator(
                 target
             ));
         }
-    }
-    #[cfg(windows)]
-    if target_meta.permissions().readonly() {
-        return Err(format!(
-            "updateapply: target binary {:?} is not writable",
-            target
-        ));
     }
     let parent = target
         .parent()
@@ -224,22 +217,24 @@ fn download(
     url: &reqwest::Url,
     limit: u64,
 ) -> Result<Vec<u8>, String> {
-    download_named(client, &asset.name, url, limit)
+    // Go: `request asset: <transport error>`.
+    download_named(client, &asset.name, "request asset", url, limit)
 }
 
 fn download_named(
     client: &reqwest::blocking::Client,
     name: &str,
+    request_label: &str,
     url: &reqwest::Url,
     limit: u64,
 ) -> Result<Vec<u8>, String> {
     let mut response = client
         .get(url.clone())
         .send()
-        .map_err(|error| format!("updateapply: request {name:?}: {error}"))?;
+        .map_err(|error| format!("{request_label}: {error}"))?;
     if response.status() != reqwest::StatusCode::OK {
         return Err(format!(
-            "updateapply: download {name:?}: HTTP {}",
+            "download {name:?}: HTTP {}",
             response.status().as_u16()
         ));
     }
@@ -329,7 +324,7 @@ fn parse_checksums(bytes: &[u8]) -> Result<std::collections::HashMap<String, Str
         result.insert(name.to_owned(), sum.to_owned());
     }
     if result.is_empty() {
-        return Err("updateapply: checksums.txt contained no parseable entries".into());
+        return Err("checksums.txt contained no parseable entries".into());
     }
     Ok(result)
 }
@@ -388,13 +383,7 @@ fn verify_cosign_with(
 
 fn which_cosign() -> Result<PathBuf, String> {
     std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
-        .map(|directory| {
-            directory.join(if cfg!(windows) {
-                "cosign.exe"
-            } else {
-                "cosign"
-            })
-        })
+        .map(|directory| directory.join("cosign"))
         .find(|candidate| candidate.is_file())
         .ok_or_else(|| {
             "cosign CLI not found — install cosign from https://docs.sigstore.dev to verify release signatures: executable not found in PATH".into()
@@ -808,11 +797,7 @@ mod tests {
         let canonical_dir = fs::canonicalize(dir.path()).expect("resolve isolated install root");
         let install_dir = dir.path().join("install");
         fs::create_dir(&install_dir).expect("create isolated install directory");
-        let target = install_dir.join(if cfg!(windows) {
-            "symvault.exe"
-        } else {
-            "symvault"
-        });
+        let target = install_dir.join("symvault");
         fs::copy(&source, &target).expect("seed isolated install target");
         set_executable(&target).expect("make isolated target executable");
         assert!(
@@ -916,11 +901,7 @@ mod tests {
             fs::create_dir(home.join("gopath")).expect("create isolated GOPATH");
             fs::create_dir(home.join("gomodcache")).expect("create isolated Go module cache");
             fs::create_dir(&install).expect("create isolated install target directory");
-            let binary = install.join(if cfg!(windows) {
-                "symvault.exe"
-            } else {
-                "symvault"
-            });
+            let binary = install.join("symvault");
             fs::copy(source, &binary).expect("seed isolated install target");
             set_executable(&binary).expect("make isolated target executable");
             assert!(

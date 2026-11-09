@@ -200,24 +200,12 @@ fn config_inspect_cleans_read_paths_but_preserves_set_target() {
             assert_eq!(go_result.status.code(), rust_result.status.code());
             assert_eq!(go_result.stdout, rust_result.stdout);
             assert!(!go_result.status.success());
-            if cfg!(windows) {
-                // Windows resolves the rename, but Go rejects `..` on reload.
-                assert_ne!(go_file, original);
-                for result in [&go_result, &rust_result] {
-                    assert!(
-                        String::from_utf8_lossy(&result.stderr)
-                            .contains("config file path escapes expected directory"),
-                        "set must reject traversal after writing on Windows"
-                    );
-                }
-            } else {
-                assert_eq!(go_file, original);
-                for result in [&go_result, &rust_result] {
-                    assert!(
-                        String::from_utf8_lossy(&result.stderr).contains("cannot write config"),
-                        "set must fail at the write stage, not the read stage"
-                    );
-                }
+            assert_eq!(go_file, original);
+            for result in [&go_result, &rust_result] {
+                assert!(
+                    String::from_utf8_lossy(&result.stderr).contains("cannot write config"),
+                    "set must fail at the write stage, not the read stage"
+                );
             }
         } else {
             assert_same(

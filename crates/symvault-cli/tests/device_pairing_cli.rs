@@ -423,10 +423,7 @@ fn accept_refuses_non_directory_entries_root() {
     let output = vault.run(&["device", "accept", token]);
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr).to_lowercase();
-    assert!(
-        stderr.contains("not a directory") || (cfg!(windows) && stderr.contains("already exists")),
-        "{stderr}"
-    );
+    assert!(stderr.contains("not a directory"), "{stderr}");
 }
 
 #[test]

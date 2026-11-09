@@ -61,6 +61,8 @@ let package = Package(
             dependencies: ["SymvaultFFI"],
             path: "Sources/SymvaultIOS",
             exclude: [
+                // App-bundle resource (see project.yml); not a SwiftPM resource.
+                "PrivacyInfo.xcprivacy",
                 "ApprovalsListView.swift",
                 "EnrollView.swift",
                 "EntryDetailView.swift",

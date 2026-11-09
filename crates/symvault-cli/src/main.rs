@@ -86,7 +86,6 @@ use symvault_core::platform::TouchId;
 #[cfg(not(any(
     target_os = "macos",
     target_os = "linux",
-    target_os = "windows",
     target_os = "freebsd",
     target_os = "openbsd",
     target_os = "netbsd"
@@ -102,7 +101,6 @@ use symvault_platform::FallbackKeyring;
 #[cfg(any(
     target_os = "macos",
     target_os = "linux",
-    target_os = "windows",
     target_os = "freebsd",
     target_os = "openbsd",
     target_os = "netbsd"
@@ -616,7 +614,13 @@ enum Command {
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "check")]
         check: bool,
         /// Session duration override (for example, 30m or 1h).
-        #[arg(long, value_name = "DURATION", allow_hyphen_values = true)]
+        // pflag keeps the last of repeated duration flags (`--ttl 1m --ttl 2m`).
+        #[arg(
+            long,
+            value_name = "DURATION",
+            allow_hyphen_values = true,
+            overrides_with = "ttl"
+        )]
         ttl: Option<String>,
         #[command(flatten)]
         _ignored: IgnoredPositionals,
@@ -1112,8 +1116,9 @@ enum FileCommand {
         query: String,
         #[arg(long)]
         field: Option<String>,
+        /// Kept as text so `--out ""` reaches Go's "`--out` is required" check.
         #[arg(long)]
-        out: Option<PathBuf>,
+        out: Option<String>,
     },
     /// Run a command with an attachment materialized to a private temporary file.
     #[command(args_override_self = true)]
@@ -1567,7 +1572,21 @@ fn run_cli() -> ExitCode {
                         path: name.clone(),
                         editor: editor.unwrap_or_default(),
                     },
-                )?;
+                )
+                .map_err(|error| {
+                    if error.starts_with("entry not found: ") {
+                        // Go: `errorspkg.NotFound("entry not found: %s", name)`.
+                        reported(
+                            2,
+                            &format!("{error}: entry not found"),
+                            Some(
+                                "Try: symvault list to browse entries, or symvault find <term> to search by keyword.",
+                            ),
+                        )
+                    } else {
+                        error
+                    }
+                })?;
                 if !cli.quiet {
                     println!("Entry updated: {name}");
                 }
@@ -1973,6 +1992,12 @@ fn run_cli() -> ExitCode {
         }
         Some(Command::Approval { command }) => {
             let result = (|| {
+                // Go (`cmd/approval.go`, `newApprovalDecideCmd`) checks the flags before the vault.
+                if let ApprovalCommand::Decide { approve, deny, .. } = &command
+                    && approve == deny
+                {
+                    return Err("exactly one of --approve or --deny is required".to_owned());
+                }
                 let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                 require_initialized(&root)?;
                 let format = if cli.json {
@@ -2635,7 +2660,6 @@ fn run_cli() -> ExitCode {
             cli._profile.as_deref(),
             check,
             ttl.as_deref(),
-            cli.quiet,
         ),
         Some(Command::Auth { command }) => match command {
             AuthCommand::Status { .. } => run_auth_status(
@@ -3113,12 +3137,6 @@ fn run_doctor(
 fn cli_home_directory() -> Result<PathBuf, String> {
     std::env::var_os("HOME")
         .filter(|value| !value.is_empty())
-        .or_else(|| {
-            cfg!(windows)
-                .then(|| std::env::var_os("USERPROFILE"))
-                .flatten()
-                .filter(|value| !value.is_empty())
-        })
         .map(PathBuf::from)
         .ok_or_else(|| "cannot determine home directory".to_owned())
 }
@@ -3149,12 +3167,6 @@ fn run_profile(command: &ProfileCommand, vault: Option<&Path>, quiet: bool) -> E
     let result = (|| {
         let home = std::env::var_os("HOME")
             .filter(|value| !value.is_empty())
-            .or_else(|| {
-                cfg!(windows)
-                    .then(|| std::env::var_os("USERPROFILE"))
-                    .flatten()
-                    .filter(|value| !value.is_empty())
-            })
             .map(PathBuf::from)
             .ok_or_else(|| "cannot determine home directory".to_owned())?;
         let mut output = io::stdout().lock();
@@ -3192,11 +3204,6 @@ fn run_audit_export(
     let result = (|| {
         let home = std::env::var_os("HOME")
             .filter(|value| !value.is_empty())
-            .or_else(|| {
-                cfg!(windows)
-                    .then(|| std::env::var_os("USERPROFILE"))
-                    .flatten()
-            })
             .map(PathBuf::from)
             .ok_or_else(|| "cannot determine home directory".to_owned())?;
         let mut rendered = Vec::new();
@@ -3272,12 +3279,6 @@ fn run_audit(
     let result = (|| {
         let home = std::env::var_os("HOME")
             .filter(|value| !value.is_empty())
-            .or_else(|| {
-                cfg!(windows)
-                    .then(|| std::env::var_os("USERPROFILE"))
-                    .flatten()
-                    .filter(|value| !value.is_empty())
-            })
             .map(PathBuf::from)
             .ok_or_else(|| "cannot determine home directory".to_owned())?;
         let json = audit_json || output_format == Some("json");
@@ -3608,6 +3609,11 @@ fn run_file(
             ),
             _ => None,
         };
+        // Go (`cmd/file/get.go`, `runFileGet`) demands a non-empty `--out` before the vault.
+        if matches!(&command, FileCommand::Get { out, .. } if out.as_deref().is_none_or(str::is_empty))
+        {
+            return Err(reported(9, "--out is required", None));
+        }
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
@@ -3644,7 +3650,7 @@ fn run_file(
                 }
             }
             FileCommand::Get { query, field, out } => {
-                let output = out.ok_or_else(|| "--out is required".to_owned())?;
+                let output = PathBuf::from(out.ok_or_else(|| "--out is required".to_owned())?);
                 let result = file_commands::get(
                     &vault,
                     &identity,
@@ -3939,7 +3945,7 @@ fn run_get(
         let clock = symvault_platform::get_clipboard::RealClock::with_termination_signals();
         let environment = GetEnvironment {
             stdout_is_terminal: io::IsTerminal::is_terminal(&io::stdout()),
-            clipboard: clipboard.as_ref(),
+            clipboard: &clipboard,
             clock: &clock,
         };
         emit_get_result(
@@ -4042,7 +4048,7 @@ fn emit_exposure_audit(vault: &Path, path: &str, field: &str) {
 /// without a terminal, a desktop clipboard or sleeping.
 struct GetEnvironment<'a> {
     stdout_is_terminal: bool,
-    clipboard: &'a dyn symvault_platform::get_clipboard::TextClipboard,
+    clipboard: &'a std::sync::Arc<dyn symvault_platform::get_clipboard::TextClipboard>,
     clock: &'a dyn symvault_platform::get_clipboard::Clock,
 }
 
@@ -4117,9 +4123,11 @@ fn copy_get_field_to_clipboard(
     if destination == clip::GetDestination::Stdout {
         return Ok(false);
     }
-    let text = run_commands::format_go_value(value);
+    // The formatted text and `format_go_value`'s intermediates are wiped once the
+    // flow ends; the decoded `serde_json::Value` the caller passed in is not.
+    let text = Zeroizing::new(run_commands::format_go_value(value));
     let seconds = clip::auto_clear_seconds(section.map(|section| section.auto_clear_duration));
-    clip::copy_and_auto_clear(
+    clip::copy_and_auto_clear_shared(
         environment.clipboard,
         &text,
         seconds,
@@ -4489,14 +4497,19 @@ fn run_recipients(
             } => {
                 let identity = device::unlock_vault(&vault)?;
                 if !yes {
-                    eprint!("Remove recipient {recipient}? (y/N): ");
+                    // Go: `confirmInteractive("Remove recipient %s", false)` prints
+                    // "<prompt> (y/N): " and treats EOF with no answer as an error.
+                    eprint!("Remove recipient {recipient} (y/N): ");
                     io::stderr()
                         .flush()
                         .map_err(|error| format!("recipient confirmation prompt: {error}"))?;
                     let mut answer = String::new();
-                    io::stdin()
+                    let read = io::stdin()
                         .read_line(&mut answer)
-                        .map_err(|error| format!("recipient confirmation: {error}"))?;
+                        .map_err(|error| format!("read confirmation: {error}"))?;
+                    if read == 0 {
+                        return Err(reported(1, "read confirmation: EOF", None));
+                    }
                     if !answer.trim().eq_ignore_ascii_case("y") {
                         if !quiet {
                             eprintln!("Canceled");
@@ -5113,13 +5126,6 @@ fn service_config(warn: bool) -> Option<Config> {
 /// Renders an io error the way Go's `*os.PathError` does ("no such file or
 /// directory", "permission denied", ...).
 fn go_io_reason(error: &std::io::Error) -> String {
-    #[cfg(windows)]
-    match error.raw_os_error() {
-        Some(2) => return "The system cannot find the file specified.".to_owned(),
-        Some(3) => return "The system cannot find the path specified.".to_owned(),
-        Some(5) => return "Access is denied.".to_owned(),
-        _ => {}
-    }
     match error.kind() {
         std::io::ErrorKind::NotFound => "no such file or directory".to_owned(),
         std::io::ErrorKind::PermissionDenied => "permission denied".to_owned(),
@@ -5659,7 +5665,6 @@ fn run_unlock(
     profile: Option<&str>,
     check: bool,
     ttl_override: Option<&str>,
-    quiet: bool,
 ) -> ExitCode {
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
@@ -5673,9 +5678,9 @@ fn run_unlock(
             .flatten();
         if check {
             session_commands::check(&runtime.manager, &vault)?;
-            if !quiet {
-                eprintln!("Session active");
-            }
+            // Go writes this with `fmt.Fprintln(os.Stderr, ...)`: `--quiet` does not
+            // silence it (ADR 0037 R15 recording).
+            eprintln!("Session active");
             return Ok::<(), String>(());
         }
         // `UnlockVaultForSession` resolves the configuration first, like every open.
@@ -5725,9 +5730,15 @@ fn run_unlock(
                 "session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support".to_owned(),
             );
         }
-        if !quiet {
-            eprintln!("Vault unlocked (session TTL: {})", format_duration(ttl));
-        }
+        // Go prints `time.Duration.String()` through `cliout.Hintf`, which the
+        // `--quiet` flag does not reach: sub-second TTLs keep their fraction
+        // (`1.5s`, `999ms`, `1ns`) and the line stays under `--quiet`.
+        eprintln!(
+            "Vault unlocked (session TTL: {})",
+            symvault_core::config::go_duration_string(
+                i128::try_from(ttl.as_nanos()).unwrap_or(i128::MAX)
+            )
+        );
         Ok::<(), String>(())
     })();
     finish_session_result(result, true, 3)
@@ -5876,6 +5887,8 @@ fn run_auth_status(
     finish_session_result(result, false, 1)
 }
 
+const UNLOCK_LOCKED_HINT: &str = "Enable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.";
+
 fn finish_session_result(
     result: Result<(), String>,
     locked_error: bool,
@@ -5895,10 +5908,14 @@ fn finish_session_result(
                 // Cobra reports the ExitLocked error, then `ExecuteRoot` does and
                 // adds the `unlock` flavour of the locked hint.
                 print_error_like_go(&error);
-                let _ = writeln!(
-                    io::stderr(),
-                    "Enable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored."
-                );
+                let _ = writeln!(io::stderr(), "{UNLOCK_LOCKED_HINT}");
+                return ExitCode::from(4);
+            }
+            if locked_error && error == "no active session" {
+                // `unlock --check` without a session: the same ExitLocked CLIError,
+                // wrapping `ErrVaultLocked` (ADR 0037 R15 recording).
+                print_error_like_go("no active session: vault locked");
+                let _ = writeln!(io::stderr(), "{UNLOCK_LOCKED_HINT}");
                 return ExitCode::from(4);
             }
             if locked_error && error.starts_with("open vault: ") {
@@ -6119,20 +6136,6 @@ fn touch_id_available() -> bool {
     }
 }
 
-fn format_duration(duration: std::time::Duration) -> String {
-    let seconds = duration.as_secs();
-    let hours = seconds / 3600;
-    let minutes = (seconds % 3600) / 60;
-    let seconds = seconds % 60;
-    if hours > 0 {
-        format!("{hours}h{minutes}m{seconds}s")
-    } else if minutes > 0 {
-        format!("{minutes}m{seconds}s")
-    } else {
-        format!("{seconds}s")
-    }
-}
-
 /// Mirror cmd/policy.go: policy file arguments are taken verbatim; only a
 /// leading `~` is expanded, via `filepath.Join(home, path[1:])` in Go (which
 /// cleans the joined result). Unlike vault paths, plain policy arguments are
@@ -6142,17 +6145,13 @@ fn expand_policy_path(path: &Path) -> Result<PathBuf, String> {
         .to_str()
         .ok_or_else(|| "policy path must be UTF-8".to_owned())?;
     if let Some(rest) = raw.strip_prefix('~') {
-        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        let home = std::env::var_os("HOME")
             .filter(|value| !value.is_empty())
             .ok_or_else(|| "cannot determine home directory".to_owned())?;
         // Go's filepath.Join(home, path[1:]) keeps a separator-prefixed rest
         // under home; PathBuf::join would instead replace home. A backslash
-        // is a separator only on Windows, and a literal filename byte on Unix.
-        let rest = if cfg!(windows) {
-            rest.trim_start_matches(['/', '\\'])
-        } else {
-            rest.trim_start_matches('/')
-        };
+        // is a literal filename byte on Unix.
+        let rest = rest.trim_start_matches('/');
         return Ok(agent_list_commands::clean_path(
             &PathBuf::from(home).join(rest),
         ));
@@ -6165,7 +6164,7 @@ fn expand_vault_path(path: &Path) -> Result<PathBuf, String> {
         .to_str()
         .ok_or_else(|| "vault path must be UTF-8".to_owned())?;
     if raw == "~" || raw.starts_with("~/") {
-        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        let home = std::env::var_os("HOME")
             .filter(|value| !value.is_empty())
             .ok_or_else(|| "cannot determine home directory".to_owned())?;
         if raw == "~" {
@@ -6220,7 +6219,6 @@ fn runtime_session_manager() -> RuntimeSession {
     #[cfg(any(
         target_os = "macos",
         target_os = "linux",
-        target_os = "windows",
         target_os = "freebsd",
         target_os = "openbsd",
         target_os = "netbsd"
@@ -6238,7 +6236,6 @@ fn runtime_session_manager() -> RuntimeSession {
     #[cfg(not(any(
         target_os = "macos",
         target_os = "linux",
-        target_os = "windows",
         target_os = "freebsd",
         target_os = "openbsd",
         target_os = "netbsd"
@@ -6540,7 +6537,7 @@ mod get_clipboard_wiring_tests {
         result: Result<(), String>,
         stdout: String,
         stderr: String,
-        clipboard: FakeClipboard,
+        clipboard: std::sync::Arc<FakeClipboard>,
         clock: VirtualClock,
     }
 
@@ -6568,15 +6565,16 @@ mod get_clipboard_wiring_tests {
         terminal: bool,
         fail_copy: bool,
     ) -> Outcome {
-        let clipboard = FakeClipboard {
+        let clipboard = std::sync::Arc::new(FakeClipboard {
             fail_copy,
             ..FakeClipboard::default()
-        };
+        });
+        let shared: std::sync::Arc<dyn TextClipboard> = clipboard.clone();
         let clock = VirtualClock::default();
         let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
         let environment = GetEnvironment {
             stdout_is_terminal: terminal,
-            clipboard: &clipboard,
+            clipboard: &shared,
             clock: &clock,
         };
         let result = emit_get_result(

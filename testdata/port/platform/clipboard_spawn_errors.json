@@ -1,0 +1,583 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "ce2390d748818a4beb413e97183b7795efa99411",
+    "tag": "legacy/go-oracle",
+    "go_version": "go1.26.6",
+    "atotto_clipboard_version": "v0.1.4",
+    "go_source": "scripts/rust-port/cmd/spawnobs/main.go (detached program; copy: scripts/rust-port/clipboard_spawnobs.go.txt)",
+    "program_sha256": "fbe1078d958ffc8f32d8bd56e442d4964fba0616a15e307e600d98aa26d13416",
+    "go_code_path": "internal/clipboard/system_clipboard.go -> github.com/atotto/clipboard v0.1.4 clipboard_unix.go / clipboard_darwin.go (init selection, writeAll, readAll)"
+  },
+  "note": "R7/R8 (ADR 0037). The production internal/clipboard.NewSystemClipboard() run in a re-executed child per scenario with a disposable PATH holding only the files named in `files` ('@BIN@' = that directory; error texts show it as '<BIN>'). Linux runs executed in the symvault-local-gate image as uid 1000; darwin runs natively. Copy drains stdin before a fake tool dies so the parent's write never races the death.",
+  "runs": [
+    {
+      "atotto_version": "v0.1.4",
+      "go_version": "go1.26.6",
+      "goarch": "arm64",
+      "goos": "darwin",
+      "group": "signals",
+      "observations": [
+        {
+          "name": "signal_kill",
+          "files": {
+            "pbcopy": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -KILL $$\n"
+            },
+            "pbpaste": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -KILL $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: killed",
+            "read_error": "signal: killed",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "signal_term",
+          "files": {
+            "pbcopy": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -TERM $$\n"
+            },
+            "pbpaste": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -TERM $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: terminated",
+            "read_error": "signal: terminated",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "signal_segv",
+          "files": {
+            "pbcopy": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -SEGV $$\n"
+            },
+            "pbpaste": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -SEGV $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: segmentation fault",
+            "read_error": "signal: segmentation fault",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "signal_hup",
+          "files": {
+            "pbcopy": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -HUP $$\n"
+            },
+            "pbpaste": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -HUP $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: hangup",
+            "read_error": "signal: hangup",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "signal_int",
+          "files": {
+            "pbcopy": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -INT $$\n"
+            },
+            "pbpaste": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -INT $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: interrupt",
+            "read_error": "signal: interrupt",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "signal_abrt",
+          "files": {
+            "pbcopy": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -ABRT $$\n"
+            },
+            "pbpaste": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -ABRT $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: abort trap",
+            "read_error": "signal: abort trap",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "signal_bus",
+          "files": {
+            "pbcopy": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -BUS $$\n"
+            },
+            "pbpaste": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -BUS $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: bus error",
+            "read_error": "signal: bus error",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "signal_usr1",
+          "files": {
+            "pbcopy": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -USR1 $$\n"
+            },
+            "pbpaste": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -USR1 $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: user defined signal 1",
+            "read_error": "signal: user defined signal 1",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "signal_pipe",
+          "files": {
+            "pbcopy": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -PIPE $$\n"
+            },
+            "pbpaste": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$(basename \"$0\")\" = pbcopy ]; then /bin/cat >/dev/null; fi\nkill -PIPE $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: broken pipe",
+            "read_error": "signal: broken pipe",
+            "read_value": ""
+          }
+        }
+      ],
+      "schema_version": 1,
+      "uid_is_root": false
+    },
+    {
+      "atotto_version": "v0.1.4",
+      "go_version": "go1.26.6",
+      "goarch": "arm64",
+      "goos": "darwin",
+      "group": "spawn",
+      "observations": [
+        {
+          "name": "enoexec_garbage_no_shebang",
+          "files": {
+            "pbcopy": {
+              "mode": "0755",
+              "content": "\u0001\u0002garbage without a shebang\n"
+            },
+            "pbpaste": {
+              "mode": "0755",
+              "content": "\u0001\u0002garbage without a shebang\n"
+            }
+          },
+          "result": {
+            "copy_error": "fork/exec <BIN>/pbcopy: exec format error",
+            "read_error": "fork/exec <BIN>/pbpaste: exec format error",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "enoexec_empty_file",
+          "files": {
+            "pbcopy": {
+              "mode": "0755",
+              "content": ""
+            },
+            "pbpaste": {
+              "mode": "0755",
+              "content": ""
+            }
+          },
+          "result": {
+            "copy_error": "fork/exec <BIN>/pbcopy: exec format error",
+            "read_error": "fork/exec <BIN>/pbpaste: exec format error",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "eacces_interpreter_not_executable",
+          "files": {
+            "interp": {
+              "mode": "0644",
+              "content": "#!/bin/sh\nexit 0\n"
+            },
+            "pbcopy": {
+              "mode": "0755",
+              "content": "#!@BIN@/interp\n"
+            },
+            "pbpaste": {
+              "mode": "0755",
+              "content": "#!@BIN@/interp\n"
+            }
+          },
+          "result": {
+            "copy_error": "fork/exec <BIN>/pbcopy: permission denied",
+            "read_error": "fork/exec <BIN>/pbpaste: permission denied",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "enoent_interpreter_missing",
+          "files": {
+            "pbcopy": {
+              "mode": "0755",
+              "content": "#!@BIN@/no-such-interpreter\n"
+            },
+            "pbpaste": {
+              "mode": "0755",
+              "content": "#!@BIN@/no-such-interpreter\n"
+            }
+          },
+          "result": {
+            "copy_error": "fork/exec <BIN>/pbcopy: no such file or directory",
+            "read_error": "fork/exec <BIN>/pbpaste: no such file or directory",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "not_executable_file",
+          "files": {
+            "pbcopy": {
+              "mode": "0644",
+              "content": "#!/bin/sh\n/bin/cat >/dev/null\nexit 0\n"
+            },
+            "pbpaste": {
+              "mode": "0644",
+              "content": "#!/bin/sh\n/bin/cat >/dev/null\nexit 0\n"
+            }
+          },
+          "result": {
+            "copy_error": "exec: \"pbcopy\": executable file not found in $PATH",
+            "read_error": "exec: \"pbpaste\": executable file not found in $PATH",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "unreadable_not_executable",
+          "files": {
+            "pbcopy": {
+              "mode": "0000",
+              "content": "#!/bin/sh\n/bin/cat >/dev/null\nexit 0\n"
+            },
+            "pbpaste": {
+              "mode": "0000",
+              "content": "#!/bin/sh\n/bin/cat >/dev/null\nexit 0\n"
+            }
+          },
+          "result": {
+            "copy_error": "exec: \"pbcopy\": executable file not found in $PATH",
+            "read_error": "exec: \"pbpaste\": executable file not found in $PATH",
+            "read_value": ""
+          }
+        }
+      ],
+      "schema_version": 1,
+      "uid_is_root": false
+    },
+    {
+      "atotto_version": "v0.1.4",
+      "go_version": "go1.26.6",
+      "goarch": "arm64",
+      "goos": "linux",
+      "group": "signals",
+      "observations": [
+        {
+          "name": "signal_kill",
+          "files": {
+            "xclip": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nmode=paste\nfor a in \"$@\"; do case \"$a\" in -in) mode=copy;; esac; done\nif [ \"$mode\" = copy ]; then /bin/cat >/dev/null; fi\nkill -KILL $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: killed",
+            "read_error": "signal: killed",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "signal_term",
+          "files": {
+            "xclip": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nmode=paste\nfor a in \"$@\"; do case \"$a\" in -in) mode=copy;; esac; done\nif [ \"$mode\" = copy ]; then /bin/cat >/dev/null; fi\nkill -TERM $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: terminated",
+            "read_error": "signal: terminated",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "signal_segv",
+          "files": {
+            "xclip": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nmode=paste\nfor a in \"$@\"; do case \"$a\" in -in) mode=copy;; esac; done\nif [ \"$mode\" = copy ]; then /bin/cat >/dev/null; fi\nkill -SEGV $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: segmentation fault",
+            "read_error": "signal: segmentation fault",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "signal_hup",
+          "files": {
+            "xclip": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nmode=paste\nfor a in \"$@\"; do case \"$a\" in -in) mode=copy;; esac; done\nif [ \"$mode\" = copy ]; then /bin/cat >/dev/null; fi\nkill -HUP $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: hangup",
+            "read_error": "signal: hangup",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "signal_int",
+          "files": {
+            "xclip": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nmode=paste\nfor a in \"$@\"; do case \"$a\" in -in) mode=copy;; esac; done\nif [ \"$mode\" = copy ]; then /bin/cat >/dev/null; fi\nkill -INT $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: interrupt",
+            "read_error": "signal: interrupt",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "signal_abrt",
+          "files": {
+            "xclip": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nmode=paste\nfor a in \"$@\"; do case \"$a\" in -in) mode=copy;; esac; done\nif [ \"$mode\" = copy ]; then /bin/cat >/dev/null; fi\nkill -ABRT $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: aborted",
+            "read_error": "signal: aborted",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "signal_bus",
+          "files": {
+            "xclip": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nmode=paste\nfor a in \"$@\"; do case \"$a\" in -in) mode=copy;; esac; done\nif [ \"$mode\" = copy ]; then /bin/cat >/dev/null; fi\nkill -BUS $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: bus error",
+            "read_error": "signal: bus error",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "signal_usr1",
+          "files": {
+            "xclip": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nmode=paste\nfor a in \"$@\"; do case \"$a\" in -in) mode=copy;; esac; done\nif [ \"$mode\" = copy ]; then /bin/cat >/dev/null; fi\nkill -USR1 $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: user defined signal 1",
+            "read_error": "signal: user defined signal 1",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "signal_pipe",
+          "files": {
+            "xclip": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nmode=paste\nfor a in \"$@\"; do case \"$a\" in -in) mode=copy;; esac; done\nif [ \"$mode\" = copy ]; then /bin/cat >/dev/null; fi\nkill -PIPE $$\n"
+            }
+          },
+          "result": {
+            "copy_error": "signal: broken pipe",
+            "read_error": "signal: broken pipe",
+            "read_value": ""
+          }
+        }
+      ],
+      "schema_version": 1,
+      "uid_is_root": false
+    },
+    {
+      "atotto_version": "v0.1.4",
+      "go_version": "go1.26.6",
+      "goarch": "arm64",
+      "goos": "linux",
+      "group": "spawn",
+      "observations": [
+        {
+          "name": "enoexec_garbage_no_shebang",
+          "files": {
+            "xclip": {
+              "mode": "0755",
+              "content": "\u0001\u0002garbage without a shebang\n"
+            }
+          },
+          "result": {
+            "copy_error": "fork/exec <BIN>/xclip: exec format error",
+            "read_error": "fork/exec <BIN>/xclip: exec format error",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "enoexec_empty_file",
+          "files": {
+            "xclip": {
+              "mode": "0755",
+              "content": ""
+            }
+          },
+          "result": {
+            "copy_error": "fork/exec <BIN>/xclip: exec format error",
+            "read_error": "fork/exec <BIN>/xclip: exec format error",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "eacces_interpreter_not_executable",
+          "files": {
+            "interp": {
+              "mode": "0644",
+              "content": "#!/bin/sh\nexit 0\n"
+            },
+            "xclip": {
+              "mode": "0755",
+              "content": "#!@BIN@/interp\n"
+            }
+          },
+          "result": {
+            "copy_error": "fork/exec <BIN>/xclip: permission denied",
+            "read_error": "fork/exec <BIN>/xclip: permission denied",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "enoent_interpreter_missing",
+          "files": {
+            "xclip": {
+              "mode": "0755",
+              "content": "#!@BIN@/no-such-interpreter\n"
+            }
+          },
+          "result": {
+            "copy_error": "fork/exec <BIN>/xclip: no such file or directory",
+            "read_error": "fork/exec <BIN>/xclip: no such file or directory",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "not_executable_file",
+          "files": {
+            "xclip": {
+              "mode": "0644",
+              "content": "#!/bin/sh\n/bin/cat >/dev/null\nexit 0\n"
+            }
+          },
+          "result": {
+            "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+            "read_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "unreadable_not_executable",
+          "files": {
+            "xclip": {
+              "mode": "0000",
+              "content": "#!/bin/sh\n/bin/cat >/dev/null\nexit 0\n"
+            }
+          },
+          "result": {
+            "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+            "read_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+            "read_value": ""
+          }
+        },
+        {
+          "name": "not_executable_xclip_falls_back_to_xsel",
+          "files": {
+            "xclip": {
+              "mode": "0644",
+              "content": "#!/bin/sh\n/bin/cat >/dev/null\nexit 0\n"
+            },
+            "xsel": {
+              "mode": "0755",
+              "content": "#!/bin/sh\nif [ \"$1\" = --input ]; then /bin/cat >/dev/null; exit 0; fi\nprintf selected-xsel\n"
+            }
+          },
+          "result": {
+            "copy_error": null,
+            "read_error": null,
+            "read_value": "selected-xsel"
+          }
+        },
+        {
+          "name": "enoexec_xclip_beats_xsel",
+          "files": {
+            "xclip": {
+              "mode": "0755",
+              "content": "\u0001\u0002garbage\n"
+            },
+            "xsel": {
+              "mode": "0755",
+              "content": "#!/bin/sh\n/bin/cat >/dev/null\nexit 0\n"
+            }
+          },
+          "result": {
+            "copy_error": "fork/exec <BIN>/xclip: exec format error",
+            "read_error": "fork/exec <BIN>/xclip: exec format error",
+            "read_value": ""
+          }
+        }
+      ],
+      "schema_version": 1,
+      "uid_is_root": false
+    }
+  ]
+}

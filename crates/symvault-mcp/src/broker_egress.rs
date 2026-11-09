@@ -265,8 +265,7 @@ impl<'a> EgressBroker<'a> {
     }
 
     fn handle_client(&self, stream: TcpStream) -> Result<(), String> {
-        let socket =
-            connect::Socket::new(stream, &self.cancellation).map_err(|_| "configure broker I/O")?;
+        let socket = connect::Socket::new(stream).map_err(|_| "configure broker I/O")?;
         let mut transport = Transport::Plain(socket);
         let request = match read_request(&mut transport) {
             Ok(Some(request)) => request,
@@ -309,8 +308,8 @@ impl<'a> EgressBroker<'a> {
             else {
                 return Ok(());
             };
-            let mut upstream = connect::Socket::new(upstream, &self.cancellation)
-                .map_err(|_| "configure broker upstream")?;
+            let mut upstream =
+                connect::Socket::new(upstream).map_err(|_| "configure broker upstream")?;
             client
                 .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
                 .map_err(|_| "write CONNECT response")?;

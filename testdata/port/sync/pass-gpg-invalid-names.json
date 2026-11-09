@@ -1,0 +1,342 @@
+{
+ "schema_version": 1,
+ "oracle": {
+  "commit": "ce2390d748818a4beb413e97183b7795efa99411",
+  "tag": "legacy/go-oracle",
+  "go_version": "go1.26.6",
+  "goos": "linux",
+  "goarch": "arm64",
+  "gpg_version": "gpg (GnuPG) 2.4.4",
+  "go_source": "scripts/rust-port/cmd/passgpggen/r10_test.go (TestR10InvalidNames; detached copy: scripts/rust-port/pass_gpg_invalid_names.go.txt)",
+  "program_sha256": "eef240aa467c5a0674d0e2048ae98ed29c049b9c8e8d89eb8132ac18018f7f51",
+  "go_code_path": "internal/importer/pass.go (PassImporter.Parse, passEntryPath) driven through importer.New(FormatPass) + os.Open(store) as the CLI does"
+ },
+ "note": "R10 (ADR 0037, IO-001). Linux only: macOS refuses to create these names (EILSEQ). Stores are materialised from `files` (path_b64 = the raw name bytes), imported with the system gpg in a disposable GNUPGHOME holding `keyring`, LC_ALL=C. Entry paths and error texts are raw bytes (`*_b64`); `path_json` is how encoding/json renders the path (one U+FFFD per invalid byte). The store root in error text is replaced by @STORE. Recorded in the symvault-local-gate image (gpg 2.4.4) as uid 1000; every case was evaluated twice and the two results were identical.",
+ "keyring": {
+  "agent_conf": "pinentry-program /usr/bin/false\n",
+  "secret_key_armor": "-----BEGIN PGP PRIVATE KEY BLOCK-----\n\nlFgEavEiORYJKwYBBAHaRw8BAQdA1xolYYZoZjR3u29GktrN6iYqKjDIEe/ke6zu\n/cOgd5QAAQCjoBSEqFmLhU4wOF/l08IejLBiOIee/241BuZ8ZjjN+hAEtC5TeW12\nYXVsdCBQYXNzIFRlc3QgPHBhc3MtdGVzdEBleGFtcGxlLmludmFsaWQ+iJMEExYK\nADsWIQQlEto71n9ug6mtiEqkWG5/Qs87MwUCavEiOQIbAwULCQgHAgIiAgYVCgkI\nCwIEFgIDAQIeBwIXgAAKCRCkWG5/Qs87M+0dAP9e2rr57dzD0TQ1G5YP8MbE0Cil\nIUP6bxaeDDOQLd/k5gD8Du43KY+3oQvLVWVMCcBQJmDV8e6XXe17MAav7c9pkgWc\nXQRq8SI5EgorBgEEAZdVAQUBAQdAkXjdP7wwXalRHsIAu5O38LglSkET2tNfGTGA\n38bh90oDAQgHAAD/W3taZWh8jzcgL8hcSwK0wcPaKV+hB5QI0o9vv2/Hz2AP0Ih4\nBBgWCgAgFiEEJRLaO9Z/boOprYhKpFhuf0LPOzMFAmrxIjkCGwwACgkQpFhuf0LP\nOzN48gD+MJyV6j9h7isrnivI2h+cSeYgFdIf+0Il9eayBdxjNJcBAMA/rQNuZHaB\nM33QdA1IE9y7/K3wprC2PrLwISpBAEEO\n=VpI6\n-----END PGP PRIVATE KEY BLOCK-----\n"
+ },
+ "cases": [
+  {
+   "id": "invalid_name_entry",
+   "files": [
+    {
+     "path_b64": "YS1nb29kLmdwZw==",
+     "kind": "encrypted",
+     "mode": "main",
+     "content_base64": "hF4Dgf/T7lg5BV8SAQdACFXuf66p4q2wbaLw9AnP78HcXoZW7lI9KkNcAPNCLDkw88XepU1QX/Bpw2HaYPyey59zUely6VVGSjjp6wKVlQ8GJj26RtvPn+ISHAjNheiQ1EoBCQIQaehxcnjTmjcYoZmnGJksqCMYhS4XMAOpA7rw5wUVKWavY3iPY0L4B5CRLeTD9s42aPP3qj7JjqVSKu3q1fpkODNudpNuUQ==",
+     "plaintext_base64": "Z29vZAo=",
+     "decrypts": true,
+     "path_lossy": "a-good.gpg"
+    },
+    {
+     "path_b64": "YmFk/y5ncGc=",
+     "kind": "encrypted",
+     "mode": "main",
+     "content_base64": "hF4Dgf/T7lg5BV8SAQdA0FQLqnrImov4SlBoxtCTfAzGxDKVoKG3RoUR6vvQeH0wxDmz8eNVcsNaz5sWRM7R4PJ2HxH2iCGlPIVvTfSdJLCL9SEYwztTQLreILn4eNjj1GUBCQIQYg/4Ox4H7orOuOJFb/9/ScGXsaFi2oniJs1QGk1m86TbohpQ/t9pEilo4FEnr+2XYUIBcISJ+J1/KzzNq/OcVdtnK/2LBMkNmg4SMQ8iF/7cAfRT9dfjWv+A+pM78JYpoA==",
+     "plaintext_base64": "cHcKdXJsOiBodHRwczovL2V4YW1wbGUuaW52YWxpZAo=",
+     "decrypts": true,
+     "path_lossy": "bad�.gpg"
+    }
+   ],
+   "entries": [
+    {
+     "path_b64": "YS1nb29k",
+     "path_json": "a-good",
+     "data": {
+      "password": "good"
+     },
+     "warnings_b64": null
+    },
+    {
+     "path_b64": "YmFk/w==",
+     "path_json": "bad�",
+     "data": {
+      "password": "pw",
+      "url": "https://example.invalid"
+     },
+     "warnings_b64": null
+    }
+   ],
+   "failed": false
+  },
+  {
+   "id": "invalid_name_in_directory",
+   "files": [
+    {
+     "path_b64": "ZGly/i9sZWFmwy5ncGc=",
+     "kind": "encrypted",
+     "mode": "main",
+     "content_base64": "hF4Dgf/T7lg5BV8SAQdA05ANA6LizFYtMJU2GgMHe+Zk37xsfmwmMI53/du9EyQwkiktH0WQ+Uj2uNp/RCy1smRCd7AvSwFdp+9smT2kVIVnPmQeSIxih3S8mSJXWDc61EwBCQIQfJVoifHDOuGpOLtbjFB/eUaVFmtOMFIVSlYfvPsS3UcbTgdWUwV8ehJsP70sh0OJSg7ryyVuYFqb06zUUbKbFjp67PqSQ9t6",
+     "plaintext_base64": "bmVzdGVkCg==",
+     "decrypts": true,
+     "path_lossy": "dir�/leaf�.gpg"
+    }
+   ],
+   "entries": [
+    {
+     "path_b64": "ZGly/i9sZWFmww==",
+     "path_json": "dir�/leaf�",
+     "data": {
+      "password": "nested"
+     },
+     "warnings_b64": null
+    }
+   ],
+   "failed": false
+  },
+  {
+   "id": "invalid_name_directory_only",
+   "files": [
+    {
+     "path_b64": "ZP8vb2suZ3Bn",
+     "kind": "encrypted",
+     "mode": "main",
+     "content_base64": "hF4Dgf/T7lg5BV8SAQdAIGDaGIHvQl5B53cI3CLYAbzjZd8E764d7lOv+v4ESh0wu3koW1PZFMiIUc4Dl/AI0KcZNqfbMHQqnLwJShFYZ1blNzWqIae9+0w26czSU1vw1EwBCQIQhVwUaeWVBilvhK+pScYOoyd8Qsdbxn2E0ZHvS2XF8Izk/SFgVdWH07MW3zXWmz7zX1KTsgmJ2gJ/qRxVCS/GrSvQApAygo5p",
+     "plaintext_base64": "aW5zaWRlCg==",
+     "decrypts": true,
+     "path_lossy": "d�/ok.gpg"
+    }
+   ],
+   "entries": [
+    {
+     "path_b64": "ZP8vb2s=",
+     "path_json": "d�/ok",
+     "data": {
+      "password": "inside"
+     },
+     "warnings_b64": null
+    }
+   ],
+   "failed": false
+  },
+  {
+   "id": "invalid_name_decrypt_failure",
+   "files": [
+    {
+     "path_b64": "YS1nb29kLmdwZw==",
+     "kind": "encrypted",
+     "mode": "main",
+     "content_base64": "hF4Dgf/T7lg5BV8SAQdAwTLGdFRoZsQA08pypy4+QdUSEMDhJVfmsxGDiK35eHgwi9GXasfY25sg8AlMmNi+M736uky06ML5low4LpMi5eC4b3QT2y4FB/7OojtUsmMf1EoBCQIQe9vs7b0ZRKtallHQvmI+ufoq9tC8CzMCw2z68t4e4YP901hr7JrflR5jnyOxEw6JsOvuiCP4p9EsrAMwrAxMfcQT2XGDKQ==",
+     "plaintext_base64": "Z29vZAo=",
+     "decrypts": true,
+     "path_lossy": "a-good.gpg"
+    },
+    {
+     "path_b64": "YmFk/y1mb3JlaWduLmdwZw==",
+     "kind": "encrypted",
+     "mode": "foreign",
+     "content_base64": "hF4DgGD+j6BFkbQSAQdA3nDCFyLiIJ2nsOXZy+9zY0G7SqMRjLlyCvxMSd7XqRMwfHThxrPSCdWGVYeFBXCrjPDxV/gBdz0DuR+8LwyCXo2qwTGSRuq/QjhIBot0VmJG1E0BCQIQvepry+wQPbsnjItB5cGnsN6yD/yAm4fzdIlrNZ2ihqm+6IxG9GKJkhMGvZOrUWdLSrDQe5oFVVJNoIkbQg5+DC/5+952hYFspQ==",
+     "plaintext_base64": "Zm9yZWlnbgo=",
+     "path_lossy": "bad�-foreign.gpg"
+    }
+   ],
+   "entries": null,
+   "failed": true,
+   "error_b64": "ZGVjcnlwdCBwYXNzIGVudHJ5IEBTVE9SRS9iYWT/LWZvcmVpZ24uZ3BnOiBncGc6IGVuY3J5cHRlZCB3aXRoIEVDREgga2V5LCBJRCA4MDYwRkU4RkEwNDU5MUI0CmdwZzogcHVibGljIGtleSBkZWNyeXB0aW9uIGZhaWxlZDogTm8gc2VjcmV0IGtleQpncGc6IGRlY3J5cHRpb24gZmFpbGVkOiBObyBzZWNyZXQga2V5"
+  },
+  {
+   "id": "invalid_name_decrypt_failure_in_directory",
+   "files": [
+    {
+     "path_b64": "ZP4veP8uZ3Bn",
+     "kind": "encrypted",
+     "mode": "foreign",
+     "content_base64": "hF4DgGD+j6BFkbQSAQdA31bE7oNHsKVf6CYYxcGdG7On19pMZ6TsCvhd3FlFLXswe6ZyDImmYbhuaY8jW3v8Xytg5SDh9LX5I4GYdJbkzfpIT5P6NjGhRIB7wp5g8WJQ1E0BCQIQkFxF7gVl8Zxvw1MkMLNVq4ZeKhFMdPjql8X/ALYTRNRF8AVUSegNqNi/Mic3LWw23EipKRhx3+Yvka0xLZA37bM86WI6OL7PtQ==",
+     "plaintext_base64": "Zm9yZWlnbgo=",
+     "path_lossy": "d�/x�.gpg"
+    }
+   ],
+   "entries": null,
+   "failed": true,
+   "error_b64": "ZGVjcnlwdCBwYXNzIGVudHJ5IEBTVE9SRS9k/i94/y5ncGc6IGdwZzogZW5jcnlwdGVkIHdpdGggRUNESCBrZXksIElEIDgwNjBGRThGQTA0NTkxQjQKZ3BnOiBwdWJsaWMga2V5IGRlY3J5cHRpb24gZmFpbGVkOiBObyBzZWNyZXQga2V5CmdwZzogZGVjcnlwdGlvbiBmYWlsZWQ6IE5vIHNlY3JldCBrZXk="
+  },
+  {
+   "id": "invalid_names_collapse_in_json",
+   "files": [
+    {
+     "path_b64": "Yf4uZ3Bn",
+     "kind": "encrypted",
+     "mode": "main",
+     "content_base64": "hF4Dgf/T7lg5BV8SAQdAGgOJi7sltkqP27Nysnc3+KVlFbLlAFxAXWLjVAeRxwYwne7PNnE9GtrzwF7zd+vcfNmaE+g4QjkMPPqL3Hsi9G8lFFQzXqI8wOXSWR62oemN1EkBCQIQg689u0fKqphQLHt+JoVRR5/MUHGnmjiK+FbwHGAv+o3ZHqfD/o9bfDvasxftl2ViBXDTQM0Ak1KUQtVjrPZSmRpzLdcD",
+     "plaintext_base64": "b25lCg==",
+     "decrypts": true,
+     "path_lossy": "a�.gpg"
+    },
+    {
+     "path_b64": "Yf8uZ3Bn",
+     "kind": "encrypted",
+     "mode": "main",
+     "content_base64": "hF4Dgf/T7lg5BV8SAQdAg2zWyw3tdumHglQbCVoOfBVZJskc7xXMGGpwPsgeYAEwL///H8b1ylsQrJlO8A7HdvkZEOEHakwhZ7vgR+jhD6anq2W2mSX5aJMmScTtbYo01EkBCQIQ9Ct+spcB/j4QVZNXpRO2vjMH+2Ud3ckMjEowyxDd8HKAynf6gC2Nou4cfMfO3Yq1HdHrIMIpoimrWomYs361TFGnCcCU",
+     "plaintext_base64": "dHdvCg==",
+     "decrypts": true,
+     "path_lossy": "a�.gpg"
+    }
+   ],
+   "entries": [
+    {
+     "path_b64": "Yf4=",
+     "path_json": "a�",
+     "data": {
+      "password": "one"
+     },
+     "warnings_b64": null
+    },
+    {
+     "path_b64": "Yf8=",
+     "path_json": "a�",
+     "data": {
+      "password": "two"
+     },
+     "warnings_b64": null
+    }
+   ],
+   "failed": false
+  },
+  {
+   "id": "invalid_name_plain_file_in_gpg",
+   "files": [
+    {
+     "path_b64": "bm90LWdwZ/8uZ3Bn",
+     "kind": "raw",
+     "content_base64": "cGxhaW4gdGV4dAo=",
+     "path_lossy": "not-gpg�.gpg"
+    }
+   ],
+   "entries": null,
+   "failed": true,
+   "error_b64": "ZGVjcnlwdCBwYXNzIGVudHJ5IEBTVE9SRS9ub3QtZ3Bn/y5ncGc6IGdwZzogbm8gdmFsaWQgT3BlblBHUCBkYXRhIGZvdW5kLgpncGc6IGRlY3J5cHRfbWVzc2FnZSBmYWlsZWQ6IFVua25vd24gc3lzdGVtIGVycm9y"
+  },
+  {
+   "id": "invalid_name_not_gpg_ignored",
+   "files": [
+    {
+     "path_b64": "YS1nb29kLmdwZw==",
+     "kind": "encrypted",
+     "mode": "main",
+     "content_base64": "hF4Dgf/T7lg5BV8SAQdAvBmpyKsH/1OdMDNjtwVsnWy41rjqSZAJZlhAZ/MNLxEwajTzBkIOmvBWTSlQHt8BZFs5ACF+S0eflMIYwJhCg0QB1f5spUed4CwJz9rm7Y7m1EoBCQIQmF7eDHMV3g7N51Uz/2EWJquSe5ckFuBotYMA8i2XEQxLLskdqwmU3GN2/FlM9M0noQhVhtsIVxzbC4vPKYd/jZeZj6rjhw==",
+     "plaintext_base64": "Z29vZAo=",
+     "decrypts": true,
+     "path_lossy": "a-good.gpg"
+    },
+    {
+     "path_b64": "bm90Zf8udHh0",
+     "kind": "raw",
+     "content_base64": "aWdub3JlZAo=",
+     "path_lossy": "note�.txt"
+    }
+   ],
+   "entries": [
+    {
+     "path_b64": "YS1nb29k",
+     "path_json": "a-good",
+     "data": {
+      "password": "good"
+     },
+     "warnings_b64": null
+    }
+   ],
+   "failed": false
+  },
+  {
+   "id": "invalid_name_overlong_sequence",
+   "files": [
+    {
+     "path_b64": "b8CvLmdwZw==",
+     "kind": "encrypted",
+     "mode": "main",
+     "content_base64": "hF4Dgf/T7lg5BV8SAQdAl3j26IYseKwjRVF/X+SF5etkl5jNt2J6pfNPEtwUsnAwatp2wUc3jcU5bLMUoWtJG2WEMupvIOnC5EXS9KrB54hR1dbPpc0QeXPXDt0YCpvT1E4BCQIQpSj2BHZbihiTo8tO7hgbxHGYWQsw1SKrcu/rp/IiM6NbFbSgvi2xDqPpo/wu5OYiIOhZM6LjxPs99lY9z0xq5GVPw35OB1G1wj8=",
+     "plaintext_base64": "b3ZlcmxvbmcK",
+     "decrypts": true,
+     "path_lossy": "o�.gpg"
+    }
+   ],
+   "entries": [
+    {
+     "path_b64": "b8Cv",
+     "path_json": "o��",
+     "data": {
+      "password": "overlong"
+     },
+     "warnings_b64": null
+    }
+   ],
+   "failed": false
+  },
+  {
+   "id": "invalid_name_surrogate_encoding",
+   "files": [
+    {
+     "path_b64": "c+2ggC5ncGc=",
+     "kind": "encrypted",
+     "mode": "main",
+     "content_base64": "hF4Dgf/T7lg5BV8SAQdAxFM/hddzehvKjDt554BxZVRHNNyXZeTZ6QV+XcuM/U8wMpCIefVlM3ZVDM+q98mn6fpe8tdSchezCmQaz8LnKV9Tgn1H/tY/7B0sOsyYu9D21E8BCQIQmNvDeYSahP4obRrVAK9H+XTc+wG1AKFdjU0wOytiK+Ocs78DIeXr4zWVGAKkDyncFPRXNPVaH+WBC6gbJqsnTrbiPfSZ4t0QtzQr",
+     "plaintext_base64": "c3Vycm9nYXRlCg==",
+     "decrypts": true,
+     "path_lossy": "s�.gpg"
+    }
+   ],
+   "entries": [
+    {
+     "path_b64": "c+2ggA==",
+     "path_json": "s���",
+     "data": {
+      "password": "surrogate"
+     },
+     "warnings_b64": null
+    }
+   ],
+   "failed": false
+  },
+  {
+   "id": "invalid_name_truncated_sequence",
+   "files": [
+    {
+     "path_b64": "dOKCLmdwZw==",
+     "kind": "encrypted",
+     "mode": "main",
+     "content_base64": "hF4Dgf/T7lg5BV8SAQdAkEIk/ivndmGPZRLglElcTXb59ZrWysE0hbiQV6j/xSEwunvvH9oa2GLStL0OhzHPIIQkyuyEnOjzlW+HLbgtfAzbRDck7CjlACsZcVmcrZPM1E8BCQIQuYVk1FgTVKNeHSIZI7ZHj5Bm7VqW8txxf6VSGkmbmO6LSte20KF61laUvIeqKYvqLA553rpokIbNMmc6itH3a/89kRQHu0oDQC6B",
+     "plaintext_base64": "dHJ1bmNhdGVkCg==",
+     "decrypts": true,
+     "path_lossy": "t�.gpg"
+    }
+   ],
+   "entries": [
+    {
+     "path_b64": "dOKC",
+     "path_json": "t��",
+     "data": {
+      "password": "truncated"
+     },
+     "warnings_b64": null
+    }
+   ],
+   "failed": false
+  },
+  {
+   "id": "valid_non_ascii_name",
+   "files": [
+    {
+     "path_b64": "Y2Fmw6kv4oKsLmdwZw==",
+     "kind": "encrypted",
+     "mode": "main",
+     "content_base64": "hF4Dgf/T7lg5BV8SAQdAfUaCe5OPiKch4HazG53KB2l4OP7A8qR9rUmyLQETPVgwqUG0foZ7HB2FREV0n1P6wl2UEXNDBtgSFqhPzRHzzErAGvgnp6FzSKCMNjfG1KHD1EsBCQIQBahor9qH/sqqNpZCqZ+vOTv+9hZpliaR97mhqpr88QQQzSEJDxlKGWiFL6F6iSw7U2A89cS5CgafsiCn91RiVpT/ecJZUjk=",
+     "plaintext_base64": "dmFsaWQK",
+     "decrypts": true,
+     "path_lossy": "café/€.gpg"
+    }
+   ],
+   "entries": [
+    {
+     "path_b64": "Y2Fmw6kv4oKs",
+     "path_json": "café/€",
+     "data": {
+      "password": "valid"
+     },
+     "warnings_b64": null
+    }
+   ],
+   "failed": false
+  }
+ ]
+}

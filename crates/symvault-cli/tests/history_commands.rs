@@ -65,8 +65,10 @@ fn git_log_matches_go_text_and_path_filter_contract() {
     history_commands::write_log(&mut output, &vault, false).expect("render history");
     let rendered = String::from_utf8(output.into_inner()).expect("UTF-8 history");
     assert!(rendered.contains("  20"));
-    assert!(rendered.contains("  second\n  Author: Symaira Vault\n"));
-    assert!(rendered.contains("  first\n  Author: Symaira Vault\n"));
+    // Go's `formatAuthor`: "Name <email>" (recorded from the Go binary in
+    // testdata/port/cli/config-prompts.json, git_log cases).
+    assert!(rendered.contains("  second\n  Author: Symaira Vault <symvault@example.com>\n"));
+    assert!(rendered.contains("  first\n  Author: Symaira Vault <symvault@example.com>\n"));
 
     let mut quiet = Cursor::new(Vec::new());
     history_commands::write_log(&mut quiet, &all, true).expect("quiet history");

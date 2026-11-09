@@ -1861,9 +1861,12 @@ fn read_wire_request(
         reader
             .get_mut()
             .set_read_timeout(Some(timeouts.initial_read))?;
-        reader.get_mut().set_read_deadline(
-            request_started.checked_add(timeouts.initial_read.min(timeouts.request_read)),
-        );
+        // Go (net/http `readRequest`): the header deadline is ReadHeaderTimeout
+        // alone, even when it exceeds ReadTimeout; the whole-request deadline
+        // only replaces it once the headers are complete (ADR 0037 R17).
+        reader
+            .get_mut()
+            .set_read_deadline(request_started.checked_add(timeouts.initial_read));
     }
     let Some(first) = read_bounded_line(reader, MAX_HTTP_REQUEST_LINE)? else {
         return Ok(None);
@@ -3198,6 +3201,55 @@ mod tests {
         })
     }
 
+    /// A HEAD request to an unrouted path gets the status and headers of the GET
+    /// 404 (`404 page not found`, same Content-Length) with the body suppressed.
+    #[test]
+    fn head_to_an_unrouted_path_returns_404_with_a_suppressed_body() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let address = listener.local_addr().expect("listener address");
+        let server = thread::spawn(move || {
+            for _ in 0..2 {
+                let (stream, _) = listener.accept().expect("accept");
+                let state = test_state();
+                serve_connection_shared(
+                    stream,
+                    Path::new("missing-token-registry.json"),
+                    &state,
+                    None,
+                    None,
+                    HttpTimeouts::default(),
+                )
+                .expect("serve unrouted request");
+            }
+        });
+        let raw = |method: &str| {
+            let mut stream = TcpStream::connect(address).expect("connect");
+            write!(
+                stream,
+                "{method} /no-such-route HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n"
+            )
+            .expect("send request");
+            let mut bytes = Vec::new();
+            stream.read_to_end(&mut bytes).expect("read until close");
+            String::from_utf8(bytes).expect("HTTP response UTF-8")
+        };
+        let get = raw("GET");
+        let head = raw("HEAD");
+        server.join().expect("server thread");
+
+        assert_eq!(raw_status(&get), 404, "{get}");
+        assert_eq!(raw_body(&get), "404 page not found\n");
+        assert_eq!(raw_status(&head), 404, "{head}");
+        assert!(head.starts_with("HTTP/1.1 404 Not Found\r\n"), "{head}");
+        assert!(head.contains("Content-Length: 19\r\n"), "{head}");
+        assert_eq!(raw_body(&head), "", "HEAD must not carry a body: {head:?}");
+        assert_eq!(
+            head.split_once("\r\n\r\n").map(|(headers, _)| headers),
+            get.split_once("\r\n\r\n").map(|(headers, _)| headers),
+            "HEAD and GET must send the same status line and headers"
+        );
+    }
+
     #[test]
     fn local_approval_route_is_mounted_without_mcp_bearer_auth() {
         use hmac::{Hmac, KeyInit, Mac};
@@ -4287,6 +4339,110 @@ mod tests {
         drop(stream);
         server.join().expect("server thread");
         response
+    }
+
+    /// ADR 0037 R16 (access-token leg): `testdata/port/mcp/http-oauth-expiry.json`
+    /// holds Go's observation through `BearerAuthMiddlewareWithRateLimit` with a
+    /// 400 ms access TTL, observed immediately and after 900 ms. Rust reads
+    /// `now_utc()` in `lookup_token`, so this leg uses the same real clock.
+    #[test]
+    fn access_token_expiry_matches_the_go_recording() {
+        use symvault_store::token_registry::{NewToken, TOKEN_REGISTRY_FILE, create};
+        let recording: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../testdata/port/mcp/http-oauth-expiry.json"
+        ))
+        .expect("parse Go OAuth expiry recording");
+        let go = |id: &str| {
+            recording["cases"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|case| case["id"] == id)
+                .unwrap_or_else(|| panic!("missing Go case {id}"))
+                .clone()
+        };
+        let call = |root: &Path, raw: &str| {
+            let registry_path = root.join(TOKEN_REGISTRY_FILE);
+            let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+            let address = listener.local_addr().expect("listener address");
+            let server = thread::spawn(move || {
+                let (stream, _) = listener.accept().expect("accept");
+                let state = test_state();
+                serve_connection_shared(
+                    stream,
+                    &registry_path,
+                    &state,
+                    None,
+                    None,
+                    HttpTimeouts::default(),
+                )
+                .expect("serve connection");
+            });
+            let request = format!(
+                "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: http://127.0.0.1\r\nAuthorization: Bearer {raw}\r\nX-Symaira-Agent: default\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{BODY}",
+                BODY.len()
+            );
+            let mut stream = TcpStream::connect(address).expect("connect");
+            stream.write_all(request.as_bytes()).expect("write request");
+            let response = read_http_response(&mut BufReader::new(
+                stream.try_clone().expect("clone stream"),
+            ));
+            drop(stream);
+            server.join().expect("server thread");
+            response
+        };
+        let token = |root: &Path, ttl: Option<time::Duration>| {
+            create(
+                root,
+                &NewToken {
+                    label: "r16",
+                    allowed_tools: vec!["*".into()],
+                    agent_name: "default",
+                    ttl,
+                    tool_registry_hash: "r16",
+                },
+                time::OffsetDateTime::now_utc(),
+            )
+            .expect("create token")
+            .1
+        };
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let raw = token(dir.path(), Some(time::Duration::milliseconds(400)));
+        let before = call(dir.path(), &raw);
+        assert_eq!(
+            u64::from(raw_status(&before)),
+            go("access-short-immediate")["status"].as_u64().unwrap(),
+            "{before}"
+        );
+        thread::sleep(Duration::from_millis(900));
+        let after = call(dir.path(), &raw);
+        let want = go("access-short-after-wait");
+        assert_eq!(
+            u64::from(raw_status(&after)),
+            want["status"].as_u64().unwrap(),
+            "{after}"
+        );
+        assert!(
+            after.contains(&format!(
+                "Content-Type: {}\r\n",
+                want["headers"]["content_type"].as_str().unwrap()
+            )),
+            "{after}"
+        );
+        assert_eq!(raw_body(&after), want["body"].as_str().unwrap());
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let raw = token(dir.path(), None);
+        thread::sleep(Duration::from_millis(400));
+        let forever = call(dir.path(), &raw);
+        assert_eq!(
+            u64::from(raw_status(&forever)),
+            go("access-no-ttl-never-expires")["status"]
+                .as_u64()
+                .unwrap(),
+            "{forever}"
+        );
     }
 
     fn round_trip_oauth_wire(request: &str) -> String {

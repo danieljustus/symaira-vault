@@ -139,7 +139,12 @@ pub(crate) fn use_profile(
         return Err("profile name cannot be empty".to_owned());
     }
     let source = home.join(CONFIG_FILE);
-    let config = Config::load(&source).map_err(|error| format!("cannot load config: {error}"))?;
+    let config = Config::load(&source).map_err(|error| {
+        format!(
+            "cannot load config: {}",
+            crate::config::go_config_cause(&source, &error)
+        )
+    })?;
     if !config
         .profiles
         .as_ref()

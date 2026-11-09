@@ -69,7 +69,7 @@ pub(crate) fn pair(vault: &Path, host: Option<&str>, quiet: bool) -> Result<(), 
     let (port, bind) = runtime_server(vault)?;
     if !bind.is_empty() && is_loopback_bind(&bind) {
         return Err(format!(
-            "'symvault serve' is bound to {bind} (loopback-only) — a phone on the LAN cannot reach it. Restart the server with --bind 0.0.0.0 (all interfaces) or --bind <lan-ip>, then run 'approval-pair' again"
+            "'symvault serve' is bound to {bind} (loopback-only) — a phone on the LAN cannot reach it. Restart the server with --bind <lan-ip> (wildcard binds such as 0.0.0.0 are refused), then run 'approval-pair' again"
         ));
     }
     let host = select_host(host, detect_lan_ipv4)?;

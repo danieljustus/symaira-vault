@@ -18,7 +18,7 @@ case ${1:-} in
     *) echo "usage: $0" >&2; exit 2 ;;
 esac
 
-tests="--test config_inspect --test cli_differential --test profile_differential --test remote_differential --test sync_differential --test audit_export_commands --test run_differential --test share_differential --test agent_whoami_differential --test agent_list_differential --test agent_profile_differential --test agent_token_mutations_differential --test policy_differential --test path_migration_differential --test auth_differential --test audit_rotate_differential --test config_validate_differential --test doctor_differential --test migrate_kdf_differential"
+tests="--test config_inspect --test cli_differential --test profile_differential --test remote_differential --test sync_differential --test audit_export_commands --test run_differential --test share_differential --test agent_whoami_differential --test agent_list_differential --test agent_profile_differential --test agent_token_mutations_differential --test policy_differential --test path_migration_differential --test auth_differential --test audit_rotate_differential --test config_validate_differential --test doctor_differential --test migrate_kdf_differential --test cli_mcp_agent_spelling --test cli_signal_literals --test cli_unlock_ttl --test cli_forced_colour --test cli_update_live_release"
 
 # shellcheck disable=SC2086 # $tests is a word list of cargo flags
 "${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" -p symvault-cli $tests --locked

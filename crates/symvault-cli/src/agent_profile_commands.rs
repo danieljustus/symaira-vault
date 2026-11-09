@@ -24,7 +24,8 @@ pub(crate) fn show(
     output: &mut impl Write,
 ) -> Result<(), String> {
     let config_path = vault.join("config.yaml");
-    let config = Config::load(&config_path).map_err(|error| format!("load config: {error}"))?;
+    let config = Config::load(&config_path)
+        .map_err(|error| crate::config::go_load_config_error(&config_path, &error))?;
     let profile = config
         .agents
         .get(name)
@@ -90,10 +91,24 @@ pub(crate) fn edit(
     output: &mut impl Write,
     error_output: &mut impl Write,
 ) -> Result<(), String> {
+    // Go (`cmd/mcp/agent_profile.go`) looks for the editor before it reads the config.
+    if preferred_editor.is_none_or(str::is_empty)
+        && ["EDITOR", "VISUAL"]
+            .iter()
+            .all(|name| env::var(name).unwrap_or_default().is_empty())
+    {
+        return Err("neither $EDITOR nor $VISUAL is set".to_owned());
+    }
     let config_path = vault.join("config.yaml");
     let source = safeio::read(&config_path)
         .map_err(|error| format!("read config: {error}"))?
-        .ok_or_else(|| "read config: file not found".to_owned())?;
+        .ok_or_else(|| {
+            let missing = std::io::Error::from(std::io::ErrorKind::NotFound);
+            let clean = crate::agent_list_commands::clean_path(&config_path);
+            let cause = crate::config::go_path_error(&clean, &missing, true)
+                .unwrap_or_else(|| "file not found".to_owned());
+            format!("read config: {cause}")
+        })?;
     let document: serde_yaml_ng::Value =
         serde_yaml_ng::from_slice(&source).map_err(|error| format!("read config: {error}"))?;
     let agent_value = document

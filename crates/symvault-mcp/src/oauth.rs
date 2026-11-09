@@ -848,6 +848,9 @@ fn encode_hex(bytes: &[u8]) -> String {
 }
 
 #[cfg(test)]
+mod expiry_replay;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;

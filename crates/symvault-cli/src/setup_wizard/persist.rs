@@ -39,12 +39,6 @@ struct ResumeState {
 
 /// Go's `os.UserCacheDir`.
 fn user_cache_dir() -> Option<PathBuf> {
-    #[cfg(windows)]
-    {
-        std::env::var_os("LocalAppData")
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from)
-    }
     #[cfg(target_os = "macos")]
     {
         std::env::var_os("HOME")

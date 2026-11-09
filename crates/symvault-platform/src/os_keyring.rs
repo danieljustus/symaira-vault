@@ -30,19 +30,8 @@ impl OsKeyring {
             .as_ref()
             .map_err(|_| SessionError::Keyring("native OS keyring unavailable".to_owned()))?;
 
-        #[cfg(target_os = "windows")]
-        {
-            let target = windows_target_name(service, account);
-            let modifiers = std::collections::HashMap::from([("target", target.as_str())]);
-            Entry::new_with_modifiers(service, account, &modifiers)
-                .map_err(|_| SessionError::Keyring("native OS keyring unavailable".to_owned()))
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            Entry::new(service, account)
-                .map_err(|_| SessionError::Keyring("native OS keyring unavailable".to_owned()))
-        }
+        Entry::new(service, account)
+            .map_err(|_| SessionError::Keyring("native OS keyring unavailable".to_owned()))
     }
 
     fn provider_error(_: keyring::Error) -> SessionError {
@@ -94,11 +83,6 @@ fn hex_digit(value: u8) -> Option<u8> {
         b'A'..=b'F' => Some(value - b'A' + 10),
         _ => None,
     }
-}
-
-#[cfg(any(test, target_os = "windows"))]
-fn windows_target_name(service: &str, account: &str) -> String {
-    format!("{service}:{account}")
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -278,15 +262,6 @@ mod tests {
             b"secret"
         );
         assert_ne!(encode_macos_provider_value(b"secret"), b"secret");
-    }
-
-    #[test]
-    fn windows_target_matches_go_credential_manager_address() {
-        assert_eq!(windows_target_name("symvault", "alice"), "symvault:alice");
-        assert_eq!(
-            windows_target_name("service:with:colon", "user@example"),
-            "service:with:colon:user@example"
-        );
     }
 
     fn hex_encode(value: &[u8]) -> String {

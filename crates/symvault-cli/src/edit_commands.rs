@@ -219,21 +219,6 @@ fn executable_candidate(path: &Path) -> Option<PathBuf> {
     if is_executable(path) {
         return Some(path.to_path_buf());
     }
-    #[cfg(windows)]
-    if path.extension().is_none() {
-        let extensions = env::var_os("PATHEXT")
-            .map(|value| value.to_string_lossy().into_owned())
-            .unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".to_owned());
-        for extension in extensions
-            .split(';')
-            .filter(|extension| !extension.is_empty())
-        {
-            let candidate = path.with_extension(extension.trim_start_matches('.'));
-            if is_executable(&candidate) {
-                return Some(candidate);
-            }
-        }
-    }
     None
 }
 
@@ -263,14 +248,29 @@ pub(crate) fn editor_command(editor: &str, path: &Path) -> Command {
 }
 
 fn safe_environment_key(key: &std::ffi::OsStr) -> bool {
-    match key.to_str() {
+    matches!(
+        key.to_str(),
         Some(
-            "PATH" | "HOME" | "TMPDIR" | "TMP" | "TEMP" | "USER" | "LOGNAME" | "LANG" | "LC_ALL"
-            | "SHELL" | "TERM" | "COLORTERM" | "DISPLAY" | "XAUTHORITY" | "GIT_ASKPASS" | "GIT_SSH"
-            | "GIT_SSH_COMMAND" | "SSH_AUTH_SOCK" | "SSH_AGENT_LAUNCHER" | "GNUPGHOME",
-        ) => true,
-        #[cfg(windows)]
-        Some("SystemRoot" | "USERPROFILE") => true,
-        _ => false,
-    }
+            "PATH"
+                | "HOME"
+                | "TMPDIR"
+                | "TMP"
+                | "TEMP"
+                | "USER"
+                | "LOGNAME"
+                | "LANG"
+                | "LC_ALL"
+                | "SHELL"
+                | "TERM"
+                | "COLORTERM"
+                | "DISPLAY"
+                | "XAUTHORITY"
+                | "GIT_ASKPASS"
+                | "GIT_SSH"
+                | "GIT_SSH_COMMAND"
+                | "SSH_AUTH_SOCK"
+                | "SSH_AGENT_LAUNCHER"
+                | "GNUPGHOME",
+        )
+    )
 }

@@ -26,6 +26,8 @@ MIRI_TARGET_DIR := target/miri-2026-09-03
 MIRI_FLAGS := -Zmiri-disable-isolation
 MIRI_TEST_ARGS := --skip config::tests:: --skip config_typed::tests:: --skip go_yaml_depth::
 RUST_FUZZ_TOOLCHAIN := nightly-2026-09-03
+# Every cargo-fuzz target in fuzz/fuzz_targets (override to run a subset).
+RUST_FUZZ_TARGETS ?= age_envelope import_csv import_csv_mapping import_bitwarden import_1pux import_cxf import_pass_entry import_normalize_path
 RUST_FUZZ_RUNS ?= 128
 RUST_FUZZ_MAX_TOTAL_TIME ?= 10
 RUST_FUZZ_MAX_LEN ?= 4096
@@ -509,20 +511,27 @@ rust-fuzz-lock:
 	$(CARGO) check --manifest-path "$(RUST_FUZZ_MANIFEST)" --locked; \
 	echo "Fuzz manifest and lockfile are present and locked."
 
-# Bounded PR smoke; the corpus is copied because libFuzzer may add files to it.
+# Bounded PR smoke over every target in RUST_FUZZ_TARGETS; each corpus is copied
+# because libFuzzer may add files to it. RUST_FUZZ_MAX_TOTAL_TIME is per target.
 rust-fuzz-smoke: rust-fuzz-lock
 	@set -eu; \
-	corpus="$$(mktemp -d)"; \
-	runs_arg=""; \
 	lock_before="$$(shasum -a 256 "$(RUST_FUZZ_LOCK)")"; \
+	runs_arg=""; \
 	if [ -n "$(RUST_FUZZ_RUNS)" ]; then runs_arg="-runs=$(RUST_FUZZ_RUNS)"; fi; \
-	trap 'rm -rf "$$corpus"' EXIT; \
-	cp -R "$(RUST_FUZZ_DIR)/corpus/age_envelope/." "$$corpus/"; \
-	CARGOFLAGS=--locked $(CARGO) +$(RUST_FUZZ_TOOLCHAIN) fuzz run --fuzz-dir "$(RUST_FUZZ_DIR)" --sanitizer none age_envelope "$$corpus" -- \
-		$$runs_arg -max_total_time=$(RUST_FUZZ_MAX_TOTAL_TIME) \
-		-max_len=$(RUST_FUZZ_MAX_LEN) -timeout=$(RUST_FUZZ_TIMEOUT) \
-		-rss_limit_mb=$(RUST_FUZZ_RSS_LIMIT_MB) -seed=992 -verbosity=0 \
-		-print_final_stats=1 -dict="$(CURDIR)/$(RUST_FUZZ_DIR)/dictionaries/age_envelope.dict"; \
+	for target in $(RUST_FUZZ_TARGETS); do \
+		test -d "$(RUST_FUZZ_DIR)/corpus/$$target" || { echo "Missing seed corpus for $$target" >&2; exit 1; }; \
+		dict_arg=""; \
+		if [ -f "$(RUST_FUZZ_DIR)/dictionaries/$$target.dict" ]; then dict_arg="-dict=$(CURDIR)/$(RUST_FUZZ_DIR)/dictionaries/$$target.dict"; fi; \
+		corpus="$$(mktemp -d)"; \
+		echo "== fuzz $$target =="; \
+		cp -R "$(RUST_FUZZ_DIR)/corpus/$$target/." "$$corpus/"; \
+		CARGOFLAGS=--locked $(CARGO) +$(RUST_FUZZ_TOOLCHAIN) fuzz run --fuzz-dir "$(RUST_FUZZ_DIR)" --sanitizer none "$$target" "$$corpus" -- \
+			$$runs_arg -max_total_time=$(RUST_FUZZ_MAX_TOTAL_TIME) \
+			-max_len=$(RUST_FUZZ_MAX_LEN) -timeout=$(RUST_FUZZ_TIMEOUT) \
+			-rss_limit_mb=$(RUST_FUZZ_RSS_LIMIT_MB) -seed=992 -verbosity=0 \
+			-print_final_stats=1 $$dict_arg || { rm -rf "$$corpus"; exit 1; }; \
+		rm -rf "$$corpus"; \
+	done; \
 	lock_after="$$(shasum -a 256 "$(RUST_FUZZ_LOCK)")"; \
 	test "$$lock_before" = "$$lock_after" || { echo "Fuzz run modified $(RUST_FUZZ_LOCK)" >&2; exit 1; }
 
@@ -739,7 +748,7 @@ LOCAL_AREA_DIFFERENTIAL_TARGETS := mcp-init-differential mcp-stdio-differential 
 	config-profile-differential config-session-differential cfg-overrides-fixtures-check \
 	device-list-differential device-session-differential pairing-differential \
 	git-offline-differential git-winner-differential rust-007-differential \
-	update-fixtures-check
+	update-fixtures-check data-safety-differential
 
 # Process contracts of the area workflows (.github/workflows/rust-http-*.yml,
 # rust-mcp-*.yml, rust-broker-*.yml, rust-api-transport.yml,
@@ -768,7 +777,7 @@ LOCAL_AREA_PROCESS_TARGETS := area-check-selftest worktree-prune-check http-fram
 	read-resource-policy-contract mcp-http-shutdown-contract \
 	signal-process-contract store-live-contract \
 	pairing-oracle-contract tui-named-tests \
-	mcp-http-replay-contract mcp-http-token-contract
+	mcp-http-replay-contract mcp-http-token-contract toolhash-process-contract
 LOCAL_AREA_LANE ?= $(if $(filter Darwin,$(shell uname -s)),macos,linux)
 LOCAL_AREA_LANE_TARGETS_macos := tui-harness-check
 LOCAL_AREA_LANE_TARGETS_linux := tui-contract
@@ -845,7 +854,17 @@ AREA_KDF_MIGRATION_TESTS := 10
 # `arguments` probes recorded from the oracle, 3 call.rs unit tests for the
 # raw-text arguments decode; measured: 447 passed, 0 failed over 56 result lines).
 # 448 after the coordinator's anomaly_dispatch order pin (decode before lookup/token scope).
-AREA_MCP_TEST_COUNT := 448
+# 449 from local/impl-residuals (+1: http.rs unit test
+# head_to_an_unrouted_path_returns_404_with_a_suppressed_body; measured at the
+# 95419793 gate: 449 passed, 0 failed).
+# 451 from local/r-platform (+2: autotype_run_command_contract replays the Go
+# autotype and run_command handler recording, ADR 0037 R13).
+# 468 from local/r-http (+17, ADR 0037 R16 to R19: 7 oauth::expiry_replay and 1
+# http::tests::access_token_expiry_matches_the_go_recording unit tests, 5
+# store_adapter::tests R19 unit tests, 2 tests/http_budget_combinations.rs, 2
+# tests/http_tls_lifecycle.rs; 466 on that branch alone + 2 from r-platform;
+# confirmed by the integration gate).
+AREA_MCP_TEST_COUNT := 468
 
 # `make -s print-<VARIABLE>` prints a variable's value, for the workflows that must
 # not repeat the constants above.
@@ -1403,7 +1422,7 @@ help:
 	@echo "  pass-gpg-differential - Verify the pass importer against real gpg"
 	@echo "  crypto-differential - Verify the frozen age and KDF vectors against Rust"
 	@echo "  store-differential - Verify the frozen storage reopen and read-only fixtures"
-	@echo "  data-safety-differential - Verify the pre-Rust-mutation backup gate over Go-created vaults (needs the recorded Go binary)"
+	@echo "  data-safety-differential - Verify the pre-Rust-mutation backup gate over Go-created vaults (Go-free replay of the recorded Go seed calls; needs only the Rust CLI and the data_safety_probe example)"
 	@echo "  audit-fixtures-check - Verify audit fixture provenance and drift"
 	@echo "  audit-differential - Verify the frozen audit chain, rotation, and export"
 	@echo "  rust-fuzz-smoke   - Run the deterministic bounded Rust age/KDF fuzz smoke"

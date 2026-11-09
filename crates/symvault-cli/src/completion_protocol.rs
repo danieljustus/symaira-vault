@@ -519,10 +519,8 @@ pub fn run(args: &[OsString], index: usize) -> ExitCode {
             .cloned()
             .collect(),
         "profiles" => {
-            // Go's os.UserHomeDir uses USERPROFILE on Windows and HOME on Unix.
-            let Some(home) = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-                .filter(|home| !home.is_empty())
-            else {
+            // Go's os.UserHomeDir uses HOME on Unix.
+            let Some(home) = std::env::var_os("HOME").filter(|home| !home.is_empty()) else {
                 return vec![];
             };
             match symvault_core::config::Config::load(

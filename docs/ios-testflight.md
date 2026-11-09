@@ -14,8 +14,10 @@ Swift-Code liegt weiterhin unter `Sources/SymvaultIOS`.
 - Upload: `client/ExportOptions-TestFlight-Upload.plist`
 - Build-Skript: `scripts/ios-testflight.sh`
 
-Der lokale technische Preflight baut das Go-Mobile-Framework und einen
-unsignierten `iphoneos`-Build. Archiv, Distribution-Signing und Upload werden
+Der lokale technische Preflight baut den Rust-Kern als
+`SymvaultFFI.xcframework` (UniFFI/C-ABI-Wrapper aus `crates/symvault-ffi`) und
+einen unsignierten `iphoneos`-Build. Go ist entfernt; es gibt kein
+Go-Mobile-Framework mehr. Archiv, Distribution-Signing und Upload werden
 anschließend von Xcode mit dem ASC-Key aus SymVault ausgeführt.
 
 ## Bereits in SymVault vorhanden
@@ -40,9 +42,11 @@ ist ein macOS-Developer-ID-Zertifikat und wird für iOS nicht verwendet.
 
 ## Lokaler Preflight
 
-Auf Daniels Mac wird automatisch ein installiertes Release-Xcode verwendet.
+Auf Daniels Mac wird automatisch ein installiertes Release-Xcode verwendet
+(`/Applications/Xcode-*.app`, sonst `/Applications/Xcode.app`; aktuell Xcode 27).
 Ein Beta-Xcode ist nur ein Fallback für lokale Builds; Apple kann Beta-SDKs
-beim Upload ablehnen.
+beim Upload ablehnen. Das gewählte Xcode zeigt `xcode-select -p`; mit
+`DEVELOPER_DIR` lässt es sich pro Aufruf überschreiben.
 
 ```bash
 ./scripts/ios-testflight.sh preflight
@@ -50,12 +54,15 @@ beim Upload ablehnen.
 
 Das erledigt:
 
-1. `SymvaultFFI.xcframework` (Rust-Kern, `crates/symvault-ffi`) unter
-   `client/.build/mobilecore` bei jedem Lauf neu bauen (Cargo baut inkrementell,
-   ein unveränderter Kern kostet Sekunden; so landet nie ein veralteter Kern im
-   Upload). Braucht die gepinnte
-   Rust-Toolchain mit den Targets `aarch64-apple-ios` und
-   `aarch64-apple-ios-sim`.
+1. `SymvaultFFI.xcframework` (Rust-Kern, `crates/symvault-ffi`) über
+   `scripts/build-vaultcore.sh` unter `client/.build/mobilecore` bei jedem Lauf
+   neu bauen (Cargo baut inkrementell, ein unveränderter Kern kostet Sekunden;
+   so landet nie ein veralteter Kern im Upload). Das Swift-Package
+   (`client/Package.swift`, Binary-Target `CSymvaultFFI`) und damit
+   `SymvaultIOSApp` (`client/project.yml`, Produkt `SymvaultFFI`) binden genau
+   diesen Pfad ein. Braucht die gepinnte Rust-Toolchain mit den Targets
+   `aarch64-apple-ios` und `aarch64-apple-ios-sim`
+   (`rustup target add aarch64-apple-ios aarch64-apple-ios-sim`).
 2. Das Xcode-Projekt mit XcodeGen generieren.
 3. Swift Package Dependencies auflösen.
 4. Einen unsignierten Release-App-Build für `iphoneos` bauen.
@@ -86,16 +93,19 @@ symvault run \
   --env ASC_API_KEY=apple-developer/notary-api-key.password \
   --env ASC_KEY_ID=apple-developer/notary-api-key-id.password \
   --env ASC_ISSUER_ID=apple-developer/notary-api-issuer-id.password \
-  -- env DEVELOPER_DIR=/Applications/Xcode-26.6.app/Contents/Developer \
-  ./scripts/ios-testflight.sh archive
+  -- ./scripts/ios-testflight.sh archive
 
 symvault run \
   --env ASC_API_KEY=apple-developer/notary-api-key.password \
   --env ASC_KEY_ID=apple-developer/notary-api-key-id.password \
   --env ASC_ISSUER_ID=apple-developer/notary-api-issuer-id.password \
-  -- env DEVELOPER_DIR=/Applications/Xcode-26.6.app/Contents/Developer \
-  ./scripts/ios-testflight.sh upload
+  -- ./scripts/ios-testflight.sh upload
 ```
+
+Das Skript wählt das Release-Xcode selbst (siehe oben). Soll ein bestimmtes
+Xcode verwendet werden, `env DEVELOPER_DIR=<Xcode>.app/Contents/Developer`
+vor `./scripts/ios-testflight.sh` setzen (Standard:
+`/Applications/Xcode.app/Contents/Developer`, siehe `xcode-select -p`).
 
 Für einen lokalen Export ohne Upload heißt der letzte Befehl `export`; danach
 liegt die IPA unter `client/.build/testflight/export/`.
@@ -104,9 +114,13 @@ liegt die IPA unter `client/.build/testflight/export/`.
 
 - Der erste TestFlight-Build ist `1.0 (1)` aus `client/project.yml` und passt
   zur bereits angelegten App-Store-Connect-Version.
-- Jeder weitere Upload derselben Version braucht eine höhere Build-Nummer.
-- Das Go-Mobile-Framework liegt absichtlich unter `.build/` und wird nicht ins
-  Repository eingecheckt.
-- Xcode 27 Beta ist für diesen Upload nicht zulässig; Release-Xcode verwenden.
+- Jeder weitere Upload derselben Version braucht eine höhere Build-Nummer:
+  `CURRENT_PROJECT_VERSION` in `client/project.yml` muss erhöht werden, sobald
+  ein Build mit der aktuellen Nummer bereits hochgeladen wurde (Apple lehnt
+  doppelte Build-Nummern ab).
+- `SymvaultFFI.xcframework` liegt absichtlich unter `client/.build/mobilecore`
+  und wird nicht ins Repository eingecheckt.
+- Ein Beta-Xcode ist für diesen Upload nicht zulässig; Release-Xcode
+  verwenden (Xcode 27 ist inzwischen das Release).
 - Apple-Passwort und 2FA-Codes niemals in Chat, Commit oder Klartextdateien
   eingeben.

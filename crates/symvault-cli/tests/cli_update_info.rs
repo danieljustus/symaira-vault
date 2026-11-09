@@ -56,7 +56,6 @@ struct Case {
     exit: i32,
     stdout: String,
     stderr: String,
-    platform: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -99,15 +98,6 @@ fn update_cases_match_go_oracle_bytes() {
     let home = dir.path();
 
     for case in &fixture.cases {
-        if case.platform == "unix" && cfg!(windows) {
-            eprintln!(
-                "skipping {} on Windows: fixture captured on darwin; \
-                 corekit's writability fallback is platform-specific",
-                case.id
-            );
-            continue;
-        }
-
         let output = run(&case.argv, home);
         let exit = output.status.code();
         let stdout = String::from_utf8_lossy(&output.stdout);

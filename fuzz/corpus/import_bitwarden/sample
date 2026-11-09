@@ -1,0 +1,63 @@
+{
+  "encrypted": false,
+  "folders": [
+    {
+      "id": "f-work",
+      "name": "Work"
+    },
+    {
+      "id": "f-personal",
+      "name": "Personal"
+    }
+  ],
+  "items": [
+    {
+      "id": "item-github",
+      "organizationId": null,
+      "folderId": "f-personal",
+      "type": 1,
+      "reprompt": 0,
+      "name": "GitHub",
+      "notes": "Personal GitHub account used for open source, includes comma, quote: \"maintainer\".",
+      "favorite": true,
+      "login": {
+        "uris": [
+          {
+            "match": null,
+            "uri": "https://github.com/login"
+          },
+          {
+            "match": 0,
+            "uri": "https://github.com/"
+          }
+        ],
+        "username": "user@example.com",
+        "password": "mysecretpassword",
+        "totp": "JBSWY3DPEHPK3PXP"
+      },
+      "collectionIds": null
+    },
+    {
+      "id": "item-aws",
+      "organizationId": null,
+      "folderId": "f-work",
+      "type": 1,
+      "reprompt": 0,
+      "name": "AWS Console",
+      "notes": "Shared admin login; password supplied out-of-band.",
+      "favorite": false,
+      "login": {
+        "uris": [
+          {
+            "match": 0,
+            "uri": "https://signin.aws.amazon.com/console"
+          }
+        ],
+        "username": "admin@company.com",
+        "password": null,
+        "totp": null
+      },
+      "collectionIds": null
+    }
+  ]
+}

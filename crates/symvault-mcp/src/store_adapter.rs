@@ -42,19 +42,6 @@ pub type SharedAuditLogger = Arc<Mutex<symvault_store::audit::Logger>>;
 
 fn runtime_vault_dir(root: &Path) -> String {
     let directory = root.to_string_lossy();
-    // Windows canonicalization uses verbatim paths for I/O. Expose the ordinary
-    // drive/UNC spelling in runtime metadata, as Go does, without changing I/O.
-    #[cfg(windows)]
-    {
-        if let Some(rest) = directory.strip_prefix(r"\\?\UNC\") {
-            return format!(r"\\{rest}");
-        }
-        if let Some(rest) = directory.strip_prefix(r"\\?\")
-            && rest.as_bytes().get(1) == Some(&b':')
-        {
-            return rest.to_owned();
-        }
-    }
     directory.into_owned()
 }
 
@@ -65,6 +52,16 @@ const MAX_API_TEMPLATE_BYTES: u64 = 64 * 1024;
 pub fn load_api_template_definition(
     vault_root: &Path,
     name: &str,
+) -> Result<ApiTemplateDefinition, String> {
+    load_api_template_definition_with(vault_root, name, || {})
+}
+
+/// `after_check` runs between the path checks and the open; production passes a
+/// no-op, the race regression swaps the file there (ADR 0037 R19).
+fn load_api_template_definition_with(
+    vault_root: &Path,
+    name: &str,
+    after_check: impl FnOnce(),
 ) -> Result<ApiTemplateDefinition, String> {
     if name.is_empty() || name.contains("..") || name.contains('/') || name.contains('\\') {
         return Err(format!("invalid template name: {name:?}"));
@@ -100,13 +97,19 @@ pub fn load_api_template_definition(
     if !canonical.starts_with(&directory) {
         return Err("template path escapes the template directory".into());
     }
+    after_check();
     let file = fs::File::open(&canonical).map_err(|error| format!("read template: {error}"))?;
-    if file
+    let opened = file
         .metadata()
-        .map_err(|error| format!("stat template: {error}"))?
-        .len()
-        > MAX_API_TEMPLATE_BYTES
-    {
+        .map_err(|error| format!("stat template: {error}"))?;
+    // Go checks with os.Stat and then reads by path (two lookups, symlinks
+    // followed), so a swap in between is not detected. Pin the handle to the
+    // inode that passed the checks: a file renamed or relinked over the path
+    // after the lstat is refused instead of read.
+    if !opened.is_file() || !same_file(&metadata, &opened) {
+        return Err("template changed while loading".into());
+    }
+    if opened.len() > MAX_API_TEMPLATE_BYTES {
         return Err("template exceeds the 65536-byte limit".into());
     }
     let mut bytes = Vec::new();
@@ -117,6 +120,17 @@ pub fn load_api_template_definition(
         return Err("template exceeds the 65536-byte limit".into());
     }
     serde_yaml_ng::from_slice(&bytes).map_err(|error| format!("parse template: {error}"))
+}
+
+#[cfg(unix)]
+fn same_file(checked: &fs::Metadata, opened: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    checked.dev() == opened.dev() && checked.ino() == opened.ino()
+}
+
+#[cfg(not(unix))]
+fn same_file(_checked: &fs::Metadata, _opened: &fs::Metadata) -> bool {
+    true
 }
 
 fn load_builtin_api_template(name: &str) -> Result<ApiTemplateDefinition, String> {
@@ -1174,7 +1188,8 @@ impl StoreReadOnlyRuntime {
                 Ok(value) => value,
                 Err(error) => {
                     return Ok(ToolCallResult::error(format!(
-                        "cannot resolve secret ref {reference:?}: {error}"
+                        "cannot resolve secret ref {reference:?}: {}",
+                        go_secret_ref_detail(&error)
                     )));
                 }
             };
@@ -1236,7 +1251,8 @@ impl StoreReadOnlyRuntime {
             .map_err(|error| format!("embed command output: {error}"))?;
         if execution.timed_out {
             return Ok(ToolCallResult::error(format!(
-                "command timed out after {timeout_seconds}s\nExit code: {}\nStdout: {stdout}\nStderr: {stderr}",
+                "command timed out after {}\nExit code: {}\nStdout: {stdout}\nStderr: {stderr}",
+                go_timeout(timeout_seconds),
                 execution.exit_code
             )));
         }
@@ -1595,7 +1611,8 @@ impl StoreReadOnlyRuntime {
             .map_err(|error| format!("embed command output: {error}"))?;
         if execution.timed_out {
             return Ok(ToolCallResult::error(format!(
-                "command timed out after {timeout_seconds}s\nExit code: {}\nStdout: {stdout}\nStderr: {stderr}",
+                "command timed out after {}\nExit code: {}\nStdout: {stdout}\nStderr: {stderr}",
+                go_timeout(timeout_seconds),
                 execution.exit_code
             )));
         }
@@ -2055,7 +2072,10 @@ impl StoreReadOnlyRuntime {
             self.authorize_run_secret_path(&path)?;
             let source =
                 StoreReadOnlyAdapter::ref_at_path(reader, &reference, &path).map_err(|error| {
-                    RunFilesError::Tool(format!("cannot resolve secret ref {reference:?}: {error}"))
+                    RunFilesError::Tool(format!(
+                        "cannot resolve secret ref {reference:?}: {}",
+                        go_secret_ref_detail(&error)
+                    ))
                 })?;
             let content = if encoding == "base64" {
                 BASE64_STANDARD.decode(source.as_bytes()).map_err(|_| {
@@ -4245,6 +4265,21 @@ pub fn read_only_tool_names() -> Vec<String> {
     .collect()
 }
 
+/// Go `resolveMCPSecretRefAtPath` reports a missing entry as
+/// `secret ref not found: <path>`; the store layer says `entry not found: `.
+fn go_secret_ref_detail(error: &str) -> String {
+    error.strip_prefix("entry not found: ").map_or_else(
+        || error.to_owned(),
+        |path| format!("secret ref not found: {path}"),
+    )
+}
+
+/// Go renders the timeout as a `time.Duration` (`secrets.RunCommand`:
+/// `command timed out after %s`), so 60 seconds read `1m0s`.
+fn go_timeout(seconds: u64) -> String {
+    symvault_core::config::go_duration_string(i128::from(seconds) * 1_000_000_000)
+}
+
 fn parse_command_timeout(value: Option<&Value>) -> Result<u64, String> {
     let Some(value) = value else {
         return Ok(30);
@@ -6210,14 +6245,29 @@ mod tests {
         .expect("runtime")
         .with_command_executor(Arc::new(FakeCommandExecutor));
 
+        // Expected texts come from the Go recording (ADR 0037 R13).
+        let recorded: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../testdata/port/mcp/autotype-run-command.json"
+        ))
+        .expect("Go recording");
+        let recorded_text = |name: &str| -> String {
+            recorded["cases"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|case| case["name"] == name)
+                .and_then(|case| case["output"]["text"].as_str())
+                .unwrap_or_else(|| panic!("recorded case {name}"))
+                .to_owned()
+        };
         for (arguments, expected) in [
             (
                 json!({"command":["sh", "-c", "echo ok"], "files":"not an object"}),
-                "argument \"files\" must be an object",
+                recorded_text("run_files_not_object"),
             ),
             (
                 json!({"command":["sh", "-c", "echo ok"], "working_dir":true}),
-                "argument \"working_dir\" must be a string",
+                recorded_text("run_working_dir_not_string"),
             ),
         ] {
             runtime
@@ -6393,6 +6443,7 @@ mod tests {
     }
 
     include!("api_review_tests.rs");
+    include!("r19_diagnostics_tests.rs");
 }
 
 /// The audit row Go `handleGenerateTOTP` writes for a finished call, or `None`

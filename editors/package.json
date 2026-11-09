@@ -22,6 +22,9 @@
     "@typescript-eslint/eslint-plugin": "^8.71.1"
   },
   "overrides": {
-    "js-yaml": "4.3.2"
+    "js-yaml": "4.3.2",
+    "minimatch@^9": "11.0.1",
+    "minimatch@^10": "11.0.1",
+    "glob@>=9": "14.0.4"
   }
 }

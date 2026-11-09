@@ -1255,8 +1255,7 @@ the Go tree. `scripts/rust-port/cmd/approvalgen` freezes the same contract befor
   digests, `make approval-tls-fixtures-check`); the Rust process must refuse each with the same exit code, empty stdout and `Error:`
   lines. **Divergence found and fixed:** Rust reported `MCP HTTP TLS: <rustls text>` and loaded certificate, key, CA in that order;
   it now follows Go (CA read, CA parse, key pair; cause-free `load server TLS key pair failed`; `http server: ` prefix).
-- **Not covered, declared.** Device-token `/api/v1/approvals` (ported and frozen separately by `deviceapprovalgen`, see the device-token section above; this e2e does not drive it); `decide_expired` (the Rust queue TTL
-  is fixed at five minutes); Go's pre-failure diagnostics (listener bind + legacy-token migration happen before Go validates the
+- **Not covered, declared.** Device-token `/api/v1/approvals` (ported and frozen separately by `deviceapprovalgen`, see the device-token section above; this e2e does not drive it); Go's pre-failure diagnostics (listener bind + legacy-token migration happen before Go validates the
   CA/key pair; Rust validates first); non-mTLS certificate/key failure texts (Go `crypto/tls`); Windows (the settings replay is
   unix-only because the recorded errno texts are Unix's).
 

@@ -2306,14 +2306,9 @@ pub(crate) fn scope_allows(allowed_paths: &[String], path: &str) -> bool {
 
 pub(crate) fn go_scope_path(path: &str) -> String {
     let trimmed = path.trim();
-    let slashed = if cfg!(windows) {
-        trimmed.replace('\\', "/")
-    } else {
-        trimmed.to_owned()
-    };
-    let rooted = slashed.starts_with('/');
+    let rooted = trimmed.starts_with('/');
     let mut components: Vec<&str> = Vec::new();
-    for component in slashed.split('/') {
+    for component in trimmed.split('/') {
         match component {
             "" | "." => {}
             ".." => {

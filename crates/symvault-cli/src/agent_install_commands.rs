@@ -147,24 +147,9 @@ fn detect_agent(home: &Path, def: AgentDef) -> (bool, String) {
     }
     // Go only checks existence, not the executable bit.
     let path_env = std::env::var_os("PATH").unwrap_or_default();
-    let binary_found = std::env::split_paths(&path_env).any(|dir| {
-        def.binaries
-            .iter()
-            .any(|binary| dir.join(binary).is_file() || has_windows_executable(&dir, binary))
-    });
+    let binary_found = std::env::split_paths(&path_env)
+        .any(|dir| def.binaries.iter().any(|binary| dir.join(binary).is_file()));
     (binary_found || !config_path.is_empty(), config_path)
-}
-
-#[cfg(windows)]
-fn has_windows_executable(dir: &Path, binary: &str) -> bool {
-    ["exe", "cmd", "bat", "ps1"]
-        .iter()
-        .any(|ext| dir.join(format!("{binary}.{ext}")).is_file())
-}
-
-#[cfg(not(windows))]
-fn has_windows_executable(_dir: &Path, _binary: &str) -> bool {
-    false
 }
 
 /// Go `install.ResolveConfigPath`: the expanded first candidate, unchecked.

@@ -308,7 +308,11 @@ pub fn create(
     new: &NewToken<'_>,
     now: OffsetDateTime,
 ) -> Result<(TokenRecord, String), StoreError> {
-    let root_cap = open_root(root)?;
+    let Some(root_cap) = crate::open_registry_root(root)? else {
+        // Go reads the missing registry as empty and fails at the write.
+        new_record(new, now)?;
+        return Err(missing_root_write_error(root));
+    };
     let _lock = crate::open_root_write_lock(&root_cap, root)?;
     let target = root.join(TOKEN_REGISTRY_FILE);
     let mut entries = read(&target)?;
@@ -548,7 +552,10 @@ pub fn revoke(
     token_id: &str,
     now: OffsetDateTime,
 ) -> Result<bool, StoreError> {
-    let root_cap = open_root(root)?;
+    let Some(root_cap) = crate::open_registry_root(root)? else {
+        // A missing vault root is an empty registry: nothing to revoke.
+        return Ok(false);
+    };
     let _lock = crate::open_root_write_lock(&root_cap, root)?;
     let target = root.join(TOKEN_REGISTRY_FILE);
     let mut entries = read(&target)?;
@@ -629,7 +636,11 @@ pub fn rotate(
     new: &NewToken<'_>,
     now: OffsetDateTime,
 ) -> Result<(TokenRecord, String), StoreError> {
-    let root_cap = open_root(root)?;
+    let Some(root_cap) = crate::open_registry_root(root)? else {
+        // Go reads the missing registry as empty and fails at the write.
+        new_record(new, now)?;
+        return Err(missing_root_write_error(root));
+    };
     let _lock = crate::open_root_write_lock(&root_cap, root)?;
     let target = root.join(TOKEN_REGISTRY_FILE);
     let mut entries = read(&target)?;
@@ -719,6 +730,20 @@ fn open_root(root: &Path) -> Result<fs::File, StoreError> {
         path: root.to_path_buf(),
         source,
     })
+}
+
+/// Go's failure for a token write into a vault directory that does not exist:
+/// `create token: write token registry: open <dir>/mcp-tokens.json.tmp-<n>: no
+/// such file or directory`, where `<n>` is the random suffix of Go's temp file.
+fn missing_root_write_error(root: &Path) -> StoreError {
+    let mut suffix = [0_u8; 4];
+    // The suffix only mimics Go's random temp name; a failed draw is harmless.
+    let _ = getrandom::fill(&mut suffix);
+    StoreError::RegistryWrite(format!(
+        "create token: write token registry: open {}.tmp-{}: no such file or directory",
+        root.join(TOKEN_REGISTRY_FILE).display(),
+        u32::from_le_bytes(suffix)
+    ))
 }
 
 fn read(path: &Path) -> Result<BTreeMap<String, TokenRecord>, StoreError> {
@@ -871,6 +896,34 @@ mod tests {
                 .expect("mutation completes after lock release")
         );
         assert!(path.join(TOKEN_REGISTRY_FILE).is_file());
+    }
+
+    /// ADR 0037 R21: Go reads a missing vault directory as an empty registry.
+    /// Revoking finds nothing; creating and rotating fail at the write with Go's
+    /// text. Nothing is ever created.
+    #[test]
+    fn missing_vault_root_reads_as_empty_registry_and_is_never_created() {
+        let (root, _) = vault_dir();
+        let missing = root.path().join("absent");
+        let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+
+        assert!(!revoke(&missing, "agent", "tok-1", now).expect("empty registry"));
+        for result in [
+            create(&missing, &new_token("agent"), now),
+            rotate(&missing, &new_token("agent"), now),
+        ] {
+            let message = result.expect_err("write into a missing root").to_string();
+            let prefix = format!(
+                "create token: write token registry: open {}.tmp-",
+                missing.join(TOKEN_REGISTRY_FILE).display()
+            );
+            let suffix = message.strip_prefix(&prefix).expect("Go-shaped message");
+            let digits = suffix
+                .strip_suffix(": no such file or directory")
+                .expect("Go-shaped message");
+            assert!(!digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()));
+        }
+        assert!(!missing.exists(), "the vault directory must not be created");
     }
 
     #[test]

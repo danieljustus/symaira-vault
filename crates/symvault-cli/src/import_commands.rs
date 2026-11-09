@@ -124,8 +124,7 @@ fn bytes_of(parts: &[&[u8]]) -> Vec<u8> {
 /// element, empty when there is none (so a dotfile `.csv` has extension `.csv`).
 fn go_ext(path: &Path) -> String {
     let text = path.to_string_lossy();
-    let separators: &[char] = if cfg!(windows) { &['/', '\\'] } else { &['/'] };
-    let base_start = text.rfind(separators).map_or(0, |index| index + 1);
+    let base_start = text.rfind('/').map_or(0, |index| index + 1);
     let base = &text[base_start..];
     base.rfind('.')
         .map_or("", |index| &base[index..])

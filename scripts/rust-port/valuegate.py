@@ -173,6 +173,8 @@ def _macho_stripped(fh, head, is64):
             defined = 0
             for i in range(nsyms):
                 n_type = table[i * entry + 4]
+                if n_type == 0x3C:  # N_OPT: the radr://5614542 marker Apple's strip
+                    continue  # leaves in every stripped binary; carries no debug info
                 if n_type & 0xE0:  # N_STAB debug symbol
                     return False, "mach-o: debug (stab) symbols present"
                 if n_type & 0x0E == 0x0E:  # N_SECT: defined in a section
