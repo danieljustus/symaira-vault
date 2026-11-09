@@ -222,6 +222,13 @@ class Helpers(unittest.TestCase):
             self.assertTrue(vg.detect_stripped(stripped)[0])
             self.assertFalse(vg.detect_stripped(full)[0])
             self.assertFalse(vg.detect_stripped(stab)[0])
+            # Apple's strip leaves one N_OPT (0x3C) radr://5614542 marker.
+            opt = Path(tmp, "o")
+            opt.write_bytes(macho([0x3C, 0x0F, 0x01]))
+            self.assertTrue(vg.detect_stripped(opt)[0])
+            opt_and_stab = Path(tmp, "os")
+            opt_and_stab.write_bytes(macho([0x3C, 0x24, 0x0F]))
+            self.assertFalse(vg.detect_stripped(opt_and_stab)[0])
 
 
 class MeasureWithFakes(unittest.TestCase):
