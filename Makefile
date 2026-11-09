@@ -697,9 +697,9 @@ ffi-fixtures-check:
 # decrypting Rust-produced vault data is no longer tested: the `ffi-differential` attestation (a past live Go
 # mobilebind driver run of the same test) is verified in the same target as static, historical evidence.
 # A test that prints SKIP (c_abi under coverage instrumentation) is reported, not hidden.
-FFI_LOG := target/ffi-differential/cargo-test.txt
+FFI_LOG := $(CARGO_TARGET_DIR)/ffi-differential/cargo-test.txt
 ffi-differential: ffi-fixtures-check
-	@set -eu; mkdir -p target/ffi-differential; \
+	@set -eu; mkdir -p "$(CARGO_TARGET_DIR)/ffi-differential"; \
 	$(CARGO) test -p symvault-ffi --locked -- --nocapture > "$(FFI_LOG)" 2>&1 || { cat "$(FFI_LOG)"; exit 1; }; \
 	cat "$(FFI_LOG)"; \
 	if grep -q 'SKIP' "$(FFI_LOG)"; then \
@@ -1769,7 +1769,7 @@ mcp-call-fixtures-check: mcp-copy-clipboard-fixtures-check mcp-secure-input-fixt
 # verdicts, the historical bytes against the independent anchor, and every behavior field of the corrected and
 # product-source captures against the historical fixtures.
 .PHONY: mcp-ordered-fixtures-check mcp-oracle-controls
-MCP_FIXTURE_EVIDENCE ?= target/mcp-fixture-evidence
+MCP_FIXTURE_EVIDENCE ?= $(CARGO_TARGET_DIR)/mcp-fixture-evidence
 mcp-oracle-controls:
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_mcp_oracle.py
 
@@ -1819,7 +1819,7 @@ REENCRYPT_FIXTURE_TESTS := go_written_crash_states_recover_to_the_tree_go_recove
 REENCRYPT_UNIT_TESTS := reencrypt_journal::tests::lexical_root_alias_is_normalized_but_symlinked_ancestor_is_rejected tests::recovery_resource_failures_preserve_journal_and_originals tests::recovery_without_backup_rolls_back_only_with_staged_provenance
 .PHONY: reencrypt-journal-differential
 reencrypt-journal-differential:
-	@set -eu; mkdir -p target/reencrypt-journal; log=target/reencrypt-journal/fixture.txt; units=target/reencrypt-journal/units.txt; \
+	@set -eu; mkdir -p "$(CARGO_TARGET_DIR)/reencrypt-journal"; log="$(CARGO_TARGET_DIR)/reencrypt-journal/fixture.txt"; units="$(CARGO_TARGET_DIR)/reencrypt-journal/units.txt"; \
 	$(CARGO) test -p symvault-store --locked --test reencrypt_journal_go_fixture -- --exact $(REENCRYPT_FIXTURE_TESTS) --nocapture > "$$log" 2>&1 || { cat "$$log"; exit 1; }; \
 	$(CARGO) test -p symvault-store --locked --lib -- --exact $(REENCRYPT_UNIT_TESTS) --nocapture > "$$units" 2>&1 || { cat "$$units"; exit 1; }; \
 	$(AREA_CHECK) log-ok "$$log" --exact-prefix "" $(REENCRYPT_FIXTURE_TESTS) --sum-passed $(words $(REENCRYPT_FIXTURE_TESTS)); \
