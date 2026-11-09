@@ -171,6 +171,15 @@ pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), Confi
         .documents()
         .next()
         .ok_or_else(|| "cannot load config: missing YAML document".to_owned())?;
+    // yaml.v3 reads a document that is only a start marker (`---`) as a null
+    // scalar root and Go refuses to set a key under it; yaml-edit 0.3.4+ gives
+    // such a document no root node and would write a new mapping (#1526).
+    if document_start_without_root(&document, source) {
+        let cause = "root node is a scalar, not a mapping";
+        return Err(ConfigFailure::GoConfigError(format!(
+            "cannot set {key:?}: {cause}: {cause}"
+        )));
+    }
     let target_line = document.try_get_path(key).ok().and_then(|node| {
         node.as_scalar()
             .map(|scalar| scalar.start_position(source).line)
@@ -349,6 +358,19 @@ fn reindent_two_spaces(text: &str) -> String {
         out.push_str(comment_newline);
     }
     out
+}
+
+/// A document with an explicit start marker and no root node at all (comments
+/// and blank lines aside), which yaml.v3 reads as a null scalar root.
+fn document_start_without_root(document: &yaml_edit::Document, source: &str) -> bool {
+    document.as_mapping().is_none()
+        && document.as_sequence().is_none()
+        && document.as_scalar().is_none()
+        && document.as_tagged().is_none()
+        && source.lines().any(|line| {
+            let line = line.trim_end();
+            line == "---" || line.starts_with("--- ") || line.starts_with("---\t")
+        })
 }
 
 fn ensure_mapping_parents(document: &yaml_edit::Document, key: &str) -> Result<(), String> {

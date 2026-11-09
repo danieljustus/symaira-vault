@@ -18,7 +18,7 @@ serde.workspace = true
 serde_json.workspace = true
 serde_yaml_ng = "=0.10.0"
 symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
-yaml-edit = { version = "=0.3.3", default-features = false }
+yaml-edit = { version = "0.3.5", default-features = false }
 symaira-core-version.workspace = true
 sha1 = "=0.11.0"
 sha2 = "=0.11.1"
