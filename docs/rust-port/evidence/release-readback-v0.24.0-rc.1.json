@@ -1,0 +1,22 @@
+{
+ "schema": "release-readback-v1",
+ "tag": "v0.24.0-rc.1",
+ "commit": "9e28b01e620e8ce832c892618e8c9690e7a445b1",
+ "release_url": "https://github.com/danieljustus/symaira-vault/releases/tag/v0.24.0-rc.1",
+ "workflow_run": 42717413895,
+ "verified_utc": "2026-11-10",
+ "checks": {
+  "prerelease_flag": true,
+  "draft": false,
+  "asset_count": 43,
+  "checksums": "12/12 OK (shasum -a 256 -c symaira-vault_0.24.0-rc.1_checksums.txt)",
+  "cosign": "13/13 verify-blob OK; identity release.yml@refs/tags/v0.24.0-rc.1, issuer token.actions.githubusercontent.com; negative control (appended byte) rejected",
+  "sbom": "3 CycloneDX SBOMs (370/402/401 components), covered by checksums and cosign",
+  "provenance": "gh attestation verify: SLSA provenance v1, refs/tags/v0.24.0-rc.1 @ 9e28b01e",
+  "macos": "darwin_arm64 symvault: Developer ID Application Daniel Justus (M4744F3TAA), hardened runtime, spctl: Notarized Developer ID; version 0.24.0-rc.1; init/set/get round trip OK",
+  "linux_packages": "deb arm64 on debian:stable-slim and ubuntu:24.04, apk arm64 on alpine:3, rpm amd64 on fedora:41 install and report 0.24.0-rc.1; ubuntu deb init/set/get round trip OK",
+  "docker": "ghcr.io/danieljustus/symvault:0.24.0-rc.1 version OK, scripts/docker-smoke.sh init/set/get OK; :latest not moved by the RC",
+  "homebrew": "tap PR danieljustus/homebrew-tap#51 formula urls and darwin_arm64 sha256 match the release checksums; not merged (RC is not published to the tap); local brew install not run to avoid replacing the operator's production symvault",
+  "nix": "ci.yml job 'Flake vendorHash' (run 42706990490 on 9e28b01e) built and ran the flake"
+ }
+}
