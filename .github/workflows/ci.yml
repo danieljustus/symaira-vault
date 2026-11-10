@@ -271,10 +271,10 @@ jobs:
     needs: [changes, decide]
     if: needs.changes.outputs.code != 'false'
     runs-on: ${{ fromJSON(matrix.os == 'macos-latest' && needs.decide.outputs.runs_on || toJSON(matrix.os)) }}
-    # The macOS leg runs about 43 minutes on the self-hosted MacBook runner
-    # (tests about 2300-2450 s plus the CLI/auth replay); 60 leaves headroom
-    # for normal host variance so the limit only catches real hangs.
-    timeout-minutes: 60
+    # The macOS leg runs 38 to 56 minutes on the self-hosted MacBook runner
+    # depending on host load (tests plus the CLI/auth replay); 90 leaves
+    # headroom for that variance so the limit only catches real hangs.
+    timeout-minutes: 90
     env:
       CARGO_BUILD_JOBS: '2'
       RUST_TEST_THREADS: '1'
