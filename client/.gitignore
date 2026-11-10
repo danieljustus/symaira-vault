@@ -1,4 +1,4 @@
-.build/
+.build
 .swiftpm/
 DerivedData/
 Symvault.xcodeproj/

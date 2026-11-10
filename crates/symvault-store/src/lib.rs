@@ -1975,52 +1975,38 @@ fn open_directory_nofollow(path: &Path) -> io::Result<fs::File> {
 #[cfg(unix)]
 fn open_nofollow_kind(path: &Path, final_directory: bool) -> io::Result<fs::File> {
     use rustix::fs::{CWD, Mode, OFlags, openat};
-    let mut components = path.components().peekable();
-    let mut dir = if path.is_absolute() {
-        openat(
-            CWD,
-            "/",
-            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW,
-            Mode::empty(),
-        )?
-    } else {
-        openat(
-            CWD,
-            ".",
-            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW,
-            Mode::empty(),
-        )?
-    };
-    let mut last = None;
-    while let Some(component) = components.next() {
-        let name = match component {
-            Component::RootDir | Component::CurDir => continue,
-            Component::Normal(name) => name,
+    // One kernel lookup instead of an `openat` per component: intermediate
+    // symlinks (e.g. macOS `/var` -> `/private/var`) resolve like the Go
+    // oracle's plain `os.Open`, and NOFOLLOW guards only the final component,
+    // exactly as before. A per-component walk also needed read access to
+    // every ancestor, which the iOS sandbox refuses for the app container's
+    // parents (`EPERM` on a physical iPhone), while path lookup only needs
+    // search access. The path is rebuilt from its components so a trailing
+    // `/` or `.` cannot make the kernel follow a final symlink.
+    let mut clean = PathBuf::new();
+    let mut has_name = false;
+    for component in path.components() {
+        match component {
+            Component::RootDir => clean.push(component.as_os_str()),
+            Component::CurDir => {}
+            Component::Normal(name) => {
+                clean.push(name);
+                has_name = true;
+            }
             Component::ParentDir | Component::Prefix(_) => {
                 return Err(io::Error::new(io::ErrorKind::InvalidInput, "unsafe path"));
             }
-        };
-        let is_last = components.peek().is_none();
-        // Only the final component is opened with NOFOLLOW: intermediate
-        // symlinks (e.g. macOS `/var` -> `/private/var`) must resolve like
-        // the Go oracle's plain `os.Open` does. Symlink-safety of the target
-        // itself is preserved by the final NOFOLLOW open.
-        let flags = if is_last && final_directory {
-            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW
-        } else if is_last {
-            OFlags::RDONLY | OFlags::NOFOLLOW
-        } else {
-            OFlags::RDONLY | OFlags::DIRECTORY
-        };
-        let opened = openat(&dir, name, flags, Mode::empty())?;
-        if is_last {
-            last = Some(opened);
-        } else {
-            dir = opened;
         }
     }
-    last.map(fs::File::from)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "empty path"))
+    if !has_name {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "empty path"));
+    }
+    let flags = if final_directory {
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW
+    } else {
+        OFlags::RDONLY | OFlags::NOFOLLOW
+    };
+    Ok(fs::File::from(openat(CWD, &clean, flags, Mode::empty())?))
 }
 
 #[cfg(not(unix))]

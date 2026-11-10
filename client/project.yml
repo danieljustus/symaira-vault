@@ -155,8 +155,38 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
 
+  # Hosted unit tests: device destinations refuse tool-hosted (package
+  # scheme) tests, and the keychain tests need the signed app's entitlements
+  # (unhosted runs fail with -34018). Same sources as the package test target.
+  SymvaultIOSAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget:
+      iOS: "17.0"
+    sources:
+      - path: Tests/SymvaultIOSTests
+    dependencies:
+      - target: SymvaultIOSApp
+      - package: SymvaultClient
+        product: SymvaultIOS
+      - package: SymvaultClient
+        product: SymvaultFFI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.symaira.vault.ios.tests
+        # The host's PRODUCT_NAME differs from its target name.
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Symaira Vault.app/Symaira Vault"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        DEVELOPMENT_TEAM: M4744F3TAA
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: YES
+        "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
+
 schemes:
   SymvaultIOSApp:
     build:
       targets:
         SymvaultIOSApp: all
+    test:
+      targets:
+        - SymvaultIOSAppTests

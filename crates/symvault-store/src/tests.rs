@@ -3095,3 +3095,42 @@ fn keep_negative_zero_rewrites_only_a_leading_minus_zero() {
         serde_json::from_slice::<serde_json::Value>(&bytes).expect("still valid JSON");
     }
 }
+
+/// The iOS sandbox lets an app traverse, but not open, its container's
+/// parents; a per-component `openat` walk then failed with EPERM on a
+/// physical iPhone. A search-only (0311) ancestor reproduces that class on a
+/// host: the open needs search access only, and a final symlink is still
+/// refused, with or without a trailing slash.
+#[cfg(unix)]
+#[test]
+fn nofollow_open_needs_only_search_access_on_ancestors() {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
+    let temp = tempfile::tempdir().unwrap();
+    if fs::metadata(temp.path()).unwrap().uid() == 0 {
+        return; // root bypasses the permission bits this test relies on
+    }
+    let locked = temp.path().join("locked");
+    let vault = locked.join("vault");
+    fs::create_dir_all(&vault).unwrap();
+    fs::write(vault.join("config.yaml"), b"x").unwrap();
+    symlink(&vault, locked.join("link")).unwrap();
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o311)).unwrap();
+
+    let directory = open_directory_nofollow(&vault);
+    let file = open_nofollow_kind(&vault.join("config.yaml"), false);
+    let final_link = open_directory_nofollow(&locked.join("link"));
+    let mut trailing = locked.join("link").into_os_string();
+    trailing.push("/");
+    let trailing_link = open_directory_nofollow(Path::new(&trailing));
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+
+    assert!(directory.is_ok(), "{directory:?}");
+    assert!(file.is_ok(), "{file:?}");
+    assert!(final_link.is_err(), "a final symlink must not be followed");
+    assert!(
+        trailing_link.is_err(),
+        "a trailing slash must not follow a final symlink"
+    );
+    assert!(open_directory_nofollow(Path::new("/")).is_err());
+    assert!(open_directory_nofollow(&temp.path().join("a/../b")).is_err());
+}
