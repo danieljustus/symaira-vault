@@ -595,7 +595,15 @@ fn run_all() -> Vec<Case> {
         "mtls/client-ca-file-replaced-old-client-established-connection",
     );
     cases.push(case);
-    thread::sleep(Duration::from_millis(3500));
+    // X.509 stores notAfter in whole seconds and rustls compares whole
+    // seconds inclusively, so the short certificate can stay valid until the
+    // second after `now + 3s` ends. Wait past that boundary, never less than
+    // the original 3.5 s, so the after-expiry cases do not race the clock.
+    let expiry_second = (now + TimeDuration::seconds(3)).unix_timestamp();
+    let past_expiry = OffsetDateTime::from_unix_timestamp(expiry_second + 1).unwrap()
+        + TimeDuration::milliseconds(200);
+    let wait = (past_expiry - OffsetDateTime::now_utc()).max(TimeDuration::milliseconds(3500));
+    thread::sleep(wait.unsigned_abs());
     let (case, _) = client.request(
         address,
         &cfg(Some(&short), Version::Tls13),
