@@ -485,6 +485,36 @@ fn scan(path: &Path, root: &Path, hits: &mut Hits, scanned: &mut usize) {
     }
 }
 
+/// Tracked plus untracked-but-not-ignored files under `sub`, as git sees them.
+/// Git-ignored local run output (`.github/admin/`, `.github/audit/`, ...) is
+/// never shipped and must not fail a local gate run in a used checkout. `None`
+/// without a usable git; the caller then walks the filesystem.
+fn git_files(root: &Path, sub: &str) -> Option<Vec<PathBuf>> {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args([
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "--",
+        ])
+        .arg(sub)
+        .output()
+        .ok()
+        .filter(|o| o.status.success())?;
+    let files: Vec<PathBuf> = output
+        .stdout
+        .split(|b| *b == 0)
+        .filter(|name| !name.is_empty())
+        .map(|name| root.join(String::from_utf8_lossy(name).as_ref()))
+        .filter(|path| path.is_file())
+        .collect();
+    (!files.is_empty()).then_some(files)
+}
+
 fn hits_under(roots: &[&str]) -> (Hits, usize) {
     let root = repo_root();
     let mut hits = Hits::new();
@@ -492,7 +522,15 @@ fn hits_under(roots: &[&str]) -> (Hits, usize) {
     for sub in roots {
         let path = root.join(sub);
         assert!(path.exists(), "scan root {sub} is missing");
-        scan(&path, &root, &mut hits, &mut scanned);
+        match git_files(&root, sub) {
+            Some(mut files) => {
+                files.sort();
+                for file in files {
+                    scan_file(&file, &root, &mut hits, &mut scanned);
+                }
+            }
+            None => scan(&path, &root, &mut hits, &mut scanned),
+        }
     }
     (hits, scanned)
 }
