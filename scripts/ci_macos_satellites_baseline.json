@@ -996,7 +996,7 @@
         "PYTHONDONTWRITEBYTECODE": "1"
       },
       "timeout_minutes_original": 40,
-      "file_sha256": "469b7c8768a6d16802529051e8d144cea5bcbbb65a1ee004833102f4f5400b50",
+      "file_sha256": "8668c96dde44bb2a6088fe197a0c512de5f76af28a5e907508824bf5890c7ef0",
       "group": "broker",
       "mac_step_indexes": [
         0,
@@ -1035,7 +1035,7 @@
         },
         {
           "name": "Execute actual native TLS and lifetime regressions",
-          "run": "set -euo pipefail\ncargo fmt --all --check\ncargo clippy -p symvault-cli -p symvault-mcp -p symvault-core --all-targets --locked -- -D warnings\ncargo test -p symvault-core --test policy_contract --locked bounded_network_globs_match_captured_go_unicode_and_escape_cases\ncargo test -p symvault-mcp --test egress_broker --locked > target/native-egress-tests.txt 2>&1 || { cat target/native-egress-tests.txt; exit 1; }\ncat target/native-egress-tests.txt\npython3 - <<'PY'\nfrom pathlib import Path\ntext = Path('target/native-egress-tests.txt').read_text()\nassert '5 passed; 0 failed; 0 ignored' in text\nfor case in ['egress_preflight_denies_before_credential_read_or_upstream_contact', 'egress_decoded_path_acl_denies_before_entry_read_or_normalization', 'egress_verified_mitm_injects_and_masks_real_encrypted_credentials', 'egress_callback_error_joins_idle_clients_and_releases_listener', 'egress_stop_cancels_owned_upstream_request_without_waiting_for_network_timeout']:\n    assert f'{case} ... ok' in text\nPY\ncargo build -p symvault-cli --bin symvault -p symvault-mcp --example egress_contract_probe --locked\n"
+          "run": "set -euo pipefail\ncargo fmt --all --check\ncargo clippy -p symvault-cli -p symvault-mcp -p symvault-core --all-targets --locked -- -D warnings\ncargo test -p symvault-core --test policy_contract --locked bounded_network_globs_match_captured_go_unicode_and_escape_cases\ncargo test -p symvault-mcp --test egress_broker --locked > target/native-egress-tests.txt 2>&1 || { cat target/native-egress-tests.txt; exit 1; }\ncat target/native-egress-tests.txt\npython3 - <<'PY'\nfrom pathlib import Path\ntext = Path('target/native-egress-tests.txt').read_text()\nassert '7 passed; 0 failed; 0 ignored' in text\nfor case in ['egress_preflight_denies_before_credential_read_or_upstream_contact', 'egress_decoded_path_acl_denies_before_entry_read_or_normalization', 'egress_verified_mitm_injects_and_masks_real_encrypted_credentials', 'egress_callback_error_joins_idle_clients_and_releases_listener', 'egress_stop_cancels_owned_upstream_request_without_waiting_for_network_timeout', 'egress_template_selection_limits_injection_to_the_named_templates', 'egress_template_selection_rejects_unknown_and_empty_names']:\n    assert f'{case} ... ok' in text\nPY\ncargo build -p symvault-cli --bin symvault -p symvault-mcp --example egress_contract_probe --locked\n"
         },
         {
           "name": "Execute actual native Go and Rust CLI and runtime cases",

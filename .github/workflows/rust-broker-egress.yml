@@ -72,8 +72,8 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           text = Path('target/native-egress-tests.txt').read_text()
-          assert '5 passed; 0 failed; 0 ignored' in text
-          for case in ['egress_preflight_denies_before_credential_read_or_upstream_contact', 'egress_decoded_path_acl_denies_before_entry_read_or_normalization', 'egress_verified_mitm_injects_and_masks_real_encrypted_credentials', 'egress_callback_error_joins_idle_clients_and_releases_listener', 'egress_stop_cancels_owned_upstream_request_without_waiting_for_network_timeout']:
+          assert '7 passed; 0 failed; 0 ignored' in text
+          for case in ['egress_preflight_denies_before_credential_read_or_upstream_contact', 'egress_decoded_path_acl_denies_before_entry_read_or_normalization', 'egress_verified_mitm_injects_and_masks_real_encrypted_credentials', 'egress_callback_error_joins_idle_clients_and_releases_listener', 'egress_stop_cancels_owned_upstream_request_without_waiting_for_network_timeout', 'egress_template_selection_limits_injection_to_the_named_templates', 'egress_template_selection_rejects_unknown_and_empty_names']:
               assert f'{case} ... ok' in text
           PY
           cargo build -p symvault-cli --bin symvault -p symvault-mcp --example egress_contract_probe --locked
