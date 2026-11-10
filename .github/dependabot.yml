@@ -9,6 +9,13 @@ updates:
       - danieljustus
     commit-message:
       prefix: "chore(ci)"
+    groups:
+      # init, autobuild, analyze and upload-sarif must run the same version:
+      # a split bump (init 4.39.1, analyze 4.39.2) failed every CodeQL job
+      # with a configuration error.
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
 
   - package-ecosystem: cargo
     directory: /
