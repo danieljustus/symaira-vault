@@ -376,8 +376,8 @@ osascript -e 'tell application "System Events" to get name of first application 
 ```
 
 Expected: first time, a dialog `"<terminal>" wants access to control "System
-Events"`; click **OK/Allow**. Output: the frontmost app name. This is the same
-call the autotype focus guard makes before typing
+Events"`; click **OK/Allow**. Output: the frontmost app name. The autotype
+focus guard uses a similar System Events probe that also checks for a window
 (`crates/symvault-platform/src/macos.rs`, `type_text`).
 
 The `keystroke` call needs Accessibility. Do not trigger it here, because a
@@ -527,6 +527,7 @@ your terminal app (and Automation, System Events, if offered). Run the block
 again. Expected: TextEdit shows exactly `Sx-Test-Pw-4711`, the response is
 `{"success": true}`, and the response frame does not contain the password.
 Pass: typed text equals the field value, once, in the focused app.
+With TextEdit frontmost and no document window open, repeat: expect an error containing `autotype: target has no focused window` and no typing.
 
 Focus-guard branch (code: `focus::guard` captures the frontmost process,
 waits 200 ms and captures again; a change aborts):

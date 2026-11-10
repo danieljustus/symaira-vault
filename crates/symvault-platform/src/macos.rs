@@ -344,29 +344,57 @@ impl MacOsPlatform {
     }
 }
 
+fn guarded_autotype(
+    strict: &str,
+    capture: impl FnMut() -> Result<String, PlatformError>,
+    send: impl FnOnce() -> Result<(), PlatformError>,
+) -> Result<(), PlatformError> {
+    crate::focus::guard(strict, capture)?;
+    send()
+}
+
+fn capture_autotype_target() -> Result<String, PlatformError> {
+    // Resolve the process and its window in one script without interpolating
+    // the application name into AppleScript.
+    let script = r#"tell application "System Events"
+    set targetProcess to first application process whose frontmost is true
+    if not (exists window 1 of targetProcess) then return "no-window"
+    return "process:" & (name of targetProcess)
+end tell"#;
+    let output = run_stdin_command("/usr/bin/osascript", &["-e", script], b"", DEFAULT_TIMEOUT)
+        .map_err(|_| crate::focus::unavailable())?;
+    parse_autotype_target(&output)
+}
+
+fn parse_autotype_target(output: &[u8]) -> Result<String, PlatformError> {
+    let target = String::from_utf8_lossy(output).trim().to_owned();
+    if target == "no-window" {
+        return Err(PlatformError {
+            kind: PlatformErrorKind::Canceled,
+            message: "autotype: target has no focused window".into(),
+        });
+    }
+    if !target.starts_with("process:") || target == "process:" {
+        return Err(crate::focus::unavailable());
+    }
+    Ok(target)
+}
+
 impl Autotype for MacOsPlatform {
     fn type_text(&self, text: &str) -> Result<(), PlatformError> {
-        crate::focus::guard(
+        guarded_autotype(
             &std::env::var_os("SYMVAULT_AUTOTYPE_STRICT_FOCUS")
                 .map(|value| value.to_string_lossy().into_owned())
                 .unwrap_or_default(),
+            capture_autotype_target,
             || {
-                let output = run_stdin_command(
-                    "/usr/bin/osascript",
-                    &["-e", "tell application \"System Events\" to get name of first application process whose frontmost is true"],
-                    b"", DEFAULT_TIMEOUT,
-                ).map_err(|_| crate::focus::unavailable())?;
-                Ok(format!(
-                    "process:{}",
-                    String::from_utf8_lossy(&output).trim()
-                ))
+                let script = format!(
+                    "Application('System Events').keystroke({});",
+                    js_string(text)
+                );
+                run_jxa(&script, DEFAULT_TIMEOUT).map(|_| ())
             },
-        )?;
-        let script = format!(
-            "Application('System Events').keystroke({});",
-            js_string(text)
-        );
-        run_jxa(&script, DEFAULT_TIMEOUT).map(|_| ())
+        )
     }
 }
 
@@ -564,6 +592,80 @@ fn xml_text(value: &str) -> String {
 mod tests {
     use super::*;
     use symvault_core::session::{Keyring, SessionError};
+
+    #[test]
+    fn autotype_guard_sends_only_for_a_windowed_target() {
+        let mut sends = 0;
+        guarded_autotype(
+            "1",
+            || parse_autotype_target(b"process:TextEdit\n"),
+            || {
+                sends += 1;
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(sends, 1);
+
+        let mut captures = 0;
+        let mut sends = 0;
+        let error = guarded_autotype(
+            "1",
+            || {
+                captures += 1;
+                parse_autotype_target(if captures == 1 {
+                    b"process:TextEdit\n"
+                } else {
+                    b"no-window\n"
+                })
+            },
+            || {
+                sends += 1;
+                Ok(())
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, PlatformErrorKind::Canceled);
+        assert_eq!(captures, 2);
+        assert_eq!(sends, 0);
+
+        for strict in ["", "1"] {
+            let mut sends = 0;
+            let error = guarded_autotype(
+                strict,
+                || parse_autotype_target(b"no-window\n"),
+                || {
+                    sends += 1;
+                    Ok(())
+                },
+            )
+            .unwrap_err();
+            assert_eq!(error.kind, PlatformErrorKind::Canceled);
+            assert_eq!(error.message, "autotype: target has no focused window");
+            assert_eq!(sends, 0);
+        }
+    }
+
+    #[test]
+    fn autotype_guard_preserves_unavailable_probe_policy() {
+        for (strict, expected_sends) in [("", 1), ("0", 1), ("1", 0)] {
+            let mut sends = 0;
+            let result = guarded_autotype(
+                strict,
+                || Err(crate::focus::unavailable()),
+                || {
+                    sends += 1;
+                    Ok(())
+                },
+            );
+            assert_eq!(sends, expected_sends);
+            if strict == "1" {
+                assert_eq!(result.unwrap_err().kind, PlatformErrorKind::Unavailable);
+            } else {
+                assert!(result.is_ok());
+            }
+        }
+    }
 
     #[test]
     fn native_helper_drains_pipes_and_bounds_blocked_input_and_descendants() {
