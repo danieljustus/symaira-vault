@@ -14,7 +14,7 @@ let package = Package(
         .library(name: "SymvaultFFI", targets: ["SymvaultFFI"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/danieljustus/symaira-appkit.git", exact: "0.10.0"),
+        .package(url: "https://github.com/danieljustus/symaira-corekit.git", exact: "0.20.0"),
     ],
     targets: [
         // Rust vault core (crates/symvault-ffi): the XCFramework built by
@@ -40,8 +40,8 @@ let package = Package(
         .target(
             name: "SymvaultKit",
             dependencies: [
-                .product(name: "SymairaCLIRunner", package: "symaira-appkit"),
-                .product(name: "SymairaToolKit", package: "symaira-appkit"),
+                .product(name: "SymairaCLIRunner", package: "symaira-corekit"),
+                .product(name: "SymairaToolKit", package: "symaira-corekit"),
                 .target(name: "SymvaultFFI", condition: .when(platforms: [.iOS])),
             ]
         ),
@@ -49,7 +49,7 @@ let package = Package(
             name: "SymvaultFeature",
             dependencies: [
                 "SymvaultKit",
-                .product(name: "SymairaTheme", package: "symaira-appkit"),
+                .product(name: "SymairaTheme", package: "symaira-corekit"),
             ]
         ),
         .testTarget(
