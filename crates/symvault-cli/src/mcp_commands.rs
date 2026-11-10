@@ -525,11 +525,9 @@ impl RuntimeMetadataGuard {
 /// Creates `<vault>/.symvault/device-sessions.json` (`{}`) when it is absent,
 /// matching Go's `NewDeviceSessionStore` on first start. An existing store is
 /// left to the approval commands that own its schema and migration.
-/// Go's `auth.LoadTokenSystem` for the HTTP server: a non-empty scoped registry
-/// is used as is; otherwise the single legacy bearer token (file, environment
-/// or freshly generated) is migrated into a wildcard-scoped registry entry and
-/// the file removed. The raw token is returned so it keeps authenticating, like
-/// Go's returned `legacyToken`, without ever being written to the registry.
+/// A non-empty scoped registry is used as is; a real legacy file is migrated
+/// and removed, while an environment token stays in memory. Without either,
+/// initialize an empty registry instead of minting an undisclosed bearer.
 fn load_token_system(
     root: &Path,
     configured_file: &str,
@@ -556,7 +554,7 @@ fn load_token_system(
         .and_then(|bytes| String::from_utf8(bytes).ok())
         .map(|text| Zeroizing::new(text.trim().to_owned()))
         .filter(|token| !token.is_empty());
-    let (token, generated) = match (file_token, env_token) {
+    let token = match (file_token, env_token) {
         (Some(token), env) => {
             if env.is_some() {
                 eprintln!(
@@ -564,20 +562,15 @@ fn load_token_system(
                     legacy_path.display()
                 );
             }
-            (token, false)
+            token
         }
         // The environment token serves only this process: Go neither writes
         // it to the registry nor to a file.
         (None, Some(token)) => return Ok(Some(token)),
         (None, None) => {
-            let mut bytes = Zeroizing::new([0_u8; 32]);
-            getrandom::fill(bytes.as_mut_slice())
-                .map_err(|error| format!("load legacy token: generate token: {error}"))?;
-            let hex = bytes
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>();
-            (Zeroizing::new(hex), true)
+            symvault_store::token_registry::ensure_registry(root)
+                .map_err(|error| format!("load token system: load legacy token: {error}"))?;
+            return Ok(None);
         }
     };
     let migrated = symvault_store::token_registry::import_legacy(
@@ -590,8 +583,7 @@ fn load_token_system(
         eprintln!(
             "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id={id}).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy {id}"
         );
-        if !generated
-            && let Err(error) = fs::remove_file(&legacy_path)
+        if let Err(error) = fs::remove_file(&legacy_path)
             && error.kind() != io::ErrorKind::NotFound
         {
             eprintln!(

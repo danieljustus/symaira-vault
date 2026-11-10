@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Controls for the interpreter-independent token-file structure of http_token_contract.py (no live processes)."""
+import copy
 import hashlib
 import json
 import sys
@@ -56,6 +57,23 @@ class TokenFilesDepth(unittest.TestCase):
         self.assertEqual(value['version'], 2)
         self.assertEqual(len(value['entries']), 1)
         self.assertEqual(self.structure(b'{"tokens": '), 'unparseable')
+
+
+class FreshRegistryDeviation(unittest.TestCase):
+    def test_missing_registry_deviation_rejects_mutated_native_results(self):
+        path = Path(__file__).parent / 'fixtures/go-observations/http-token.darwin.json'
+        document = json.loads(path.read_text())
+        go = next(row['go'] for row in document['data']['startup'] if row['case'] == 'registry-missing')
+        rust = copy.deepcopy(go)
+        rust['after'] = {'mcp-tokens.json': {'entries': [], 'version': 2}}
+        rust['stderr_has_legacy_warning'] = False
+        scenario = ('registry-missing', None, False, 'listening', 401)
+        driver.check_startup(scenario, go, rust)
+        for field, value in [('stderr_has_legacy_warning', True), ('after', go['after'])]:
+            broken = copy.deepcopy(rust)
+            broken[field] = value
+            with self.assertRaises(AssertionError):
+                driver.check_startup(scenario, go, broken)
 
 
 if __name__ == '__main__':

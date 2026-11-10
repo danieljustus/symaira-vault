@@ -309,9 +309,18 @@ fn compare(test: &str, label: &str, config: &str, args: &[&str]) {
         normalise(&go.stdout, &go_side),
         "{label}: stdout"
     );
+    let mut expected_stderr = normalise(&go.stderr, &go_side);
+    if test == "doctor_fix_repairs_audit_and_clipboard_like_go" {
+        // #1592: Go minted a legacy token for this fresh vault; Rust does not.
+        let warning = "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-<id>).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-<id>\n";
+        expected_stderr = expected_stderr
+            .strip_prefix(warning)
+            .expect("Go's recorded fresh-vault warning")
+            .to_owned();
+    }
     assert_eq!(
         normalise(&rust.stderr, &rust_side),
-        normalise(&go.stderr, &go_side),
+        expected_stderr,
         "{label}: stderr"
     );
     let (go_file, rust_file) = (config_of(&go_side), config_of(&rust_side));

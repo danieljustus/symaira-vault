@@ -906,6 +906,43 @@ fn assert_known_divergences_observed(seen: &[String]) {
     );
 }
 
+/// Post-Go deviation #1592: these scenarios had no legacy bearer to migrate.
+/// Require exactly the recorded legacy entry to be absent, retaining every
+/// other registry field and token in the comparison.
+fn apply_fresh_registry_divergence(go: &[ScenarioResult], rust: &mut [ScenarioResult]) {
+    let names = [
+        "agent_fail",
+        "agent_fail_keep",
+        "existing_agent_fail",
+        "http_agent_resume",
+    ];
+    let mut seen = Vec::new();
+    for (go, rust) in go.iter().zip(rust.iter_mut()) {
+        if !names.contains(&rust.name.as_str()) {
+            continue;
+        }
+        let key = "xdg/data/symaira-vault/mcp-tokens.json";
+        let expected = go.manifest.get(key).expect("Go registry");
+        let actual = rust.manifest.get(key).expect("Rust registry");
+        let mut value: serde_json::Value =
+            serde_json::from_str(expected.text.as_deref().unwrap()).unwrap();
+        let tokens = value["tokens"].as_array_mut().unwrap();
+        let before = tokens.len();
+        tokens.retain(|token| token["label"] != "legacy (auto-migrated, unscoped)");
+        assert_eq!(before - tokens.len(), 1, "{} Go legacy entry", rust.name);
+        let mut projected = expected.clone();
+        projected.text = Some(serde_json::to_string_pretty(&value).unwrap());
+        assert_eq!(&projected, actual, "{} fresh registry deviation", rust.name);
+        rust.manifest.insert(key.to_owned(), expected.clone());
+        seen.push(rust.name.as_str());
+    }
+    assert_eq!(
+        seen.len(),
+        names.len(),
+        "all fresh-registry deviations must be observed"
+    );
+}
+
 /// Field-by-field comparison; every difference names scenario, run and field.
 fn diff_results(
     left_name: &str,
@@ -2052,6 +2089,7 @@ fn native_matches_recorded_go_results() {
     recorded.iter_mut().for_each(|r| r.go_opens_vault.clear());
     let mut results = results;
     assert_known_divergences_observed(&apply_known_divergences(&recorded, &mut results));
+    apply_fresh_registry_divergence(&recorded, &mut results);
     let mut diffs = Vec::new();
     for (rust, recorded) in results.iter().zip(&recorded) {
         diffs.extend(diff_results("recorded-go", recorded, "rust", rust));

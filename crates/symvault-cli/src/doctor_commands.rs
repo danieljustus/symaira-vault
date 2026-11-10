@@ -1994,7 +1994,7 @@ fn check_mcp_tokens(vault_dir: &Path, opts: &DoctorOptions) -> DoctorResult {
         let migration = if let Some(raw) = legacy.as_deref() {
             token_registry::import_legacy(vault_dir, raw, OffsetDateTime::now_utc())
         } else {
-            token_registry::create_legacy(vault_dir, OffsetDateTime::now_utc())
+            token_registry::ensure_registry(vault_dir).map(|()| None)
         };
         let migrated_id = match migration {
             Ok(migrated_id) => migrated_id,

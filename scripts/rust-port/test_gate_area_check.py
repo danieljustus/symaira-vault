@@ -305,7 +305,12 @@ def good_http_token():
     startup = []
     for scenario in token_driver.startup_scenarios(raws, body):
         record = startup_record(scenario)
-        startup.append({"case": scenario[0], "go": record, "rust": copy.deepcopy(record)})
+        rust_record = copy.deepcopy(record)
+        if scenario[0] in token_driver.FRESH_STARTUP_CASES:
+            record['after'] = {'mcp-tokens.json': {'version': 2, 'entries': [['legacy (auto-migrated, unscoped)', 'legacy']]}}
+            record['stderr_has_legacy_warning'] = True
+            rust_record['after'] = {'mcp-tokens.json': {'version': 2, 'entries': []}}
+        startup.append({"case": scenario[0], "go": record, "rust": rust_record})
     dynamic = {"live_before_expiry": 200, "live_expiry_epoch": 100.0, "live_detected_epoch": 101.0, "added_latency": 2.1,
                "revoke_latency": 2.2, "recovered_latency": 2.0, "after_corruption": 200}
     steps = [[f"step-{i}", 200 if i % 2 else 401] for i in range(21)]
