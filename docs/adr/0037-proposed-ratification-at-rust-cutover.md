@@ -694,8 +694,8 @@ this docs-only change.
 Hardware residuals need a person at a device. They are not ratified and not
 automated; a maintainer records them as a manual acceptance note.
 
-- **SESSION-003:** Touch ID prompt (accept, cancel, failure) through the JXA
-  `LAContext` evaluation; the real default-keychain path
+- **SESSION-003:** Touch ID prompt (accept, cancel, failure) through the
+  in-process `LAContext` evaluation (JXA until 2026-11-10); the real default-keychain path
   (`SecurityBiometricItems::system()`), cross-binary access-control prompts,
   `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` and the login/data-protection
   keychain with ACL trusted-application lists; reading a Rust-written item with

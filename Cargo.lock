@@ -4129,8 +4129,10 @@ name = "symvault-platform"
 version = "0.0.0"
 dependencies = [
  "base64 0.23.1",
+ "block2",
  "keyring",
  "keyring-core",
+ "objc2",
  "rustix",
  "security-framework",
  "serde",

@@ -131,7 +131,7 @@ The scratch passphrase is a test value, not a credential. Do not reuse it.
 ## S1. Touch ID unlock through the shipped binary (SESSION-003)
 
 **Purpose.** Closes the SESSION-003 hardware residual: the Touch ID prompt
-(accept, cancel, failure) through the JXA `LAContext` evaluation, the real
+(accept, cancel, failure) through the in-process `LAContext` evaluation, the real
 default-keychain path `SecurityBiometricItems::system()`, cross-binary
 access-control behaviour, and the item layout the default (login) keychain
 actually stores. Also the #1243 acceptance line "the keychain prompt names
@@ -145,10 +145,12 @@ How it works in this tree (read from source, so you know what to expect):
   `SYMVAULT_TEST_KEYRING=memory` is set: probe the keychain item **without
   reading it**, show the Touch ID dialog, then read the item.
   (`crates/symvault-cli/src/session_commands.rs`, `load_touch_id_passphrase`.)
-- The dialog is produced by `/usr/bin/osascript` running a JXA `LAContext`
-  script with reason `Unlock Symaira Vault vault` and a 30 s timeout
-  (`crates/symvault-platform/src/macos.rs`). The dialog may therefore name
-  `osascript`, not SymVault. Record exactly what it says; do not interpret.
+- The dialog is produced by an in-process `LAContext` evaluation (Objective-C
+  runtime, `crates/symvault-platform/src/macos.rs`, `local_auth`) with reason
+  `Unlock Symaira Vault vault` and a 30 s timeout that invalidates the prompt.
+  It names the `symvault` binary. Until 2026-11-10 it went through
+  `/usr/bin/osascript` (JXA) and named `osascript` (#1243 finding, fixed).
+  Record exactly what it says; do not interpret.
 - The passphrase item is a generic password, service
   `symvault-biometric:<vault dir>`, account `passphrase`, raw passphrase bytes,
   written and read through Security.framework (no `security` subprocess).
@@ -175,7 +177,7 @@ biometric-gated). If a keychain dialog appears, screenshot it and record the
 application name.
 
 If you get `touch ID is not available in this Symaira Vault build or on this
-Mac`, the JXA availability probe failed; record it and stop S1.
+Mac`, the `LAContext` availability probe failed; record it and stop S1.
 
 ### S1.2 Item layout and ACL (no prompt expected, no secret read)
 

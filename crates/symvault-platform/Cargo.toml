@@ -19,6 +19,10 @@ keyring-core = "=1.0.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = { version = "=3.7.0", default-features = false, features = ["OSX_10_15"] }
+# LocalAuthentication through the Objective-C runtime (native Touch ID prompt
+# attributed to the signed binary). Both already ship via ctrlc -> dispatch2.
+objc2 = "=0.6.4"
+block2 = "=0.6.2"
 
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "=1.1.6", features = ["fs", "process", "termios"] }

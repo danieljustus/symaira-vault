@@ -216,43 +216,106 @@ fn js_string(value: &str) -> String {
 /// Backward-compatible macOS name for the shared native OS keyring adapter.
 pub use crate::os_keyring::OsKeyring as MacOsKeyring;
 
-/// Touch ID availability and authentication using LocalAuthentication via
-/// JavaScript for Automation. The authenticator returns only a decision.
+/// Touch ID availability and authentication through LocalAuthentication,
+/// called in-process so the system prompt names the signed `symvault` binary
+/// (the former JXA bridge made it name `osascript`, #1243). The authenticator
+/// returns only a decision.
 #[derive(Default)]
 pub struct MacOsTouchId;
 
-impl MacOsTouchId {
-    fn availability_script() -> &'static str {
-        r#"ObjC.import('LocalAuthentication');
-var context = $.LAContext.alloc.init;
-var error = $();
-context.canEvaluatePolicyError(1, error) ? 'available' : 'unavailable';"#
+// LocalAuthentication has no safe Rust binding: five documented Objective-C
+// message sends plus the framework link declarations, nothing else.
+#[allow(unsafe_code)]
+mod local_auth {
+    use std::ffi::CString;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    use block2::RcBlock;
+    use objc2::rc::{Retained, autoreleasepool};
+    use objc2::runtime::{AnyObject, Bool};
+    use objc2::{class, msg_send};
+
+    #[link(name = "LocalAuthentication", kind = "framework")]
+    unsafe extern "C" {}
+    #[link(name = "Foundation", kind = "framework")]
+    unsafe extern "C" {}
+
+    /// `LAPolicyDeviceOwnerAuthenticationWithBiometrics`: biometrics only, as
+    /// Go asked (no device-password fallback policy).
+    const BIOMETRICS: isize = 1;
+
+    #[derive(Debug, PartialEq, Eq)]
+    pub(super) enum Outcome {
+        Authenticated,
+        Rejected,
+        TimedOut,
+        Unavailable,
     }
 
-    fn authentication_script(reason: &str) -> String {
-        format!(
-            "ObjC.import('Foundation');\nObjC.import('LocalAuthentication');\n(function () {{ var context = $.LAContext.alloc.init;\nvar result = null;\nvar error = $();\nif (!context.canEvaluatePolicyError(1, error)) {{ return 'unavailable'; }}\ncontext.evaluatePolicyLocalizedReasonReply(1, {}, function(success, replyError) {{ result = success; }});\nwhile (result === null) {{ $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.05)); }}\nreturn result ? 'authenticated' : 'rejected'; }})();\n",
-            js_string(reason)
-        )
+    fn context() -> Retained<AnyObject> {
+        // SAFETY: `+[LAContext new]` returns a retained, initialised object.
+        unsafe { msg_send![class!(LAContext), new] }
+    }
+
+    fn can_evaluate(context: &AnyObject) -> bool {
+        let no_error: *mut *mut AnyObject = std::ptr::null_mut();
+        // SAFETY: `canEvaluatePolicy:error:` accepts a NULL error pointer and
+        // never shows a prompt.
+        let ok: Bool =
+            unsafe { msg_send![context, canEvaluatePolicy: BIOMETRICS, error: no_error] };
+        ok.as_bool()
+    }
+
+    pub(super) fn available() -> bool {
+        autoreleasepool(|_| can_evaluate(&context()))
+    }
+
+    pub(super) fn authenticate(reason: &str, timeout: Duration) -> Outcome {
+        autoreleasepool(|_| {
+            let context = context();
+            if !can_evaluate(&context) {
+                return Outcome::Unavailable;
+            }
+            let reason = CString::new(reason.replace('\0', "")).expect("NUL removed");
+            // SAFETY: `stringWithUTF8String:` copies the NUL-terminated UTF-8
+            // bytes; the returned autoreleased string is retained by objc2.
+            let reason: Retained<AnyObject> =
+                unsafe { msg_send![class!(NSString), stringWithUTF8String: reason.as_ptr()] };
+            let (sender, receiver) = mpsc::sync_channel::<bool>(1);
+            let reply = RcBlock::new(move |success: Bool, _error: *mut AnyObject| {
+                let _ = sender.try_send(success.as_bool());
+            });
+            // SAFETY: the reply block is copied by LocalAuthentication and is
+            // called once on a private queue; this thread only waits.
+            let () = unsafe {
+                msg_send![&*context, evaluatePolicy: BIOMETRICS, localizedReason: &*reason, reply: &*reply]
+            };
+            match receiver.recv_timeout(timeout) {
+                Ok(true) => Outcome::Authenticated,
+                Ok(false) => Outcome::Rejected,
+                Err(_) => {
+                    // Dismisses the prompt; the pending reply then reports
+                    // failure into the dropped channel.
+                    // SAFETY: `invalidate` takes no arguments.
+                    let () = unsafe { msg_send![&*context, invalidate] };
+                    Outcome::TimedOut
+                }
+            }
+        })
     }
 }
 
 impl TouchId for MacOsTouchId {
     fn is_available(&self) -> bool {
-        run_jxa(Self::availability_script(), Duration::from_secs(5))
-            .map(|output| output == b"available\n" || output == b"available")
-            .unwrap_or(false)
+        local_auth::available()
     }
 
     fn authenticate(&self, reason: &str, timeout: Duration) -> Result<(), PlatformError> {
-        if !self.is_available() {
-            return Err(unavailable("touch id unavailable"));
-        }
-        let output = run_jxa(&Self::authentication_script(reason), timeout)?;
-        match output.as_slice() {
-            b"authenticated\n" | b"authenticated" => Ok(()),
-            b"unavailable\n" | b"unavailable" => Err(unavailable("touch id unavailable")),
-            _ => Err(PlatformError {
+        match local_auth::authenticate(reason, timeout) {
+            local_auth::Outcome::Authenticated => Ok(()),
+            local_auth::Outcome::Unavailable => Err(unavailable("touch id unavailable")),
+            local_auth::Outcome::Rejected | local_auth::Outcome::TimedOut => Err(PlatformError {
                 kind: PlatformErrorKind::Canceled,
                 message: "touch id authentication was not accepted".to_owned(),
             }),
@@ -641,7 +704,20 @@ mod tests {
             run_jxa("(function () { return 'ok'; })();", DEFAULT_TIMEOUT).unwrap(),
             b"ok\n"
         );
-        let probe = run_jxa(MacOsTouchId::availability_script(), DEFAULT_TIMEOUT).unwrap();
+    }
+
+    /// The native probe must agree with an independent JXA probe of the same
+    /// `canEvaluatePolicy` call (neither shows a prompt).
+    #[test]
+    fn native_touch_id_probe_agrees_with_jxa() {
+        if !Path::new("/usr/bin/osascript").is_file() {
+            return;
+        }
+        let probe = run_jxa(
+            "ObjC.import('LocalAuthentication');\nvar c = $.LAContext.alloc.init; var e = $();\nc.canEvaluatePolicyError(1, e) ? 'available' : 'unavailable';",
+            DEFAULT_TIMEOUT,
+        )
+        .unwrap();
         assert!(
             probe == b"available\n" || probe == b"unavailable\n",
             "{probe:?}"
@@ -651,29 +727,12 @@ mod tests {
 
     #[test]
     fn jxa_scripts_never_report_through_console_log() {
-        let scripts = [
-            MacOsTouchId::availability_script().to_owned(),
-            MacOsTouchId::authentication_script("fixture reason"),
-        ];
-        for script in &scripts {
-            assert!(!script.contains("console.log"), "{script}");
-            // Go asks for biometrics only (LAPolicyDeviceOwnerAuthenticationWithBiometrics).
-            assert!(!script.contains("PolicyError(2") && !script.contains("ReasonReply(2"));
-        }
         assert!(
             !include_str!("macos.rs")
                 .lines()
                 .filter(|line| !line.trim_start().starts_with("//") && !line.contains("assert"))
                 .any(|line| line.contains(concat!("console", ".log(")))
         );
-    }
-
-    #[test]
-    fn touch_id_authentication_script_returns_only_a_decision() {
-        let script = MacOsTouchId::authentication_script("fixture reason");
-        assert!(script.contains("authenticated"));
-        assert!(script.contains("rejected"));
-        assert!(!script.contains("passphrase"));
     }
 
     #[test]
