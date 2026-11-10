@@ -1037,14 +1037,18 @@ grants you added for the terminal if you do not want them permanently
 
 ## Blocker register for the coordinator
 
+The 2026-11-10 run is recorded in
+[evidence/device-acceptance-2026-11-10.md](evidence/device-acceptance-2026-11-10.md);
+S5.5 (B7 to B9) and S6 are still open.
+
 | ID | Step | Missing | Needed before the human runs it |
 |---|---|---|---|
-| B1 | S0 | Statement of BIN's code signature (ad-hoc, Developer ID, notarized) | `codesign -dv --verbose=4 BIN` output in the handover |
-| B2 | S1.7 | Go cgo binary from `legacy/go-oracle`, Go-side command lines | Build (Go 1.26.6, `CGO_ENABLED=1`) and test the Go commands; otherwise record S1.7 as not run |
-| B3 | S2.3 | Any shipped path to `Notifier`/`SecureUi` (ADR 0034 items 28/29) | Maintainer decision: implement (option B) or ratify fail-closed (option A) |
-| B4 | S3.2 | The `config set agents.cli.*` key set was not executed | Run it once on a throwaway vault and fix the block if it fails |
-| B5 | S5.3 | Signed test host for `ApprovalSessionStoreTests` (no test target in `client/project.yml`; unsigned = `-34018`) | Add a hosted test target or a documented device test route |
-| B6 | S5.3 | Device-destination `xcodebuild test` for the package scheme never run | Run it on a connected phone once |
+| B1 | S0 | Statement of BIN's code signature (ad-hoc, Developer ID, notarized) | **resolved 2026-11-10**: published v0.24.0-rc.1 binary, Developer ID, hardened runtime, notarized |
+| B2 | S1.7 | Go cgo binary from `legacy/go-oracle`, Go-side command lines | **recorded as not run 2026-11-10** (Go removed, #1257, ADR 0036) |
+| B3 | S2.3 | Any shipped path to `Notifier`/`SecureUi` (ADR 0034 items 28/29) | **resolved 2026-11-10**: option A, fail closed (ADR 0034 items 28/29) |
+| B4 | S3.2 | The `config set agents.cli.*` key set was not executed | **resolved 2026-11-10**: executed in S3.2, values read back, `validate` clean |
+| B5 | S5.3 | Signed test host for `ApprovalSessionStoreTests` (no test target in `client/project.yml`; unsigned = `-34018`) | **resolved 2026-11-10**: hosted target `SymvaultIOSAppTests` in `client/project.yml` |
+| B6 | S5.3 | Device-destination `xcodebuild test` for the package scheme never run | **resolved 2026-11-10**: 28/28 on an iPhone 17 after the vault-open fix |
 | B7 | S5.5 | No AutoFill or share extension target (#870 open) | Build the extension, or accept host-app-only numbers and say so in the matrix |
 | B8 | S5.5 | No fixture vault encrypted to the on-device identity, no copy-in route, no harness or signposts | Provide the vault (size stated), the install route, and a measurement test |
 | B9 | S5.5 | No numeric memory budget anywhere in the repo | Maintainer states a budget, or FFI-002 stays "measured, recorded" |
