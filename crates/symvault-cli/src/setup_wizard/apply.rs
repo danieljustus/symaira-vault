@@ -318,8 +318,7 @@ fn install_agent(vault_dir: &str, selection: &AgentSelection) -> Result<(), Stri
     Err("unsupported config format \"\"".to_owned())
 }
 
-/// `auth.LoadTokenSystem`: an empty registry gets the legacy token entry,
-/// migrated from `mcp-token` when that file exists.
+/// Migrate an existing legacy file, otherwise initialize an empty registry.
 fn load_token_system(root: &Path) -> Result<(), String> {
     let mut tokens = crate::agent_list_commands::load_tokens(root)?;
     tokens.retain(|token| !token.hash.is_empty());
@@ -350,7 +349,7 @@ fn load_token_system(root: &Path) -> Result<(), String> {
     let now = OffsetDateTime::now_utc();
     let migrated = match legacy.as_deref() {
         Some(raw) => token_registry::import_legacy(root, raw, now),
-        None => token_registry::create_legacy(root, now),
+        None => token_registry::ensure_registry(root).map(|()| None),
     }
     .map_err(|error| format!("load legacy token: {error}"))?;
     if let Some(id) = migrated {

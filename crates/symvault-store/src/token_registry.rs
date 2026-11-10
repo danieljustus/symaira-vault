@@ -373,34 +373,21 @@ pub fn import_legacy(
     Ok(Some(id))
 }
 
-/// Creates Go's fresh legacy-token registry entry without retaining the raw
-/// token. This is the final on-disk state of `LoadOrCreateToken` followed by
-/// legacy migration; atomic publication keeps the registry private and valid.
-pub fn create_legacy(root: &Path, now: OffsetDateTime) -> Result<Option<String>, StoreError> {
-    use zeroize::Zeroize;
-
+/// Initializes an absent registry without minting an unusable token.
+/// Existing registries are left untouched, including empty ones.
+pub fn ensure_registry(root: &Path) -> Result<(), StoreError> {
     let root_cap = open_root(root)?;
     let _lock = crate::open_root_write_lock(&root_cap, root)?;
     let target = root.join(TOKEN_REGISTRY_FILE);
-    let mut entries = read(&target)?;
-    entries.retain(|_, entry| !entry.hash.is_empty());
-    if !entries.is_empty() {
-        return Ok(None);
+    match std::fs::symlink_metadata(&target) {
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            write(&root_cap, &target, &BTreeMap::new())
+        }
+        Err(error) => Err(StoreError::Config(format!(
+            "inspect token registry: {error}"
+        ))),
     }
-
-    let request = NewToken {
-        label: "legacy (auto-migrated, unscoped)",
-        allowed_tools: vec!["*".to_owned()],
-        agent_name: "legacy",
-        ttl: None,
-        tool_registry_hash: "",
-    };
-    let (record, mut raw_token) = new_record(&request, now)?;
-    raw_token.zeroize();
-    let id = record.id.clone();
-    entries.insert(id.clone(), record);
-    write(&root_cap, &target, &entries)?;
-    Ok(Some(id))
 }
 
 /// Creates an access token and paired refresh token, persisting only hashes.
@@ -932,7 +919,34 @@ mod tests {
         assert_waits_for_write_lock(move |path| {
             import_legacy(path, "0123456789abcdef0123456789abcdef", now)
         });
-        assert_waits_for_write_lock(move |path| create_legacy(path, now));
+        assert_waits_for_write_lock(|path| ensure_registry(path).map(|()| None::<String>));
+    }
+
+    #[test]
+    fn empty_registry_is_private_idempotent_and_accepts_new_tokens() {
+        let (_root, path) = vault_dir();
+        let registry = path.join(TOKEN_REGISTRY_FILE);
+        ensure_registry(&path).unwrap();
+        let bytes = std::fs::read(&registry).unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["version"], 2);
+        assert_eq!(json["tokens"], serde_json::json!({}));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&registry).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        ensure_registry(&path).unwrap();
+        assert_eq!(std::fs::read(&registry).unwrap(), bytes);
+        let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        let (record, _) = create(&path, &new_token("agent"), now).unwrap();
+        let populated = std::fs::read(&registry).unwrap();
+        ensure_registry(&path).unwrap();
+        assert_eq!(std::fs::read(&registry).unwrap(), populated);
+        assert!(read(&registry).unwrap().contains_key(&record.id));
     }
 
     #[test]
@@ -1043,6 +1057,7 @@ mod tests {
     #[test]
     fn refresh_token_creation_persists_hashes_and_rotation_is_single_use() {
         let (_root, path) = vault_dir();
+        ensure_registry(&path).expect("initialize empty registry");
         let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
         let (original, raw_access, raw_refresh) = create_with_refresh(
             &path,

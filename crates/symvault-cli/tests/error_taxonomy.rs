@@ -943,6 +943,17 @@ fn replay_scenarios(
                 )),
                 None => failures.push(format!("{} has no pinned native observation", case.name)),
             }
+        } else if state == "initialized"
+            && (case.name.starts_with("typed_slice_doctor_only_")
+                || case.name.starts_with("typed_slice_doctor_exclude_"))
+        {
+            // #1592: these typed-flag cases all start with no legacy file.
+            // Keep every Go byte except its exactly recorded migration warning.
+            let mut expected = case.observation.clone();
+            let warning = "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n";
+            assert_eq!(expected.stderr.matches(warning).count(), 1, "{}", case.name);
+            expected.stderr = expected.stderr.replacen(warning, "", 1);
+            record_difference(&case.name, &expected, actual, failures);
         } else {
             record_difference(&case.name, &case.observation, actual, failures);
         }

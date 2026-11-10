@@ -434,6 +434,13 @@ def observe_startup(binary, base, seed_vault, port, scenario, raws):
                 responses=responses, stderr_has_legacy_warning='legacy MCP token migrated' in stderr, stderr_utf8=stderr)
 
 
+FRESH_STARTUP_CASES = frozenset({
+    'registry-missing', 'registry-missing-sigint', 'registry-no-tokens',
+    'registry-tokens-null', 'registry-tokens-empty', 'registry-entry-null',
+    'dup-root-tokens-null-resets', 'root-null', 'root-null-whitespace',
+})
+
+
 def check_startup(scenario, go, rust):
     name, _, graceful, state, first = scenario
     for side, observed in (('go', go), ('rust', rust)):
@@ -442,8 +449,16 @@ def check_startup(scenario, go, rust):
             assert observed['exit'] == 1, (name, side, 'fatal registry exit status')
     assert go['before'] == rust['before']
     assert go['exit'] == rust['exit'] and go['disposal'] == rust['disposal'], (name, 'exit/disposal', go['exit'], rust['exit'])
-    assert go['after'] == rust['after'], (name, 'resulting token files', go['after'], rust['after'])
-    assert go['stderr_has_legacy_warning'] == rust['stderr_has_legacy_warning'], (name, 'legacy migration warning')
+    # #1592: Go minted an undisclosed wildcard token without a legacy file.
+    # Rust retains an existing registry unchanged, or creates an empty one.
+    if name in FRESH_STARTUP_CASES:
+        assert go['stderr_has_legacy_warning'] and not rust['stderr_has_legacy_warning'], (name, 'legacy migration warning')
+        assert len(go['after']['mcp-tokens.json']['entries']) == 1, (name, 'recorded Go token')
+        expected_after = go['before'] or {'mcp-tokens.json': {'entries': [], 'version': 2}}
+        assert rust['after'] == expected_after, (name, 'empty registry', expected_after, rust['after'])
+    else:
+        assert go['after'] == rust['after'], (name, 'resulting token files', go['after'], rust['after'])
+        assert go['stderr_has_legacy_warning'] == rust['stderr_has_legacy_warning'], (name, 'legacy migration warning')
     assert [transcript(r) for r in go['responses']] == [transcript(r) for r in rust['responses']], (name, 'served responses')
     if first is not None:
         assert go['responses'][0]['responses'][0]['code'] == first, (name, 'first call status')

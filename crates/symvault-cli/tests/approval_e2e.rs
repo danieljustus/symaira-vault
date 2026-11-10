@@ -768,6 +768,8 @@ fn cert_path(name: &str) -> String {
 struct McpServer {
     child: Child,
     port: u16,
+    startup_stderr: Vec<String>,
+    stderr_lines: mpsc::Receiver<String>,
 }
 
 impl McpServer {
@@ -781,10 +783,15 @@ impl McpServer {
             .stderr(Stdio::piped())
             .spawn()
             .expect("spawn symvault mcp");
-        // Owned before anything can panic: `Drop` kills and reaps the process.
-        let mut server = Self { child, port: 0 };
-        let stderr = server.child.stderr.take().expect("server stderr");
         let (sender, receiver) = mpsc::channel();
+        // Owned before anything can panic: `Drop` kills and reaps the process.
+        let mut server = Self {
+            child,
+            port: 0,
+            startup_stderr: Vec::new(),
+            stderr_lines: receiver,
+        };
+        let stderr = server.child.stderr.take().expect("server stderr");
         thread::spawn(move || {
             for line in BufReader::new(stderr).lines().map_while(Result::ok) {
                 let _ = sender.send(line);
@@ -794,7 +801,8 @@ impl McpServer {
         let mut seen = Vec::new();
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
-            let line = receiver
+            let line = server
+                .stderr_lines
                 .recv_timeout(remaining)
                 .unwrap_or_else(|_| panic!("server did not report its port; stderr: {seen:?}"));
             if let Some(port) = line
@@ -812,6 +820,11 @@ impl McpServer {
                     vault.root.join(".runtime-port").is_file(),
                     "server announced its port before saving the runtime port"
                 );
+                while !vault.root.join("mcp-tokens.json").exists() && Instant::now() < deadline {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                seen.extend(server.stderr_lines.try_iter());
+                server.startup_stderr = seen;
                 return server;
             }
             seen.push(line);
@@ -824,6 +837,45 @@ impl Drop for McpServer {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
+}
+
+#[test]
+fn fresh_vault_http_rejects_unknown_bearers_without_migration() {
+    let vault = RealVault::init();
+    vault.merge_config(&format!(
+        "mcp:\n  tls_cert_file: {}\n  tls_key_file: {}\n",
+        cert_path("server.pem"),
+        cert_path("server.key")
+    ));
+    let server = McpServer::start(&vault);
+    assert!(
+        !server
+            .startup_stderr
+            .iter()
+            .any(|line| line.contains("legacy MCP token migrated"))
+    );
+    let registry: serde_json::Value =
+        serde_json::from_slice(&fs::read(vault.root.join("mcp-tokens.json")).unwrap()).unwrap();
+    assert_eq!(registry["tokens"], serde_json::json!({}));
+    let mcp = McpClient::new(server.port);
+    for bearer in [None, Some("random-unknown-bearer")] {
+        let mut request = mcp
+            .http
+            .post(&mcp.url)
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .body(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
+        if let Some(token) = bearer {
+            request = request.bearer_auth(token);
+        }
+        assert_eq!(request.send().unwrap().status().as_u16(), 401);
+    }
+    assert!(
+        !server
+            .stderr_lines
+            .try_iter()
+            .any(|line| line.contains("legacy MCP token migrated"))
+    );
 }
 
 /// MCP-over-HTTPS client authenticated like a device: bearer + mTLS identity.

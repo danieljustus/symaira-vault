@@ -1803,15 +1803,49 @@ fn run_case(binary: &Path, seeds: &BTreeMap<&str, &Seed>, case: &Case) -> Vec<St
         if output.exit != case.exit {
             problems.push(format!("exit: want {} got {}", case.exit, output.exit));
         }
+        // #1592: these three doctor cases start without a legacy token. Preserve
+        // the Go recording and project only its exact obsolete warning/message.
+        let fresh_doctor = matches!(
+            case.id.as_str(),
+            "doctor.text" | "doctor.json" | "doctor.quiet"
+        );
+        if fresh_doctor {
+            let combined = format!("{}{}", case.stdout, case.stderr);
+            assert_eq!(
+                combined
+                    .matches("WARNING: legacy MCP token migrated")
+                    .count(),
+                1
+            );
+            assert_eq!(
+                combined
+                    .matches("1 active token(s), all within rotation policy")
+                    .count(),
+                1
+            );
+        }
+        let project = |bytes: Vec<u8>| {
+            if !fresh_doctor {
+                return bytes;
+            }
+            let text = String::from_utf8(bytes).expect("doctor output UTF-8");
+            let warning = "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-<DATE>-<RAND>).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-<DATE>-<RAND>\n";
+            text.replace(warning, "")
+                .replace(
+                    "1 active token(s), all within rotation policy",
+                    "no MCP tokens configured",
+                )
+                .into_bytes()
+        };
         compare(
             "stdout",
-            &expected_bytes(&case.stdout, &case.stdout_b64),
+            &project(expected_bytes(&case.stdout, &case.stdout_b64)),
             &stdout,
             &mut problems,
         );
         compare(
             "stderr",
-            &expected_bytes(&case.stderr, &case.stderr_b64),
+            &project(expected_bytes(&case.stderr, &case.stderr_b64)),
             &stderr,
             &mut problems,
         );

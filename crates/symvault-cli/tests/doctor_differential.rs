@@ -1810,7 +1810,7 @@ fn differential_doctor_mcp_tokens_empty_environment_value_creates_registry() {
         assert_eq!(out_rust.status.code(), Some(0));
         let result_go = doctor_result(&out_go);
         let result_rust = doctor_result(&out_rust);
-        for field in ["id", "name", "status", "message", "hint", "fixable"] {
+        for field in ["id", "name", "status", "fixable"] {
             assert_eq!(
                 result_go.get(field),
                 result_rust.get(field),
@@ -1818,7 +1818,20 @@ fn differential_doctor_mcp_tokens_empty_environment_value_creates_registry() {
             );
         }
         if migrated {
-            for (vault, output) in [(&go_vault, &out_go), (&rust_vault, &out_rust)] {
+            assert_eq!(
+                result_go["message"],
+                "1 active token(s), all within rotation policy"
+            );
+            assert_eq!(result_rust["message"], "no MCP tokens configured");
+            let bytes = fs::read(rust_vault.join("mcp-tokens.json")).unwrap();
+            let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(json["tokens"], serde_json::json!({}));
+            assert_eq!(private_mode(&rust_vault.join("mcp-tokens.json")), 0o600);
+            assert!(
+                !String::from_utf8_lossy(&out_rust.stderr).contains("legacy MCP token migrated")
+            );
+            {
+                let (vault, output) = (&go_vault, &out_go);
                 let bytes = fs::read(vault.join("mcp-tokens.json")).expect("empty env migrates");
                 assert_eq!(private_mode(&vault.join("mcp-tokens.json")), 0o600);
                 if !env_token.is_empty() {
@@ -1832,6 +1845,13 @@ fn differential_doctor_mcp_tokens_empty_environment_value_creates_registry() {
                 assert!(!vault.join("mcp-token").exists());
             }
         } else {
+            for field in ["message", "hint"] {
+                assert_eq!(
+                    result_go.get(field),
+                    result_rust.get(field),
+                    "{case}: field {field}"
+                );
+            }
             for vault in [&go_vault, &rust_vault] {
                 assert!(!vault.join("mcp-tokens.json").exists());
                 assert!(!vault.join("mcp-token").exists());
@@ -1943,6 +1963,41 @@ fn differential_doctor_mcp_tokens_migrates_isolated_legacy_and_empty_cases() {
         );
         let result_go = doctor_result(&out_go);
         let result_rust = doctor_result(&out_rust);
+        if legacy.is_none() {
+            for field in ["id", "name", "status", "fixable"] {
+                assert_eq!(
+                    result_go.get(field),
+                    result_rust.get(field),
+                    "{case}: {field}"
+                );
+            }
+            assert_eq!(
+                result_go["message"],
+                "1 active token(s), all within rotation policy"
+            );
+            assert_eq!(result_rust["message"], "no MCP tokens configured");
+            let go_json: serde_json::Value =
+                serde_json::from_slice(&fs::read(go_vault.join("mcp-tokens.json")).unwrap())
+                    .unwrap();
+            let id = go_json["tokens"]
+                .as_object()
+                .unwrap()
+                .values()
+                .next()
+                .unwrap()["id"]
+                .as_str()
+                .unwrap();
+            assert_migration_warning(&out_go, id);
+            let path = rust_vault.join("mcp-tokens.json");
+            let rust_json: serde_json::Value =
+                serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            assert_eq!(rust_json["tokens"], serde_json::json!({}));
+            assert_eq!(private_mode(&path), 0o600);
+            assert!(
+                !String::from_utf8_lossy(&out_rust.stderr).contains("legacy MCP token migrated")
+            );
+            continue;
+        }
         for field in ["id", "name", "status", "message", "hint", "fixable"] {
             assert_eq!(
                 result_go.get(field),
