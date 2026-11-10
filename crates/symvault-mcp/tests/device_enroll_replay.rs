@@ -449,15 +449,25 @@ fn ts_form(form: &str, t: OffsetDateTime) -> String {
                 shift.abs()
             )
         }
-        "single_digit" => format!(
-            "{}-{}-{}T{}:{}:{}Z",
-            t.year(),
-            u8::from(t.month()),
-            t.day(),
-            t.hour(),
-            t.minute(),
-            t.second()
-        ),
+        // Unpadded fields. Go's `15` takes a one-digit hour (see `hour1`), so
+        // the recording was only rejected for its one-digit month and day
+        // (2026-01-02). From October 10 on those are two digits, so the
+        // offset pins the local minute to 0: Go's `04` needs two digits, and
+        // the spelling stays invalid on every date for the same instant.
+        "single_digit" => {
+            let minutes = t.minute();
+            let local = t - time::Duration::minutes(i64::from(minutes));
+            format!(
+                "{}-{}-{}T{}:{}:{}-00:{:02}",
+                local.year(),
+                u8::from(local.month()),
+                local.day(),
+                local.hour(),
+                local.minute(),
+                local.second(),
+                minutes
+            )
+        }
         "epoch" => "0001-01-01T00:00:00Z".to_owned(),
         "far" => "9999-12-31T23:59:59Z".to_owned(),
         other => panic!("unknown timestamp form {other}"),
