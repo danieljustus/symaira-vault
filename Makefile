@@ -38,6 +38,10 @@ RUST_FUZZ_MANIFEST := $(RUST_FUZZ_DIR)/Cargo.toml
 RUST_FUZZ_LOCK := $(RUST_FUZZ_DIR)/Cargo.lock
 RUST_FUZZ_DENY := $(RUST_FUZZ_DIR)/deny.toml
 COVERAGE_DIR := coverage
+# cargo-llvm-cov's default profile name contains %p, so every process the CLI
+# differential tests spawn writes its own profraw file (tens of GB per run,
+# #1601). %4m merges online into four pool files per instrumented binary.
+COVERAGE_PROFILE_FILE_NAME ?= symaira-vault-%4m.profraw
 COVERAGE_FILE := $(COVERAGE_DIR)/coverage.out
 COVERAGE_HTML := $(COVERAGE_DIR)/coverage.html
 PREFIX ?= /usr/local
@@ -66,7 +70,7 @@ test-coverage: rust-coverage
 
 # Generate HTML coverage report
 test-coverage-html:
-	$(CARGO) llvm-cov nextest --workspace --all-features --locked --html --output-dir $(COVERAGE_DIR)
+	LLVM_PROFILE_FILE_NAME='$(COVERAGE_PROFILE_FILE_NAME)' $(CARGO) llvm-cov nextest --workspace --all-features --locked --html --output-dir $(COVERAGE_DIR)
 	@echo "HTML coverage report saved to $(COVERAGE_HTML)"
 
 # Run tests for core crates only (store, core, crypto)
@@ -643,7 +647,7 @@ rust-features:
 	$(CARGO) hack check --workspace --each-feature --locked
 
 rust-coverage:
-	$(CARGO) llvm-cov nextest --workspace --all-features --locked --summary-only
+	LLVM_PROFILE_FILE_NAME='$(COVERAGE_PROFILE_FILE_NAME)' $(CARGO) llvm-cov nextest --workspace --all-features --locked --summary-only
 
 rust-security:
 	$(CARGO) audit --file Cargo.lock
