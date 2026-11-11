@@ -16,6 +16,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.24.1] - 2026-11-11
+
+Maintenance release for the Rust `symvault` and the native clients.
+
+### Changed
+
+- The macOS build uses `objc2` 0.6.5 (patch update of the Objective-C bridge
+  behind Touch ID and the macOS platform adapters).
+- The Swift clients take the shared Symaira UI and toolkit products from
+  `symaira-corekit` 0.20.0, which absorbed the former `symaira-appkit`
+  package; product and module names are unchanged.
+- The release workflow uses `docker/login-action` 4.8.0.
+
+### Documentation
+
+- `docs/rust-port/work-items.json` now matches the shipped state: RUST-007,
+  RUST-008, RUST-010 and RUST-011 are passed; RUST-012 to RUST-014 name the two
+  open contract rows (CLI-006 and FFI-002).
+
 ## [v0.24.0] - 2026-11-11
 
 First stable release of the Rust implementation. Rust is the only shipped
@@ -1310,7 +1329,8 @@ Interactive TUI, vault management, and observability release.
 [v2.8.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.1
 [v2.8.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.0
 [v0.9.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.9.0
-[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.24.1...HEAD
+[v0.24.1]: https://github.com/danieljustus/symaira-vault/compare/v0.24.0...v0.24.1
 [v0.24.0]: https://github.com/danieljustus/symaira-vault/compare/v0.23.2...v0.24.0
 [v0.23.2]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.23.2
 [v0.23.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.23.1
