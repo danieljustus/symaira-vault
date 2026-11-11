@@ -16,6 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.24.0] - 2026-11-11
+
+First stable release of the Rust implementation. Rust is the only shipped
+`symvault`: there is no Go fallback binary. Existing vaults created by the Go
+releases open unchanged; on the first vault-mutating command without a Rust
+marker, the CLI creates a backup through the regular backup path, restores it
+into a temporary directory and verifies it before the write proceeds. Windows
+and macOS Intel builds are no longer published. Release candidate
+`v0.24.0-rc.1` preceded this release; the hardware-bound checks (Touch ID,
+clipboard and autotype, browser OAuth consent, iPhone) were accepted on
+devices on 2026-11-10.
+
 ### Added
 - `symvault run --broker --broker-templates name[,name]` and `symvault broker
   --templates name[,name]` restrict the egress broker to the named API templates
@@ -25,6 +37,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   listens (#1554).
 
 ### Changed
+- The macOS Touch ID unlock evaluates LocalAuthentication inside the `symvault`
+  process instead of through `osascript`, so the system dialog names
+  `symvault`; cancel and the 30 second timeout fall back to the passphrase
+  prompt (#1243).
+- A vault without a legacy MCP token file and without `SYMVAULT_MCP_TOKEN` now
+  gets an empty token registry on the first HTTP `mcp` start, during setup and
+  in `doctor`. Previously a random wildcard-scoped `legacy` token was minted
+  whose value was never shown, together with a misleading migration warning.
+  Unauthenticated HTTP requests are still refused (#1592).
+- macOS autotype refuses to type when the frontmost application has no window
+  and returns `autotype: target has no focused window`; the MCP `autotype` tool
+  reports this as an error instead of success (#1593).
+- The CI job limit for the native Rust tests is 90 minutes (#1591).
 - `symvault config set` refuses a config that is only a document start marker
   (`---`) with exit 6 and leaves the file unchanged, as the Go CLI did; the
   `yaml-edit` pin is lifted (now 0.3.6) (#1526).
@@ -35,6 +60,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   #1584); hardware legs stay with the device acceptance runbook.
 
 ### Fixed
+- iOS: opening a vault inside the app container failed with "Operation not
+  permitted" on a real device, because the path was opened one directory at a
+  time from `/`. Vault paths are now opened with a single kernel lookup that
+  keeps refusing a final symlink and `..`.
+- The biometric unlock reads its keychain item through Security.framework, so
+  macOS no longer shows repeated keychain prompts on behalf of
+  `/usr/bin/security` (#1034).
+- CodeQL analysis ran with mismatched `github/codeql-action` versions and
+  failed; all CodeQL actions are now updated together.
 - `is_executable` (PATH lookup of desktop helpers) asks the kernel for the
   effective user's execute permission like Go's `exec.LookPath` (#1480).
 
@@ -1276,7 +1310,8 @@ Interactive TUI, vault management, and observability release.
 [v2.8.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.1
 [v2.8.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.0
 [v0.9.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.9.0
-[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.23.2...HEAD
+[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.24.0...HEAD
+[v0.24.0]: https://github.com/danieljustus/symaira-vault/compare/v0.23.2...v0.24.0
 [v0.23.2]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.23.2
 [v0.23.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.23.1
 [v0.23.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.23.0
