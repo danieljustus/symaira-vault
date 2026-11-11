@@ -26,7 +26,7 @@ tar = "=0.4.46"
 tempfile = "=3.27.0"
 thiserror = "=2.0.21"
 time = { version = "=0.3.55", features = ["formatting", "parsing"] }
-zip = { version = "=9.4.1", default-features = false, features = ["deflate"] }
+zip = { version = "=9.4.2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 # Fixtures mark their throw-away vaults as Rust-created (test-only helper).
