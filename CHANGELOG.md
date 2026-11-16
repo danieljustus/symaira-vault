@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.25.0] - 2026-11-16
+
+Feature release: text intake from stdin and a macOS service, plus fixes.
+
 ### Added
 - `symvault intake --stdin-as <entry>` reads one text source from stdin instead
   of file arguments and stages it under the named entry path, so a caller never
@@ -1369,7 +1373,8 @@ Interactive TUI, vault management, and observability release.
 [v2.8.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.1
 [v2.8.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.0
 [v0.9.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.9.0
-[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.24.1...HEAD
+[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.25.0...HEAD
+[v0.25.0]: https://github.com/danieljustus/symaira-vault/compare/v0.24.1...v0.25.0
 [v0.24.1]: https://github.com/danieljustus/symaira-vault/compare/v0.24.0...v0.24.1
 [v0.24.0]: https://github.com/danieljustus/symaira-vault/compare/v0.23.2...v0.24.0
 [v0.23.2]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.23.2
