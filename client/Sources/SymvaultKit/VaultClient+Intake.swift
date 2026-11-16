@@ -33,6 +33,23 @@
       return try JSONDecoder().decode(IntakeResponse.self, from: data)
     }
 
+    /// Parses (`dryRun`) or stages one text passed on stdin under `entry`
+    /// (`intake --stdin-as`). The text never becomes a file of this app; the
+    /// CLI keeps it in its private spool for the duration of the call.
+    public func intakeText(
+      _ text: String, entry: String, dryRun: Bool, profile: String? = nil
+    ) async throws -> IntakeResponse {
+      var command = ["intake", "--stdin-as", entry, "--json"]
+      if dryRun { command.append("--dry-run") }
+      let data = try await runner.runChecked(
+        try executable(),
+        arguments: arguments(profile: profile, command: command),
+        stdin: Data(text.utf8),
+        timeout: 60
+      )
+      return try JSONDecoder().decode(IntakeResponse.self, from: data)
+    }
+
     /// Lists quarantined import batches (import review list).
     public func intakeReviewBatches(profile: String? = nil) async throws -> [String] {
       let data = try await runner.runChecked(

@@ -19,6 +19,7 @@
     @State private var showDeleteConfirmation = false
     @State private var showIntake = false
     @State private var intakeStore = IntakeStore()
+    @State private var selectionIntake: SelectionIntakeItem?
 
     var body: some View {
       @Bindable var store = store
@@ -128,11 +129,20 @@
         }
         showIntake = true
       }
+      .onChange(of: SelectionInbox.shared.pending, initial: true) { _, text in
+        guard let text else { return }
+        SelectionInbox.shared.pending = nil
+        selectionIntake = SelectionIntakeItem(text: text)
+      }
       .onChange(of: store.selectedPath) { _, path in
         Task { await store.load(path: path) }
       }
       .sheet(item: $editorContext) { context in
         EntryEditorView(context: context)
+          .environment(store)
+      }
+      .sheet(item: $selectionIntake) { item in
+        SelectionIntakeView(text: item.text)
           .environment(store)
       }
       .sheet(isPresented: $showIntake) {

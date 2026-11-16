@@ -414,7 +414,17 @@ fn page_set_comparison_rejects_missing_and_extra_pages() {
 
 /// Pages on which the port is ahead of the pinned Go oracle, with the exact lines
 /// the port adds (see the comment at the use site).
-const DECLARED_ADDITIONS: [(&str, &[&str]); 3] = [
+const DECLARED_ADDITIONS: [(&str, &[&str]); 4] = [
+    // `intake --stdin-as` (#1605) is a Rust-only local flag as well.
+    (
+        "symvault-intake.1",
+        &[
+            ".PP",
+            "\\fB--stdin-as\\fP=\"\"",
+            "\tRead one text source from stdin instead of files and stage it for this entry path (refused if the entry exists)",
+            "",
+        ],
+    ),
     // `run --broker-templates` and `broker --templates` (#1554) are Rust-only
     // local flags: the frozen Go pages predate them. They are added by the
     // `cli_artifacts::RUST_ONLY_FLAGS` overlay, never by editing the recording.

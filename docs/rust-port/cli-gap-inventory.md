@@ -1344,6 +1344,13 @@ exact text it adds and still fails on any other difference:
 the lines against the frozen pages. `cligap.py` reports no flag gap and no
 Rust-only path for them (it only looks for Go flags missing in Rust).
 
+`intake --stdin-as <entry>` (danieljustus/symaira-vault#1605) is the third
+Rust-only local flag: it reads one text source from stdin instead of file
+arguments and stages it under the named entry path. It uses the same overlay
+and the same declarations; `crates/symvault-cli/tests/intake_stdin.rs` pins its
+lines. Because it replaces the file arguments, the `intake` argument rule in
+`cobra_usage.rs` is "at least one file, unless `--stdin-as` is set".
+
 ## Deliberate non-claims
 
 - Argument-count probes from the oracle tree are not replayed. Clap and Cobra

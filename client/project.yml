@@ -74,6 +74,16 @@ targets:
               - public.x509-certificate
               - com.apple.pkcs12
             CFBundleTypeIconFiles: []
+        # Text selected in any app: right click > Services (#1605). The handler
+        # is IntakeAppDelegate.addSelectionToVault.
+        NSServices:
+          - NSMenuItem:
+              default: Zu Symaira Vault hinzufügen
+            NSMessage: addSelectionToVault
+            NSPortName: Symaira Vault
+            NSSendTypes:
+              - public.utf8-plain-text
+              - NSStringPboardType
     postBuildScripts:
       - name: Embed symvault Engine
         script: |

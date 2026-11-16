@@ -4,6 +4,17 @@
   import Observation
   import SymvaultKit
 
+  public enum SelectionIntakeError: LocalizedError {
+    case rejected(String?)
+
+    public var errorDescription: String? {
+      switch self {
+      case .rejected(let reason):
+        return "Die Auswahl wurde nicht aufgenommen: \(reason ?? "unbekannter Grund")."
+      }
+    }
+  }
+
   @MainActor
   @Observable
   public final class VaultStore {
@@ -207,6 +218,30 @@
         handle(error)
         return false
       }
+    }
+
+    /// Field names the runtime recognizes in selected text. Nothing is written
+    /// and no value is returned; the preview needs no real entry path.
+    public func selectionFields(_ text: String) async throws -> [String] {
+      let preview = try await client.intakeText(
+        text, entry: "selection", dryRun: true, profile: activeProfile)
+      guard let result = preview.results.first, result.isOK else {
+        throw SelectionIntakeError.rejected(preview.results.first?.reason)
+      }
+      return SelectionIntake.fieldNames(in: result)
+    }
+
+    /// Stages the selection under `entry`, promotes the batch and selects the
+    /// new entry. Throws so the sheet can show the reason next to its fields.
+    public func saveSelection(_ text: String, entry: String) async throws {
+      let staged = try await client.intakeText(
+        text, entry: entry, dryRun: false, profile: activeProfile)
+      guard let importID = staged.importID, let result = staged.results.first, result.isOK else {
+        throw SelectionIntakeError.rejected(staged.results.first?.reason)
+      }
+      try await client.intakePromote(importID: importID, profile: activeProfile)
+      selectedPath = entry
+      await refresh()
     }
 
     public func generatePassword(length: Int, symbols: Bool) async -> String? {

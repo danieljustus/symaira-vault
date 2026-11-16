@@ -41,3 +41,16 @@ swift test
 The Xcode build embeds the locally built `symvault` binary in the app bundle.
 During package development, the client can also discover `symvault` beside the
 executable, on `PATH`, or in the standard Homebrew prefixes.
+
+## Service for selected text
+
+The app registers the macOS service "Zu Symaira Vault hinzufügen" (`NSServices`
+in `project.yml`, handler `IntakeAppDelegate.addSelectionToVault`). Select text
+in any app, right click, Services, "Zu Symaira Vault hinzufügen": the app opens
+a sheet with the entry name (prefilled with the host of the first web link) and
+the field names the runtime recognized. "Eintrag sichern" stages the text with
+`symvault intake --stdin-as <entry>` and promotes the batch. The text stays in
+the app process and reaches the bundled CLI on stdin only; the sheet never
+shows a value. The service needs a `symvault` with `--stdin-as`, so the app
+must run the CLI it was built with. macOS lists the service after the app was
+started once (System Settings, Keyboard, Keyboard Shortcuts, Services, Text).

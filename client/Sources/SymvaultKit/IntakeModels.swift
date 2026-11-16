@@ -42,6 +42,56 @@
       self.suggestions = suggestions
       self.duplicates = duplicates
     }
+
+    enum CodingKeys: String, CodingKey {
+      case file, status, reason, provenance, suggestions, duplicates
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      file = try c.decode(String.self, forKey: .file)
+      status = try c.decode(String.self, forKey: .status)
+      reason = try c.decodeIfPresent(String.self, forKey: .reason)
+      provenance = try c.decodeIfPresent(IntakeProvenance.self, forKey: .provenance)
+      // The CLI omits both lists when they are empty.
+      suggestions = try c.decodeIfPresent([IntakeSuggestion].self, forKey: .suggestions) ?? []
+      duplicates = try c.decodeIfPresent([String].self, forKey: .duplicates) ?? []
+    }
+  }
+
+  /// Helpers for text handed over by the macOS service (`intake --stdin-as`).
+  public enum SelectionIntake {
+    /// Entry path proposed for a selection: the host of its first web link.
+    public static func suggestedEntryPath(for text: String) -> String {
+      let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+      let matches = detector?.matches(in: text, range: NSRange(text.startIndex..., in: text)) ?? []
+      let host =
+        matches.lazy
+        .compactMap(\.url)
+        .first { $0.scheme == "http" || $0.scheme == "https" }?
+        .host() ?? ""
+      return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+
+    /// Field names of a preview, each once, without the attachment marker.
+    public static func fieldNames(in result: IntakeFileResult) -> [String] {
+      var seen = Set<String>()
+      return result.suggestions.filter { !$0.attachment && seen.insert($0.field).inserted }
+        .map(\.field)
+    }
+
+    public static func fieldTitle(_ field: String) -> String {
+      switch field {
+      case "username": return "Benutzername"
+      case "password": return "Passwort"
+      case "token": return "Token / API Key"
+      case "url": return "URL"
+      case "totp": return "TOTP"
+      case "client_id": return "Client ID"
+      case "client_secret": return "Client Secret"
+      default: return field
+      }
+    }
   }
 
   public struct IntakeProvenance: Decodable, Sendable {

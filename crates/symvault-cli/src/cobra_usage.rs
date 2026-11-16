@@ -58,6 +58,9 @@ enum Rule {
     JoinPair,
     /// `find`: one query, unless `--url` is set; reported as "at most" once more are given.
     QueryOrUrl,
+    /// `intake`: at least one file, unless the Rust-only `--stdin-as` (#1605) names
+    /// the entry of a source read from stdin.
+    FilesOrStdin,
 }
 
 const JOIN_SUFFIX: &str = " — either '<remote-url> <token>' or '--pairing-file <path> <token>'";
@@ -230,7 +233,7 @@ const ARITY: &[(&str, Rule)] = &[
     ("import review list", Rule::NoArgs),
     ("import review promote", Rule::Exact(1)),
     ("init", Rule::Max(1)),
-    ("intake", Rule::Min(1)),
+    ("intake", Rule::FilesOrStdin),
     ("intake watch", Rule::Exact(1)),
     ("intake watch disable", Rule::NoArgs),
     ("list", Rule::Max(1)),
@@ -587,6 +590,8 @@ struct ValidatorFlags {
     url_filter: bool,
     /// `device join --pairing-file <non-empty>`.
     pairing_file: bool,
+    /// `intake --stdin-as <non-empty>`.
+    stdin_as: bool,
 }
 
 /// The message cobra's argument validator reports, if it rejects `count`.
@@ -607,6 +612,7 @@ fn arity_message(path: &str, count: usize, flags: ValidatorFlags) -> Option<Stri
         }
         Rule::JoinPair => (count != 2)
             .then(|| format!("accepts between 1 and 2 arg(s), received {count}{JOIN_SUFFIX}")),
+        Rule::FilesOrStdin => (count == 0 && !flags.stdin_as).then(|| at_least(1)),
         Rule::QueryOrUrl => {
             if count > 1 {
                 Some(at_most(1))
@@ -1268,6 +1274,9 @@ fn parse_flags(
         }
         (Some("pairing-file"), Some(value)) if path == "device join" => {
             parsed.validator.pairing_file = !value.is_empty();
+        }
+        (Some("stdin-as"), Some(value)) if path == "intake" => {
+            parsed.validator.stdin_as = !value.is_empty();
         }
         _ => {}
     };

@@ -83,6 +83,14 @@ pub const RUST_ONLY_FLAGS: &[RustOnlyFlag] = &[
         man_default: "=[]",
         usage: "Inject credentials only for these templates (comma-separated, built-in or vault-local names); other template hosts are treated as hosts without a template",
     },
+    RustOnlyFlag {
+        path: "symvault intake",
+        name: "stdin-as",
+        help_type: "string",
+        kind: "string",
+        man_default: "=\"\"",
+        usage: "Read one text source from stdin instead of files and stage it for this entry path (refused if the entry exists)",
+    },
 ];
 
 static RUST_ONLY_INVENTORY: LazyLock<Vec<(&'static str, Flag)>> = LazyLock::new(|| {

@@ -1142,13 +1142,18 @@ fn sha_hex(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
-/// Rust-only local flags (#1554, `cli_artifacts::RUST_ONLY_FLAGS`) add one
-/// option block to two generated manual pages that the frozen Go recording
+/// Rust-only local flags (#1554, #1605, `cli_artifacts::RUST_ONLY_FLAGS`) add one
+/// option block to three generated manual pages that the frozen Go recording
 /// predates. The block is removed exactly once before hashing so the rest of
 /// the page still has to equal Go byte for byte; a missing or doubled block
 /// leaves the page unchanged and its hash differs. `cli_generate_manpages`
 /// pins the same lines (`DECLARED_ADDITIONS`).
-const RUST_ONLY_MAN_BLOCKS: [(&str, &str); 2] = [
+const RUST_ONLY_MAN_BLOCKS: [(&str, &str); 3] = [
+    // #1605
+    (
+        "/symvault-intake.1",
+        ".PP\n\\fB--stdin-as\\fP=\"\"\n\tRead one text source from stdin instead of files and stage it for this entry path (refused if the entry exists)\n\n",
+    ),
     (
         "/symvault-run.1",
         "\\fB--broker-templates\\fP=[]\n\tWith --broker: inject credentials only for these templates (comma-separated, built-in or vault-local names); other template hosts are treated as hosts without a template\n\n.PP\n",

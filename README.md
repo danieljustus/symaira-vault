@@ -180,6 +180,7 @@ symvault restore ~/backups/symvault-20260427.tar.gz
 symvault intake ~/Downloads/creds.env --dry-run        # validate + suggest, nothing stored
 symvault intake ~/Downloads/creds.env                  # stage into quarantine/<import-id>/
 symvault import review promote <import-id>             # promote after human review
+pbpaste | symvault intake --stdin-as hosting/example    # one text from stdin, staged for that entry
 
 # Watch a folder (e.g. Downloads) and quarantine new credential files automatically
 symvault intake watch ~/Downloads --once               # single scan, cron/LaunchAgent friendly

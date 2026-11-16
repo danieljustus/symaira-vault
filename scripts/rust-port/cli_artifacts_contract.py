@@ -192,26 +192,31 @@ for kind, args in [('int', ['add', '--length']),
         PARSER_REQUESTS.append((f'{kind}-quoted-{name}', words))
 
 
-# Rust-only local flags (#1554) the frozen Go artifacts predate. The Rust CLI
+# Rust-only local flags (#1554, #1605) the frozen Go artifacts predate. The Rust CLI
 # documents them in `--help` and in the manual pages (overlay
 # `RUST_ONLY_FLAGS` in crates/symvault-cli/src/cli_artifacts.rs); the exact text
 # it adds is declared here and removed before the byte comparison, so any other
 # difference from the Go artifacts still fails. Pinned from the Rust side by
-# crates/symvault-cli/tests/broker_templates.rs.
+# crates/symvault-cli/tests/broker_templates.rs and intake_stdin.rs.
 RUN_TEMPLATES_USAGE = ('With --broker: inject credentials only for these templates (comma-separated, '
                        'built-in or vault-local names); other template hosts are treated as hosts without a template')
 BROKER_TEMPLATES_USAGE = ('Inject credentials only for these templates (comma-separated, built-in or '
                           'vault-local names); other template hosts are treated as hosts without a template')
+INTAKE_STDIN_USAGE = ('Read one text source from stdin instead of files and stage it for this entry path '
+                      '(refused if the entry exists)')  # #1605
 RUST_ONLY_HELP = {
+    'symvault intake': f'      --stdin-as string   {INTAKE_STDIN_USAGE}\n',
     'symvault run': f'      --broker-templates strings     {RUN_TEMPLATES_USAGE}\n',
     'symvault broker': f'      --templates strings     {BROKER_TEMPLATES_USAGE}\n',
 }
 # Each manual entry sits in OPTIONS between two `.PP` separators (or at the end).
 RUST_ONLY_COMPLETION = {  # case name -> the candidate line added to its flag listing
+    'symvault intake/-': f'--stdin-as\t{INTAKE_STDIN_USAGE}\n',
     'symvault run/-': f'--broker-templates\t{RUN_TEMPLATES_USAGE}\n',
     'symvault broker/-': f'--templates\t{BROKER_TEMPLATES_USAGE}\n',
 }
 RUST_ONLY_MAN = {
+    'symvault-intake.1': (f'\\fB--stdin-as\\fP=""\n\t{INTAKE_STDIN_USAGE}', 'last'),
     'symvault-run.1': (f'\\fB--broker-templates\\fP=[]\n\t{RUN_TEMPLATES_USAGE}', 'inner'),
     'symvault-broker.1': (f'\\fB--templates\\fP=[]\n\t{BROKER_TEMPLATES_USAGE}', 'last'),
 }

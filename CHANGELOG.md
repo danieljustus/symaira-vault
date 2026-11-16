@@ -16,6 +16,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `symvault intake --stdin-as <entry>` reads one text source from stdin instead
+  of file arguments and stages it under the named entry path, so a caller never
+  has to put the text into a file. Recognized fields are stored as fields and
+  the remaining lines as `notes`; the copy of the whole text is only kept (as
+  the attachment) when no field was recognized. An existing entry is refused
+  before anything is written (#1605).
+- macOS app: the service "Zu Symaira Vault hinzufügen" (right click on selected
+  text in any app, Services) opens a confirmation sheet with the entry name and
+  the recognized field names and saves the selection as one entry (#1605).
+
+### Changed
+- The intake text parser reads the label up to the first `:` or `=` and
+  tolerates spaces around it. It knows the German labels `Benutzername`,
+  `Passwort`, `Kennwort` and their variants, `url`/`website`, and a bare
+  `http(s)://` line; `.env` and JSON sources map `benutzername`, `passwort`
+  and `kennwort` as well. Existing labels keep their field and confidence
+  (#1605).
+
+### Fixed
+- macOS app: intake results decode when the CLI omits the empty `suggestions`
+  and `duplicates` lists (#1605).
+- `import review promote` no longer warns `auto-commit failed … did not match
+  any files` and leaves `manifest.age` uncommitted: a commit skips affected
+  paths that git knows neither in the worktree nor in the index, such as the
+  deleted quarantine entry that was never committed (#1606).
+
 ## [v0.24.1] - 2026-11-11
 
 Maintenance release for the Rust `symvault` and the native clients.

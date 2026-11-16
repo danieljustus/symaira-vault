@@ -157,11 +157,34 @@ pub fn source_type(name: &str, data: &[u8]) -> SourceType {
         SourceType::Other
     }
 }
+/// Label of a free-text line (lower-cased, without its separator).
+fn text_label(label: &str) -> Option<(&'static str, f64)> {
+    Some(match label {
+        "username" | "user name" | "user" | "login" | "login id" | "benutzername" | "benutzer"
+        | "nutzername" | "anmeldename" | "benutzerkennung" | "kennung" => ("username", 0.8),
+        "account" => ("username", 0.6),
+        "email" | "e-mail" | "mail" | "e-mail-adresse" => ("username", 0.7),
+        "password" | "passwort" | "kennwort" => ("password", 0.85),
+        "pass" | "passwd" | "pwd" => ("password", 0.8),
+        "secret" => ("password", 0.7),
+        "token" | "auth token" => ("token", 0.8),
+        "api key" | "api-key" | "apikey" | "access token" | "api-schlüssel" | "api schlüssel" => {
+            ("token", 0.85)
+        }
+        "totp" | "otp" => ("totp", 0.8),
+        "2fa" => ("totp", 0.7),
+        "client id" => ("client_id", 0.7),
+        "client secret" => ("client_secret", 0.8),
+        "url" | "website" | "webseite" => ("url", 0.8),
+        _ => return None,
+    })
+}
 fn field(k: &str) -> (&str, f64) {
     match k.trim().to_lowercase().as_str() {
         "username" | "user" | "login" | "login_id" | "loginid" | "account" | "email" | "mail"
-        | "userid" | "user_id" => ("username", 0.95),
-        "password" | "pass" | "passwd" | "pwd" | "password_plain" | "secret" => ("password", 0.95),
+        | "userid" | "user_id" | "benutzername" | "benutzer" => ("username", 0.95),
+        "password" | "pass" | "passwd" | "pwd" | "password_plain" | "secret" | "passwort"
+        | "kennwort" => ("password", 0.95),
         "token" | "access_token" | "accesstoken" | "api_key" | "apikey" | "api-key" | "key"
         | "auth_token" | "authtoken" | "bearer" => ("token", 0.9),
         "totp" | "otp" | "otpauth" | "secret_key" | "secretkey" | "2fa" | "two_factor" => {
@@ -220,50 +243,32 @@ pub fn suggestions(data: &[u8], kind: SourceType, name: &str) -> Vec<Suggestion>
             if out.is_empty() { attachment() } else { out }
         }
         SourceType::Text => {
-            let patterns: &[(&str, &str, f64)] = &[
-                ("username:", "username", 0.8),
-                ("user name:", "username", 0.8),
-                ("user:", "username", 0.8),
-                ("login:", "username", 0.8),
-                ("login id:", "username", 0.8),
-                ("account:", "username", 0.6),
-                ("email:", "username", 0.7),
-                ("password:", "password", 0.85),
-                ("pass:", "password", 0.8),
-                ("passwd:", "password", 0.8),
-                ("pwd:", "password", 0.8),
-                ("secret:", "password", 0.7),
-                ("token:", "token", 0.8),
-                ("api key:", "token", 0.85),
-                ("api-key:", "token", 0.85),
-                ("apikey:", "token", 0.85),
-                ("access token:", "token", 0.85),
-                ("auth token:", "token", 0.8),
-                ("totp:", "totp", 0.8),
-                ("otp:", "totp", 0.8),
-                ("2fa:", "totp", 0.7),
-                ("client id:", "client_id", 0.7),
-                ("client secret:", "client_secret", 0.8),
-            ];
             let mut out = Vec::new();
             for line in String::from_utf8_lossy(data).lines() {
                 let line = line.trim();
-                let lower = line.to_lowercase();
-                if let Some((prefix, field, confidence)) = patterns
-                    .iter()
-                    .find(|(prefix, _, _)| lower.starts_with(prefix))
-                {
-                    let value = line[prefix.len()..].trim();
-                    if !value.is_empty() {
-                        out.push(Suggestion {
-                            path: path.clone(),
-                            field: (*field).into(),
-                            confidence: *confidence,
-                            value: Some(value.into()),
-                            warning: None,
-                            attachment: false,
-                        });
-                    }
+                // The label ends at the first ':' or '=', so "Passwort : x" and
+                // "user = x" read like "password: x" (#1605).
+                let Some((label, value)) = line.split_once([':', '=']) else {
+                    continue;
+                };
+                let label = label.trim().to_lowercase();
+                let (field, confidence, value) =
+                    if matches!(label.as_str(), "http" | "https") && value.starts_with("//") {
+                        ("url", 0.6, line) // a bare URL line
+                    } else if let Some((field, confidence)) = text_label(&label) {
+                        (field, confidence, value.trim())
+                    } else {
+                        continue;
+                    };
+                if !value.is_empty() {
+                    out.push(Suggestion {
+                        path: path.clone(),
+                        field: field.into(),
+                        confidence,
+                        value: Some(value.into()),
+                        warning: None,
+                        attachment: false,
+                    });
                 }
             }
             if out.is_empty() { attachment() } else { out }
@@ -793,6 +798,46 @@ pub fn encode_attachment(data: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn text_fields(text: &str) -> Vec<(String, String, f64)> {
+        suggestions(text.as_bytes(), SourceType::Text, "x.txt")
+            .into_iter()
+            .map(|s| (s.field, s.value.unwrap_or_default(), s.confidence))
+            .collect()
+    }
+
+    #[test]
+    fn text_labels_cover_german_separators_and_urls() {
+        let field = |f: &str, v: &str, c: f64| (f.to_owned(), v.to_owned(), c);
+        assert_eq!(
+            text_fields(
+                "Zugang zum Hosting:\nBenutzername: dummy-user\nPasswort : Dummy:Pass=1\n\
+                 API Key = sk-dummy\nURL: https://example.invalid/login?a=b\nKennwort:\n"
+            ),
+            [
+                field("username", "dummy-user", 0.8),
+                field("password", "Dummy:Pass=1", 0.85),
+                field("token", "sk-dummy", 0.85),
+                field("url", "https://example.invalid/login?a=b", 0.8),
+            ]
+        );
+        // The English labels keep their fields and confidences.
+        assert_eq!(
+            text_fields("Username: a\nsecret:b\nE-Mail: c@example.invalid\nnote: d"),
+            [
+                field("username", "a", 0.8),
+                field("password", "b", 0.7),
+                field("username", "c@example.invalid", 0.7),
+            ]
+        );
+        assert_eq!(
+            text_fields("see\nhttps://example.invalid/x"),
+            [field("url", "https://example.invalid/x", 0.6)]
+        );
+        // No label: the source stays a plain attachment.
+        let plain = suggestions(b"user a / pass b", SourceType::Text, "x.txt");
+        assert!(plain.len() == 1 && plain[0].attachment);
+    }
 
     #[test]
     fn watcher_ledger_uses_metadata_from_the_staged_source_snapshot() {

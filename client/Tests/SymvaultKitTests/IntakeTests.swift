@@ -5,6 +5,52 @@ import Testing
 
 // The intake models are macOS-only (IntakeModels.swift), so are their tests.
 #if os(macOS)
+// The shape `symvault intake --stdin-as … --dry-run --json` really prints:
+// no "duplicates" key, and no "suggestions" key for a refused source.
+@Test func decodesStdinPreviewAndListsEachFieldOnce() throws {
+  let data = Data(
+    #"""
+    {
+      "results": [
+        {
+          "file": "-",
+          "status": "ok",
+          "provenance": {
+            "source_path": "-",
+            "source_name": "stdin.txt",
+            "source_type": "text",
+            "size": 161,
+            "sha256": "35716046",
+            "mtime": "2026-11-16T13:05:45.402315723+01:00"
+          },
+          "suggestions": [
+            {"path": "hosting/example", "field": "username", "confidence": 0.8},
+            {"path": "hosting/example", "field": "password", "confidence": 0.85},
+            {"path": "hosting/example", "field": "password", "confidence": 0.85}
+          ]
+        },
+        {"file": "-", "status": "skipped", "reason": "source exceeds limit"}
+      ]
+    }
+    """#.utf8
+  )
+
+  let response = try JSONDecoder().decode(IntakeResponse.self, from: data)
+  let result = try #require(response.results.first)
+  #expect(result.isOK)
+  #expect(result.duplicates.isEmpty)
+  #expect(SelectionIntake.fieldNames(in: result) == ["username", "password"])
+  #expect(response.results[1].suggestions.isEmpty)
+  #expect(response.results[1].reason == "source exceeds limit")
+}
+
+@Test func suggestsTheHostOfTheFirstWebLinkAsEntryPath() {
+  #expect(
+    SelectionIntake.suggestedEntryPath(
+      for: "Mail: someone@example.invalid\nURL: https://www.example.invalid/login?a=b") == "example.invalid")
+  #expect(SelectionIntake.suggestedEntryPath(for: "Benutzername: a\nPasswort: b") == "")
+}
+
 @Test func decodesIntakeDryRunResponse() throws {
   let data = Data(
     #"""

@@ -3,9 +3,9 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
-    io::{self, Write},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
     process::ExitCode,
     sync::mpsc,
@@ -40,6 +40,98 @@ pub struct IntakeOptions {
     move_to_trash: bool,
     #[arg(long)]
     ocr_text: Option<PathBuf>,
+    /// Rust-only (#1605): the entry path of the one text source read from stdin.
+    #[arg(long, allow_hyphen_values = true)]
+    stdin_as: Option<String>,
+}
+
+/// `--stdin-as <path>`: where the source read from stdin is staged. It
+/// replaces the file arguments, so nothing that names a file may accompany it.
+fn stdin_target(options: &IntakeOptions) -> Result<Option<String>, Error> {
+    let Some(entry) = &options.stdin_as else {
+        return Ok(None);
+    };
+    let entry = entry.trim();
+    if entry.is_empty() || entry == "quarantine" || entry.starts_with("quarantine/") {
+        return Err((
+            9,
+            "--stdin-as needs an entry path outside quarantine/".into(),
+        ));
+    }
+    if !options.files.is_empty() || options.move_to_trash || options.ocr_text.is_some() {
+        return Err((
+            9,
+            "--stdin-as reads its only source from stdin: file arguments, --move-to-trash and --ocr-text are not accepted".into(),
+        ));
+    }
+    Ok(Some(entry.to_owned()))
+}
+
+/// Reads stdin (bounded by the per-file limit) into a 0600 file of the private
+/// spool, so the caller never has to put the text on disk itself. Reading to
+/// EOF first also keeps a later passphrase prompt from consuming the source.
+fn spool_stdin(spool: &Spool) -> Result<tempfile::NamedTempFile, Error> {
+    let limit = Options::default().max_file_size;
+    // Sized up front: a growing buffer would leave unwiped copies of the text.
+    let mut text = zeroize::Zeroizing::new(Vec::with_capacity(limit as usize + 1));
+    io::stdin()
+        .lock()
+        .take(limit + 1)
+        .read_to_end(&mut text)
+        .map_err(|e| (1, format!("read stdin: {e}")))?;
+    if text.is_empty() {
+        return Err((9, "--stdin-as: stdin is empty".into()));
+    }
+    if text.len() as u64 > limit {
+        return Err((
+            9,
+            format!("--stdin-as: stdin exceeds the {limit} byte limit"),
+        ));
+    }
+    let mut file = tempfile::Builder::new()
+        .prefix("stdin-")
+        .suffix(".txt")
+        .tempfile_in(spool.root())
+        .map_err(|e| (1, format!("stage stdin: {e}")))?;
+    file.write_all(&text)
+        .and_then(|()| file.flush())
+        .map_err(|e| (1, format!("stage stdin: {e}")))?;
+    Ok(file)
+}
+
+/// The lines of a text selection that did not supply one of `fields`: prose,
+/// repeated labels and oversized values. They are kept as the entry's notes, so
+/// dropping the source copy loses nothing.
+fn unclaimed_lines(text: &[u8], fields: &BTreeMap<String, String>) -> Option<String> {
+    let text = String::from_utf8_lossy(text);
+    let mut claimed = BTreeSet::new();
+    let notes: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|line| {
+            let field = intake::suggestions(line.as_bytes(), intake::SourceType::Text, "")
+                .into_iter()
+                .find(|suggestion| !suggestion.attachment)
+                .map(|suggestion| suggestion.field);
+            // 4096 is the field value cap of `quarantine_fields`.
+            let supplied = line.len() <= 4096
+                && field.is_some_and(|field| fields.contains_key(&field) && claimed.insert(field));
+            !line.is_empty() && !supplied
+        })
+        .collect();
+    (!notes.is_empty()).then(|| notes.join("\n"))
+}
+
+/// The stdin source has no path of its own: report `-` and the chosen entry.
+fn name_stdin_result(result: &mut FileResult, target: &str) {
+    result.file = "-".into();
+    if let Some(provenance) = &mut result.provenance {
+        provenance.source_path = "-".into();
+        provenance.source_name = "stdin.txt".into();
+    }
+    for suggestion in &mut result.suggestions {
+        suggestion.path = target.to_owned();
+    }
 }
 
 pub fn parse_bool(value: &str) -> Result<bool, String> {
@@ -60,7 +152,8 @@ pub fn files(
     mut unlock: impl FnMut() -> Result<(PathBuf, Identity), Error>,
 ) -> ExitCode {
     finish((|| {
-        if options.files.is_empty() {
+        let target = stdin_target(options)?;
+        if options.files.is_empty() && target.is_none() {
             return Err((1, "requires at least 1 arg(s), only received 0".into()));
         }
         if options.move_to_trash && !cfg!(target_os = "macos") {
@@ -87,10 +180,21 @@ pub fn files(
         }
         let spool = Spool::new(std::env::temp_dir())
             .map_err(|e| (1, format!("create intake spool: {e}")))?;
+        let stdin_source = match &target {
+            Some(_) => Some(spool_stdin(&spool)?),
+            None => None,
+        };
+        let sources: Vec<&Path> = match &stdin_source {
+            Some(source) => vec![source.path()],
+            None => options.files.iter().map(PathBuf::as_path).collect(),
+        };
         let mut results = Vec::new();
         let mut total = 0u64;
-        for path in &options.files {
+        for path in sources {
             let mut result = intake::process(&spool, path, &Options::default());
+            if let Some(target) = &target {
+                name_stdin_result(&mut result, target);
+            }
             if result.status == "ok"
                 && result.provenance.as_ref().is_some_and(|p| {
                     matches!(
@@ -134,7 +238,12 @@ pub fn files(
             None
         } else {
             let (root, identity) = unlock()?;
-            Some(write_batch(&root, &identity, &mut results)?)
+            Some(write_batch(
+                &root,
+                &identity,
+                &mut results,
+                target.as_deref(),
+            )?)
         };
         if json {
             let mut out = Vec::new();
@@ -590,7 +699,7 @@ fn stage_batch(
     json: bool,
     quiet: bool,
 ) -> Result<(), Error> {
-    let batch = write_batch(root, identity, &mut results.to_vec())?;
+    let batch = write_batch(root, identity, &mut results.to_vec(), None)?;
     let id = batch.id;
     let written = batch.written;
     print_batch(&id, &written, json, quiet)
@@ -601,14 +710,27 @@ struct Batch {
     written: Vec<String>,
 }
 
+/// `target` (`--stdin-as`) replaces the path proposed from the source name.
 fn write_batch(
     root: &Path,
     identity: &Identity,
     results: &mut [FileResult],
+    target: Option<&str>,
 ) -> Result<Batch, Error> {
     let store =
         Store::open_with_legacy_migration(root, identity).map_err(|e| (1, e.to_string()))?;
     let session = store.read_session(identity);
+    // Refuse before writing: a batch that cannot be promoted would stay in quarantine.
+    if let Some(target) = target {
+        match session.get(target) {
+            Ok(_) => {
+                return Err((9, format!("--stdin-as: entry {target:?} already exists")));
+            }
+            Err(StoreError::EntryNotFound(_)) => {}
+            Err(e) if e.is_resource_failure() => return Err((1, e.to_string())),
+            Err(e) => return Err((9, format!("--stdin-as: {e}"))),
+        }
+    }
     let mut hashes: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for path in session
         .list()
@@ -667,7 +789,10 @@ fn write_batch(
         }
         let path = format!(
             "quarantine/{id}/{}",
-            intake::proposed_path(&provenance.source_name)
+            target.map_or_else(
+                || intake::proposed_path(&provenance.source_name),
+                str::to_owned
+            )
         );
         match session.get(&path) {
             Ok(_) => {
@@ -684,22 +809,35 @@ fn write_batch(
             result.duplicate_paths = hashes.get(&hash).expect("checked duplicate hash").clone();
             continue;
         }
+        let fields = result.quarantine_fields();
+        // A selection read from stdin that yielded fields is stored as those
+        // fields plus its remaining lines as notes. The attachment would repeat
+        // every secret in a field that structured output does not mask (#1605).
+        let keep_source = target.is_none() || fields.is_empty();
         let mut entry = Entry::default();
-        for (key, value) in result.quarantine_fields() {
+        if !keep_source
+            && provenance.source_type == intake::SourceType::Text
+            && let Some(notes) = unclaimed_lines(&bytes, &fields)
+        {
+            entry.data.insert("notes".into(), notes.into());
+        }
+        for (key, value) in fields {
             entry.data.insert(key, value.into());
         }
-        entry.data.insert(
-            intake::ATTACHMENT_FIELD.into(),
-            STANDARD.encode(&bytes).into(),
-        );
-        entry.secret_metadata.attachments.insert(
-            intake::ATTACHMENT_FIELD.into(),
-            AttachmentInfo {
-                filename: provenance.source_name.clone(),
-                size: provenance.size as i64,
-                sha256: hash.clone(),
-            },
-        );
+        if keep_source {
+            entry.data.insert(
+                intake::ATTACHMENT_FIELD.into(),
+                STANDARD.encode(&bytes).into(),
+            );
+            entry.secret_metadata.attachments.insert(
+                intake::ATTACHMENT_FIELD.into(),
+                AttachmentInfo {
+                    filename: provenance.source_name.clone(),
+                    size: provenance.size as i64,
+                    sha256: hash.clone(),
+                },
+            );
+        }
         let now = GoTime::now().to_rfc3339_nano();
         entry.metadata.created = now.clone();
         entry.metadata.updated = now.clone();
@@ -713,7 +851,7 @@ fn write_batch(
         let persisted = session
             .get(&path)
             .map_err(|e| (1, format!("verify quarantine entry {path:?}: {e}")))?;
-        if persisted.data.get(intake::ATTACHMENT_FIELD) != entry.data.get(intake::ATTACHMENT_FIELD)
+        if persisted.data != entry.data
             || persisted.secret_metadata.attachments != entry.secret_metadata.attachments
         {
             return Err((

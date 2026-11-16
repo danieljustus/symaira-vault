@@ -135,7 +135,12 @@ fn bare_completion_and_no_descriptions_follow_go_command_behavior() {
 /// candidate line the Rust CLI adds to the flag listing of the named case. It is
 /// removed (and must be present) before the byte comparison, so any other
 /// difference still fails. The same flags are pinned in `broker_templates.rs`.
-const DECLARED_ADDITIONS: [(&str, &str); 2] = [
+const DECLARED_ADDITIONS: [(&str, &str); 3] = [
+    // #1605
+    (
+        "symvault intake/-",
+        "--stdin-as\tRead one text source from stdin instead of files and stage it for this entry path (refused if the entry exists)\n",
+    ),
     (
         "symvault run/-",
         "--broker-templates\tWith --broker: inject credentials only for these templates (comma-separated, built-in or vault-local names); other template hosts are treated as hosts without a template\n",

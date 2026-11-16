@@ -18,6 +18,30 @@
       NotificationCenter.default.post(name: Self.openFilesNotification, object: securityScoped)
     }
 
+    public func applicationDidFinishLaunching(_ notification: Notification) {
+      NSApp.servicesProvider = self
+    }
+
+    /// macOS service "Zu Symaira Vault hinzufügen" (`NSServices` in the app's
+    /// Info.plist): receives the text selected in any app. It is only handed
+    /// to the confirmation sheet; nothing is stored before the user confirms.
+    @MainActor
+    @objc public func addSelectionToVault(
+      _ pasteboard: NSPasteboard, userData: String,
+      error: AutoreleasingUnsafeMutablePointer<NSString>
+    ) {
+      guard let text = pasteboard.string(forType: .string),
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      else {
+        error.pointee = "Die Auswahl enthält keinen Text."
+        return
+      }
+      SelectionInbox.shared.pending = text
+      // Reopening the own bundle brings the app forward and, with no window
+      // open, makes SwiftUI create one.
+      NSWorkspace.shared.open(Bundle.main.bundleURL)
+    }
+
     public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
       false
     }
