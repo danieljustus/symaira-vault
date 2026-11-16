@@ -45,6 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   any files` and leaves `manifest.age` uncommitted: a commit skips affected
   paths that git knows neither in the worktree nor in the index, such as the
   deleted quarantine entry that was never committed (#1606).
+- MCP `find_entries` and `search` report `access denied: this agent profile has
+  no allowed paths` for a profile whose `allowed_paths` is empty (or only holds
+  paths that clean to nothing) instead of returning an empty result that looked
+  like an empty vault (#1604).
 
 ### Security
 - Dependencies: lockfile entries `quinn-proto` 0.11.19 (RUSTSEC-2026-0523,

@@ -813,6 +813,25 @@ fn authorization_matches_go_path_policy_and_quota_order() {
 }
 
 #[test]
+fn search_with_an_empty_scope_is_an_access_error_not_an_empty_result() {
+    let (root, identity) = write_synthetic_vault();
+    let mut config = fixture_config();
+    config.allowed_paths = Vec::new();
+    config.available_tools = read_only_tool_names();
+    let runtime = StoreReadOnlyRuntime::open(root.path(), identity, config, None, None)
+        .expect("construct empty-scope runtime");
+    for (tool, arguments) in [
+        ("find_entries", serde_json::json!({"query": "github"})),
+        ("search", serde_json::json!({"query": "github"})),
+    ] {
+        let error = runtime
+            .call(tool, &arguments)
+            .expect_err("an empty scope must not look like an empty vault");
+        assert!(error.contains("no allowed paths"), "{tool}: {error}");
+    }
+}
+
+#[test]
 fn injected_audit_logger_records_go_event_boundaries() {
     let (root, identity) = write_synthetic_vault();
     let keyring = MemoryKeyring::new();

@@ -1630,6 +1630,12 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
     }
 
     fn find_matching_entries(&self, query: &str) -> Result<Vec<ReadOnlyMatch>, String> {
+        if scope_grants_nothing(&self.config.allowed_paths) {
+            return Err(
+                "access denied: this agent profile has no allowed paths, so no entry is in scope"
+                    .to_string(),
+            );
+        }
         let needle = symvault_core::go_to_lower(query);
         let mut matches = Vec::new();
         for entry in self
@@ -2304,6 +2310,15 @@ pub(crate) fn scope_allows(allowed_paths: &[String], path: &str) -> bool {
     })
 }
 
+/// True when no path can pass [`scope_allows`]: the list is empty or every
+/// entry other than `*` cleans to nothing. Search reports this as an access
+/// error, so an empty scope is not mistaken for an empty vault or no match.
+pub(crate) fn scope_grants_nothing(allowed_paths: &[String]) -> bool {
+    allowed_paths
+        .iter()
+        .all(|allowed| allowed != "*" && go_scope_path(allowed).is_empty())
+}
+
 pub(crate) fn go_scope_path(path: &str) -> String {
     let trimmed = path.trim();
     let rooted = trimmed.starts_with('/');
@@ -2492,7 +2507,7 @@ mod semantic_injection_tests {
 
 #[cfg(test)]
 mod scope_tests {
-    use super::scope_allows;
+    use super::{scope_allows, scope_grants_nothing};
 
     fn allows(allowed: &[&str], path: &str) -> bool {
         let allowed: Vec<String> = allowed.iter().map(|value| (*value).to_owned()).collect();
@@ -2508,6 +2523,19 @@ mod scope_tests {
                     "allowed {allowed:?} must not admit {path:?}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn an_empty_or_cleaned_away_scope_grants_nothing() {
+        let owned = |values: &[&str]| -> Vec<String> {
+            values.iter().map(|value| (*value).to_owned()).collect()
+        };
+        for allowed in [&[][..], &[""], &[".", "a/.."], &[" ", "./"]] {
+            assert!(scope_grants_nothing(&owned(allowed)), "{allowed:?}");
+        }
+        for allowed in [&["*"][..], &["prod"], &["allowed/*"], &["", "prod"]] {
+            assert!(!scope_grants_nothing(&owned(allowed)), "{allowed:?}");
         }
     }
 
