@@ -1,4 +1,4 @@
-.PHONY: keyring-key-fixtures-check biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-coverage-html test-core test-vault test-config test-crypto cover clean lint fmt fmt-check completions manpages release-manpages release-contract release-contract-selftest rust-cli manpages-differential port-fixtures-check core-fixtures-check quota-fixtures-check policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-check pairing-differential crypto-differential port-contract store-differential audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check ffi-fixtures-check ffi-differential ffi-xcframework ffi-ios-simulator-test deps
+.PHONY: keyring-key-fixtures-check biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-coverage-html test-core test-vault test-config test-crypto cover clean lint fmt fmt-check completions manpages release-manpages release-contract release-contract-selftest rust-cli manpages-differential port-fixtures-check core-fixtures-check quota-fixtures-check policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-check pairing-differential crypto-differential port-contract store-differential audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-fuzz-lock rust-fuzz-lock-sync rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check ffi-fixtures-check ffi-differential ffi-xcframework ffi-ios-simulator-test deps
 
 # Variables
 BINARY_NAME := symvault
@@ -511,9 +511,18 @@ rust-fuzz-lock:
 	test -f "$(RUST_FUZZ_MANIFEST)" || { echo "Missing $(RUST_FUZZ_MANIFEST)" >&2; exit 1; }; \
 	test -f "$(RUST_FUZZ_LOCK)" || { echo "Missing $(RUST_FUZZ_LOCK)" >&2; exit 1; }; \
 	test -f "$(RUST_FUZZ_DENY)" || { echo "Missing $(RUST_FUZZ_DENY)" >&2; exit 1; }; \
-	$(CARGO) metadata --manifest-path "$(RUST_FUZZ_MANIFEST)" --locked --format-version 1 --no-deps >/dev/null; \
+	$(CARGO) metadata --manifest-path "$(RUST_FUZZ_MANIFEST)" --locked --format-version 1 --no-deps >/dev/null \
+		|| { echo "$(RUST_FUZZ_LOCK) is stale; run 'make rust-fuzz-lock-sync' and commit it." >&2; exit 1; }; \
 	$(CARGO) check --manifest-path "$(RUST_FUZZ_MANIFEST)" --locked; \
 	echo "Fuzz manifest and lockfile are present and locked."
+
+# Re-resolve the fuzz lockfile after a root dependency bump. fuzz/ is its own
+# workspace and Dependabot only watches the root, so a bump of a crate the
+# fuzzed path crates require (zip, flate2, ...) leaves fuzz/Cargo.lock behind.
+# Updating only the workspace members moves just what their new requirements
+# need and leaves every other locked version alone.
+rust-fuzz-lock-sync:
+	$(CARGO) update --manifest-path "$(RUST_FUZZ_MANIFEST)" --workspace
 
 # Bounded PR smoke over every target in RUST_FUZZ_TARGETS; each corpus is copied
 # because libFuzzer may add files to it. RUST_FUZZ_MAX_TOTAL_TIME is per target.
@@ -1445,6 +1454,7 @@ help:
 	@echo "  rust-coverage      - Measure Rust workspace coverage"
 	@echo "  rust-security      - Run Rust advisory and dependency-policy gates"
 	@echo "  rust-fuzz-lock     - Verify the independent fuzz manifest and lockfile"
+	@echo "  rust-fuzz-lock-sync - Re-resolve fuzz/Cargo.lock after a root dependency bump"
 	@echo "  rust-gates         - Run every staged Rust gate"
 	@echo "  docs-check         - Check documentation for deprecated terms and incorrect syntax"
 	@echo "  editors-build      - Build all editor plugins (VS Code, Cursor, Neovim)"

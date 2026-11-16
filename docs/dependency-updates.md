@@ -24,6 +24,7 @@ The product is Rust-only. Dependencies are Cargo crates pinned by the committed
 | Vulnerability scan | OSV scanner on `Cargo.lock` (`dependency-scan` job in `ci.yml`, ignores in `osv-scanner.toml`), `cargo audit` and `cargo deny` via `make rust-security` |
 | Verification | `make rust-lint`, `make rust-test`, `make rust-security`; the differential tests replay committed observations and need no extra toolchain |
 | Inspecting the tree | `cargo tree --locked -i <crate>`, `cargo update -p <crate> --precise <version>` |
+| Fuzz lockfile | `fuzz/` is a separate Cargo workspace with its own `fuzz/Cargo.lock`, which Dependabot does not watch. After a root bump of a crate the fuzzed crates require (for example `zip`, `flate2`), run `make rust-fuzz-lock-sync` and commit the result; otherwise `make rust-fuzz-lock` fails under `--locked`. |
 | Deferrals | Record the decision in a comment next to the dependency in `Cargo.toml` or the Dependabot `ignore` entry, using the template below |
 
 The remainder of this runbook keeps the evaluation criteria, test protocol,

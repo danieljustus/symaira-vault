@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `http(s)://` line; `.env` and JSON sources map `benutzername`, `passwort`
   and `kennwort` as well. Existing labels keep their field and confidence
   (#1605).
+- Dependencies: `zip` 9.5.1 and `rpassword` 7.5.5. `make rust-fuzz-lock-sync`
+  re-resolves the separate `fuzz/Cargo.lock` after a root bump of a crate the
+  fuzzed crates require, which Dependabot does not cover (#1603).
 
 ### Fixed
 - macOS app: intake results decode when the CLI omits the empty `suggestions`
