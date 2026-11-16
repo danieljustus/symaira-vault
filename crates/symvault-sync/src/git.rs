@@ -1669,10 +1669,18 @@ mod tests {
         // bound still proves the timeout fired long before `sleep 30` ended.
         let deadline = Duration::from_secs(5);
         let started = Instant::now();
-        let error =
-            run_process_with_timeout(script.to_str().expect("script path"), &[], None, deadline)
-                .expect_err("helper must exceed the deadline");
-        assert!(matches!(error, GitError::Timeout { .. }));
+        // Run the helper through `sh` instead of exec'ing it: a sibling test
+        // that forks while `fs::write` still holds the descriptor makes a
+        // direct exec fail with ETXTBSY, which is not a timeout. `sh` only
+        // opens the file for reading, which that descriptor does not block.
+        let error = run_process_with_timeout(
+            "/bin/sh",
+            &[script.to_str().expect("script path")],
+            None,
+            deadline,
+        )
+        .expect_err("helper must exceed the deadline");
+        assert!(matches!(error, GitError::Timeout { .. }), "{error:?}");
         assert!(started.elapsed() < deadline + Duration::from_secs(5));
 
         let pid = fs::read_to_string(&marker)
