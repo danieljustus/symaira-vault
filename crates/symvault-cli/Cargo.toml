@@ -25,7 +25,7 @@ qrcode = { version = "=0.14.1", default-features = false }
 rcgen = "=0.14.10"
 tar = "=0.4.46"
 tempfile = "=3.27.0"
-zip = { version = "=9.4.2", default-features = false, features = ["deflate"] }
+zip = { version = "=9.5.1", default-features = false, features = ["deflate"] }
 serde.workspace = true
 serde_json.workspace = true
 reqwest.workspace = true
@@ -33,7 +33,7 @@ rustls = { version = "=0.23.46", default-features = false, features = ["ring", "
 sha2 = "=0.11.1"
 serde_yaml_ng = "=0.10.0"
 yaml-edit = { version = "0.3.5", default-features = false }
-rpassword = "=7.5.4"
+rpassword = "=7.5.5"
 scrypt = "=0.12.0"
 symaira-core-version.workspace = true
 symvault-core.workspace = true
