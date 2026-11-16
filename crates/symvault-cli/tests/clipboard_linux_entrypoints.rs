@@ -450,10 +450,38 @@ fn call_count(rec: &Path) -> usize {
         .unwrap_or(0)
 }
 
+/// Reads a recorded call file. The fake tools bump `seq` before they write
+/// `call.<n>`, so a tool that is still running can be counted before its file
+/// exists; wait a bounded time instead of failing with a bare `NotFound`.
+fn read_call_file(rec: &Path, n: usize) -> String {
+    let path = rec.join(format!("call.{n}"));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match fs::read_to_string(&path) {
+            Ok(raw) if call_file_complete(&raw) => return raw,
+            _ if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            Ok(raw) => panic!("call {n} is counted in seq but incomplete: {raw:?}"),
+            Err(error) => panic!("call {n} is counted in seq but was never written: {error}"),
+        }
+    }
+}
+
+/// A call file holds the tool, the mode, the argument count and then exactly
+/// that many arguments; the tool writes it line by line.
+fn call_file_complete(raw: &str) -> bool {
+    let lines: Vec<&str> = raw.lines().collect();
+    lines.len() >= 3
+        && lines[2]
+            .parse::<usize>()
+            .is_ok_and(|argc| lines.len() == 3 + argc)
+}
+
 fn read_calls(rec: &Path) -> Vec<Call> {
     (1..=call_count(rec))
         .map(|n| {
-            let raw = fs::read_to_string(rec.join(format!("call.{n}"))).unwrap();
+            let raw = read_call_file(rec, n);
             let lines: Vec<&str> = raw.lines().collect();
             let argc: usize = lines[2].parse().unwrap();
             assert_eq!(lines.len(), 3 + argc);
