@@ -1050,9 +1050,9 @@ S5.5 (B7 to B9) and S6 are still open.
 | B4 | S3.2 | The `config set agents.cli.*` key set was not executed | **resolved 2026-11-10**: executed in S3.2, values read back, `validate` clean |
 | B5 | S5.3 | Signed test host for `ApprovalSessionStoreTests` (no test target in `client/project.yml`; unsigned = `-34018`) | **resolved 2026-11-10**: hosted target `SymvaultIOSAppTests` in `client/project.yml` |
 | B6 | S5.3 | Device-destination `xcodebuild test` for the package scheme never run | **resolved 2026-11-10**: 28/28 on an iPhone 17 after the vault-open fix |
-| B7 | S5.5 | No AutoFill or share extension target (#870 open) | Build the extension, or accept host-app-only numbers and say so in the matrix |
+| B7 | S5.5 | No AutoFill or share extension target (#870 open) | **decided 2026-11-16**: host-app-only numbers, said so in the FFI-002 row; the extension (#870) follows later |
 | B8 | S5.5 | No fixture vault encrypted to the on-device identity, no copy-in route, no harness or signposts | Provide the vault (size stated), the install route, and a measurement test |
-| B9 | S5.5 | No numeric memory budget anywhere in the repo | Maintainer states a budget, or FFI-002 stays "measured, recorded" |
+| B9 | S5.5 | No numeric memory budget anywhere in the repo | **decided 2026-11-16**: no numeric budget; FFI-002 closes as "measured, recorded" |
 | B10 | S6 | `PrivacyInfo.xcprivacy` absent while `UserDefaults` is used | **resolved on local/device-runbook** (manifest added, `plutil -lint` OK); still verify with Xcode's privacy report on the real archive |
 | B11 | S6 | `docs/ios-testflight.md` stale (Go-Mobile wording, `Xcode-26.6.app` path); build number / Xcode release status | **resolved on local/device-runbook** (doc updated, build-number note added); human still confirms Xcode is a release and bumps `CURRENT_PROJECT_VERSION` if build 1 was uploaded |
 | B12 | S6.3 | `docs/approval-devices.md` says `--bind 0.0.0.0` (Rust refuses wildcard); no CLI to enqueue a test approval request | Doc fix **resolved on local/device-runbook**; the tested enqueue script is still open |
