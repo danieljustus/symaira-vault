@@ -200,7 +200,25 @@ impl GitRepository {
             vec![".".to_owned()]
         } else {
             validate_paths(&opts.affected_paths)?;
-            opts.affected_paths.clone()
+            // `git add` rejects a pathspec that matches neither the worktree
+            // nor the index. A deleted entry that was never committed (a
+            // promoted quarantine entry, #1606) is such a path, and must not
+            // keep the manifest change next to it out of the commit.
+            let known: Vec<String> = opts
+                .affected_paths
+                .iter()
+                .filter(|path| {
+                    self.root.join(path).symlink_metadata().is_ok()
+                        || self
+                            .command(&["ls-files", "--error-unmatch", "--", path.as_str()])
+                            .is_ok()
+                })
+                .cloned()
+                .collect();
+            if known.is_empty() {
+                return Ok(None);
+            }
+            known
         };
         let mut add = vec!["add", "--all", "--"];
         add.extend(paths.iter().map(String::as_str));
@@ -1370,6 +1388,38 @@ mod tests {
         assert_eq!(head.len(), 1);
         assert_eq!(head[0].author, "Symaira Vault <symvault@example.com>");
         assert_eq!(commit_email(&repo), "symvault@example.com");
+    }
+
+    /// Deleting an entry that was never committed leaves a path git does not
+    /// know. The commit skips it and still records the manifest (#1606).
+    #[test]
+    fn commit_skips_affected_paths_unknown_to_worktree_and_index() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = GitRepository::init(root.path()).unwrap();
+        symvault_store::data_safety::test_support_pre_marked(root.path());
+        fs::write(root.path().join("manifest.age"), b"manifest").unwrap();
+        let commit = |paths: &[&str]| {
+            repo.commit(CommitOptions {
+                message: "Delete quarantine/batch/entry".to_owned(),
+                affected_paths: paths.iter().map(|path| (*path).to_owned()).collect(),
+                ..CommitOptions::default()
+            })
+            .unwrap()
+        };
+
+        assert!(commit(&["entries/quarantine/batch/entry.age", "manifest.age"]).is_some());
+        let committed = repo.command(&["show", "--format=", "--name-only", "HEAD"]);
+        assert_eq!(
+            String::from_utf8_lossy(&committed.unwrap().stdout).trim(),
+            "manifest.age"
+        );
+        // Nothing known is nothing to commit, not "add everything".
+        fs::write(root.path().join("untracked.age"), b"other").unwrap();
+        assert!(commit(&["entries/quarantine/batch/entry.age"]).is_none());
+        assert!(
+            repo.command(&["ls-files", "--error-unmatch", "untracked.age"])
+                .is_err()
+        );
     }
 
     /// The vault's own git config wins over the defaults, exactly as in Go.
