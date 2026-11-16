@@ -38,15 +38,8 @@ updates:
       - dependency-name: "unicode-normalization"
         versions: [">0.1.22"]
 
-  # Swift client (CoreKit Swift products, exact-pinned).
-  - package-ecosystem: swift
-    directory: /client
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: "chore(deps)"
-    groups:
-      symaira-corekit:
-        patterns:
-          - "*symaira-corekit*"
+  # No `swift` entry for /client: its manifest declares the git-ignored local
+  # XCFramework built by scripts/build-vaultcore.sh as a binary target, so
+  # SwiftPM refuses to load it in Dependabot's clean checkout and every Swift
+  # update job fails before it looks at a pin. The exact CoreKit pin in
+  # client/Package.swift is reported by symaira-corekit's `make consumer-drift`.
