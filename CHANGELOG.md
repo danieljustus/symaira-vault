@@ -43,6 +43,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   paths that git knows neither in the worktree nor in the index, such as the
   deleted quarantine entry that was never committed (#1606).
 
+### Security
+- Dependencies: lockfile entries `quinn-proto` 0.11.19 (RUSTSEC-2026-0523,
+  -0524) and `quinn-udp` 0.5.16 (RUSTSEC-2026-0538). Both belong to an optional
+  dependency that no build enables, so released binaries never contained the
+  affected code (#1607).
+
 ## [v0.24.1] - 2026-11-11
 
 Maintenance release for the Rust `symvault` and the native clients.
