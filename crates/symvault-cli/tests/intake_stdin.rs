@@ -120,8 +120,12 @@ fn stdin_text_becomes_a_normal_entry_under_the_chosen_path() {
     assert_eq!(result["provenance"]["source_path"], "-");
     assert_eq!(fields(result), expected);
     let printed = text(&preview.stdout);
-    for secret in ["synthetic-user", "Synthetic:Pass", "sk-synthetic"] {
-        assert!(!printed.contains(secret), "dry run printed {secret}");
+    // The failure message names the position, never the value itself.
+    for (index, secret) in ["synthetic-user", "Synthetic:Pass", "sk-synthetic"]
+        .iter()
+        .enumerate()
+    {
+        assert!(!printed.contains(secret), "dry run printed secret #{index}");
     }
     let listed = run(&sandbox, &["list"], "");
     assert!(!text(&listed.stdout).contains("example"), "dry run wrote");
