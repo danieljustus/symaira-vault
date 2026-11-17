@@ -82,8 +82,8 @@
 
     public static func fieldTitle(_ field: String) -> String {
       switch field {
-      case "username": return "Benutzername"
-      case "password": return "Passwort"
+      case "username": return "Username"
+      case "password": return "Password"
       case "token": return "Token / API Key"
       case "url": return "URL"
       case "totp": return "TOTP"

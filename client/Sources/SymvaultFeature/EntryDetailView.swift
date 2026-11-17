@@ -3,6 +3,7 @@
   import SymairaTheme
   import SymvaultKit
 
+  /// Detail column of the Entries page: one decrypted entry on a card.
   struct EntryDetailView: View {
     let detail: VaultEntryDetail
     let onEdit: () -> Void
@@ -11,96 +12,60 @@
 
     var body: some View {
       ScrollView {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: SymairaSpacing.small) {
           header
-
           if let totp = detail.totp {
-            TOTPCard(totp: totp, loadedAt: store.detailLoadedAt) {
+            SymairaFormDivider()
+            TOTPSection(totp: totp, loadedAt: store.detailLoadedAt) {
               await store.load(path: detail.path)
             }
           }
-
-          VStack(alignment: .leading, spacing: 0) {
-            ForEach(sortedFields, id: \.0) { field, value in
-              SecretFieldRow(field: field, value: value)
-              if field != sortedFields.last?.0 {
-                Divider().overlay(Color.white.opacity(0.05))
-              }
-            }
+          SymairaFormDivider()
+          Text("FIELDS").symairaText(.sectionLabel)
+          ForEach(sortedFields, id: \.0) { field, value in
+            SecretFieldRow(field: field, value: value)
           }
-          .glassmorphicPanel(addCorners: false)
-
-          metadataCard
+          SymairaFormDivider()
+          HStack(spacing: SymairaSpacing.medium) {
+            Button(action: onEdit) { Label("Edit…", symairaIcon: .edit) }
+              .symairaButtonStyle(.secondary)
+            Button(role: .destructive, action: onDelete) { Label("Delete…", symairaIcon: .delete) }
+              .symairaButtonStyle(.secondary)
+          }
+          .padding(.top, SymairaSpacing.xSmall)
         }
-        .padding(28)
-        .frame(maxWidth: 780, alignment: .leading)
-        .frame(maxWidth: .infinity, alignment: .center)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .symairaCard()
+      .contextMenu {
+        Button("Edit Entry…", action: onEdit)
+        Divider()
+        Button("Delete Entry…", role: .destructive, action: onDelete)
       }
     }
 
     private var header: some View {
-      HStack(alignment: .top, spacing: 18) {
-        ZStack {
-          RoundedRectangle(cornerRadius: 14)
-            .fill(SymairaTheme.goldPrimary.opacity(0.09))
-            .frame(width: 64, height: 64)
-          Image(systemName: "lock.shield.fill")
-            .font(.system(size: 27, weight: .light))
-            .foregroundStyle(SymairaTheme.goldPrimary)
+      VStack(alignment: .leading, spacing: SymairaSpacing.xSmall) {
+        Text(verbatim: title)
+          .symairaText(.heading)
+          .accessibilityAddTraits(.isHeader)
+        Text(verbatim: detail.path)
+          .symairaText(.monoSmall)
+          .foregroundStyle(SymairaTokens.ink3)
+          .textSelection(.enabled)
+        if !detail.modified.isEmpty {
+          Text("Modified \(detail.modified)").symairaText(.caption)
         }
-
-        VStack(alignment: .leading, spacing: 5) {
-          Text(title)
-            .font(.largeTitle.weight(.semibold))
-            .foregroundStyle(SymairaTheme.textPrimary)
-          Text(detail.path)
-            .font(.callout.monospaced())
-            .foregroundStyle(SymairaTheme.textMuted)
-            .textSelection(.enabled)
-        }
-
-        Spacer()
-
         if let primary = detail.primarySecret {
           Button {
-            store.copy(primary.value, label: label(for: primary.field))
+            store.copy(primary.value, label: fieldLabel(primary.field))
           } label: {
-            Label("Kopieren", systemImage: "doc.on.doc.fill")
+            Label("Copy \(fieldLabel(primary.field))", symairaIcon: .copy)
           }
-          .buttonStyle(SymairaPrimaryButtonStyle())
-        }
-
-        Menu {
-          Button("Bearbeiten", systemImage: "pencil", action: onEdit)
-          Divider()
-          Button("Löschen", systemImage: "trash", role: .destructive, action: onDelete)
-        } label: {
-          Image(systemName: "ellipsis.circle")
-            .font(.title2)
-        }
-        .menuStyle(.borderlessButton)
-        .frame(width: 32)
-        .help("Weitere Aktionen")
-      }
-    }
-
-    private var metadataCard: some View {
-      HStack(spacing: 28) {
-        metadataItem("Geändert", detail.modified, icon: "clock")
-        metadataItem("Felder", "\(detail.fields.count)", icon: "list.bullet.rectangle")
-        metadataItem("Runtime", store.runtime?.version ?? "symvault", icon: "terminal")
-        Spacer()
-      }
-      .padding(16)
-      .glassmorphicPanel(cornerRadius: 10, addCorners: false)
-    }
-
-    private func metadataItem(_ label: String, _ value: String, icon: String) -> some View {
-      HStack(spacing: 8) {
-        Image(systemName: icon).foregroundStyle(SymairaTheme.goldPrimary)
-        VStack(alignment: .leading, spacing: 1) {
-          Text(label).font(.caption2).foregroundStyle(SymairaTheme.textMuted)
-          Text(value).font(.caption.weight(.medium)).foregroundStyle(SymairaTheme.textSecondary)
+          .symairaButtonStyle(.secondary)
+          .keyboardShortcut("c", modifiers: [.command, .shift])
+          .help("Copy \(fieldLabel(primary.field)) (⇧⌘C)")
+          .padding(.top, SymairaSpacing.small)
         }
       }
     }
@@ -117,9 +82,15 @@
     private var title: String {
       detail.path.split(separator: "/").last.map(String.init) ?? detail.path
     }
+  }
 
-    private func label(for field: String) -> String {
-      field.replacingOccurrences(of: "_", with: " ").capitalized
+  func fieldLabel(_ field: String) -> String {
+    switch field {
+    case "url": return "URL"
+    case "api_key": return "API Key"
+    case "totp": return "TOTP"
+    case "database_url": return "Database URL"
+    default: return field.replacingOccurrences(of: "_", with: " ").capitalized
     }
   }
 
@@ -128,93 +99,54 @@
     let value: JSONValue
     @Environment(VaultStore.self) private var store
     @State private var isRevealed = false
-    @State private var isHovered = false
 
     var body: some View {
-      HStack(alignment: .center, spacing: 14) {
-        Image(systemName: iconName)
-          .foregroundStyle(SymairaTheme.goldPrimary)
-          .frame(width: 22)
-
-        VStack(alignment: .leading, spacing: 4) {
-          Text(label)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(SymairaTheme.textMuted)
+      HStack(alignment: .firstTextBaseline, spacing: SymairaSpacing.small) {
+        Text(fieldLabel(field))
+          .symairaText(.secondary)
+          .frame(width: 96, alignment: .leading)
+        Group {
           if sensitive && !isRevealed {
-            fieldValueText.textSelection(.disabled)
+            // Masked values are not selectable, so nothing can be dragged out
+            // of a row that looks hidden.
+            Text(verbatim: String(repeating: "•", count: 12))
+              .accessibilityLabel("Hidden value")
           } else {
-            fieldValueText.textSelection(.enabled)
+            Text(verbatim: value.displayString)
+              .textSelection(.enabled)
+              .lineLimit(field == "notes" ? 6 : 3)
           }
         }
-
-        Spacer(minLength: 12)
-
+        .symairaText(.monoSmall)
+        .foregroundStyle(SymairaTokens.ink)
+        .frame(maxWidth: .infinity, alignment: .leading)
         if sensitive {
-          Button {
+          SymairaIconButton(
+            isRevealed ? "Hide \(fieldLabel(field))" : "Show \(fieldLabel(field))",
+            icon: isRevealed ? .hidden : .visible, size: 16
+          ) {
             isRevealed.toggle()
-          } label: {
-            Image(systemName: isRevealed ? "eye.slash" : "eye")
           }
-          .buttonStyle(.plain)
-          .help(isRevealed ? "Verbergen" : "Anzeigen")
         }
-
-        Button {
-          store.copy(value.displayString, label: label)
-        } label: {
-          Image(systemName: "doc.on.doc")
+        SymairaIconButton("Copy \(fieldLabel(field))", icon: .copy, size: 16) {
+          store.copy(value.displayString, label: fieldLabel(field))
         }
-        .buttonStyle(.plain)
-        .help("\(label) kopieren")
       }
-      .padding(.horizontal, 18)
-      .padding(.vertical, 15)
-      .background(isHovered ? Color.white.opacity(0.025) : Color.clear)
-      .onHover { isHovered = $0 }
+      .padding(.vertical, SymairaSpacing.xSmall)
+      .contextMenu {
+        Button("Copy \(fieldLabel(field))") {
+          store.copy(value.displayString, label: fieldLabel(field))
+        }
+        if sensitive {
+          Button(isRevealed ? "Hide Value" : "Show Value") { isRevealed.toggle() }
+        }
+      }
     }
 
     private var sensitive: Bool { VaultFieldSecurity.isSensitive(field) }
-
-    private var fieldValueText: some View {
-      Text(displayValue)
-        .font(.body.monospaced())
-        .foregroundStyle(SymairaTheme.textPrimary)
-        .lineLimit(field == "notes" ? 5 : 2)
-    }
-
-    private var displayValue: String {
-      guard !sensitive || isRevealed else {
-        return String(repeating: "•", count: min(max(value.displayString.count, 8), 20))
-      }
-      return value.displayString
-    }
-
-    private var label: String {
-      switch field {
-      case "username": return "Benutzername"
-      case "password": return "Passwort"
-      case "url": return "URL"
-      case "notes": return "Notizen"
-      case "api_key": return "API Key"
-      case "private_key": return "Private Key"
-      case "database_url": return "Datenbank-URL"
-      default: return field.replacingOccurrences(of: "_", with: " ").capitalized
-      }
-    }
-
-    private var iconName: String {
-      switch field {
-      case "username": return "person.fill"
-      case "password", "secret", "token", "api_key": return "key.fill"
-      case "url", "database_url": return "link"
-      case "notes": return "note.text"
-      case "totp": return "timer"
-      default: return "text.alignleft"
-      }
-    }
   }
 
-  private struct TOTPCard: View {
+  private struct TOTPSection: View {
     let totp: VaultTOTP
     let loadedAt: Date
     let refresh: () async -> Void
@@ -222,41 +154,28 @@
 
     var body: some View {
       TimelineView(.periodic(from: .now, by: 1)) { context in
-        HStack(spacing: 20) {
-          ZStack {
-            Circle()
-              .stroke(Color.white.opacity(0.08), lineWidth: 5)
-            Circle()
-              .trim(from: 0, to: progress(at: context.date))
-              .stroke(SymairaTheme.goldPrimary, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-              .rotationEffect(.degrees(-90))
-            Text("\(remaining(at: context.date))")
-              .font(.caption.monospacedDigit().weight(.semibold))
-              .foregroundStyle(SymairaTheme.textSecondary)
+        let remaining = remaining(at: context.date)
+        VStack(alignment: .leading, spacing: SymairaSpacing.small) {
+          Text("ONE-TIME CODE").symairaText(.sectionLabel)
+          HStack(alignment: .firstTextBaseline, spacing: SymairaSpacing.medium) {
+            Text(verbatim: groupedCode)
+              .font(SymairaTypography.readout)
+              .foregroundStyle(SymairaTokens.ink)
+              .monospacedDigit()
+              .textSelection(.enabled)
+            Text("\(remaining) s left")
+              .symairaText(.caption)
+              .monospacedDigit()
+            Spacer()
+            SymairaIconButton("Copy One-Time Code", icon: .copy, size: 16) {
+              store.copy(totp.code, label: "One-time code")
+            }
           }
-          .frame(width: 58, height: 58)
-
-          VStack(alignment: .leading, spacing: 4) {
-            Text("Einmalcode")
-              .font(.caption.weight(.semibold))
-              .foregroundStyle(SymairaTheme.textMuted)
-            Text(groupedCode)
-              .font(.system(size: 30, weight: .semibold, design: .monospaced))
-              .foregroundStyle(SymairaTheme.textPrimary)
-              .contentTransition(.numericText())
-          }
-
-          Spacer()
-
-          Button {
-            store.copy(totp.code, label: "Einmalcode")
-          } label: {
-            Label("Code kopieren", systemImage: "doc.on.doc.fill")
-          }
-          .buttonStyle(SymairaSecondaryButtonStyle())
+          ProgressView(value: Double(remaining), total: Double(max(totp.period, 1)))
+            .progressViewStyle(SymairaProgressStyle(height: 4))
+            .accessibilityLabel("Time left for this code")
+            .accessibilityValue("\(remaining) seconds")
         }
-        .padding(18)
-        .glassmorphicPanel()
       }
       .task(id: totp.code) {
         try? await Task.sleep(for: .seconds(max(totp.remaining, 1)))
@@ -273,10 +192,6 @@
     private func remaining(at date: Date) -> Int {
       let elapsed = Int(date.timeIntervalSince(loadedAt))
       return max(totp.remaining - elapsed, 0)
-    }
-
-    private func progress(at date: Date) -> Double {
-      Double(remaining(at: date)) / Double(max(totp.period, 1))
     }
   }
 #endif

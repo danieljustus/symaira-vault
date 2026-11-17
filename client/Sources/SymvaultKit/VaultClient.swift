@@ -10,9 +10,9 @@
     public var errorDescription: String? {
       switch self {
       case .binaryNotFound:
-        return "symvault wurde weder in der App noch auf diesem Mac gefunden."
+        return "symvault was not found in the app bundle or on this Mac."
       case .invalidGeneratedPassword:
-        return "symvault hat kein gültiges Passwort erzeugt."
+        return "symvault did not return a valid password."
       }
     }
   }

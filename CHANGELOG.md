@@ -16,6 +16,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- macOS app: new interface on the shared Symaira workspace (CoreKit
+  `SymairaTheme` 0.23.0, pin raised from 0.20.0). The sidebar has Overview,
+  Entries and Import (⌘1 to ⌘3); entries are a sortable table with a detail
+  column, import is a destination instead of a sheet, and errors and the
+  clipboard confirmation appear inline instead of as alerts. Settings (⌘,)
+  hold the appearance (System, Light, Dark; new key `symvault.appearance`,
+  the app was dark-only) and the runtime details. New Entry is ⌘N, Refresh
+  ⌘R, Lock Vault ⇧⌘L.
+- macOS app: the interface language is English, following the CoreKit
+  guidelines (COPY-1); the service is now "Add to Symaira Vault".
+- macOS app: the intake review is read-only, because promotion never applied
+  the edits it offered (#1612).
+
 ## [v0.25.0] - 2026-11-16
 
 Feature release: text intake from stdin and a macOS service, plus fixes.

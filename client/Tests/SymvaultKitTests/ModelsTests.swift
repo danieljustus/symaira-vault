@@ -30,7 +30,7 @@ import Testing
 
 @Test func groupsEntriesByFirstPathComponent() {
   #expect(VaultEntrySummary(path: "work/github").group == "work")
-  #expect(VaultEntrySummary(path: "github").group == "Allgemein")
+  #expect(VaultEntrySummary(path: "github").group == "General")
   #expect(VaultEntrySummary(path: "work/github").title == "github")
 }
 

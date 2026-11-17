@@ -10,7 +10,7 @@
     public var errorDescription: String? {
       switch self {
       case .rejected(let reason):
-        return "Die Auswahl wurde nicht aufgenommen: \(reason ?? "unbekannter Grund")."
+        return "The selection was not added: \(reason ?? "unknown reason")."
       }
     }
   }
@@ -85,7 +85,7 @@
         schema != VaultClient.expectedSchemaVersion
       {
         availability = .failed(
-          "Die installierte Runtime nutzt Schema \(schema); diese App erwartet Schema \(VaultClient.expectedSchemaVersion)."
+          "The installed symvault uses schema \(schema), but this app expects schema \(VaultClient.expectedSchemaVersion). Update symvault or the app."
         )
         return
       }
@@ -132,7 +132,7 @@
 
     public func unlock(passphrase: String, ttl: String) async -> Bool {
       guard !passphrase.isEmpty else {
-        errorMessage = "Bitte gib die Vault-Passphrase ein."
+        errorMessage = "Enter the vault passphrase."
         return false
       }
       isBusy = true
@@ -147,8 +147,8 @@
           // screen without a reason — that reads as "the button does
           // nothing".
           errorMessage =
-            "symvault meldet ein erfolgreiches Entsperren, aber es besteht danach keine aktive Sitzung. "
-            + "Aktualisiere die Runtime (brew upgrade symvault) und prüfe 'symvault unlock' im Terminal."
+            "symvault reported a successful unlock, but no session is active afterwards. "
+            + "Update symvault (brew upgrade symvault) and check 'symvault unlock' in Terminal."
         }
         return availability == .ready
       } catch {
@@ -203,13 +203,14 @@
       }
     }
 
-    public func deleteSelected() async -> Bool {
-      guard let selectedPath else { return false }
+    public func delete(path: String) async -> Bool {
       isBusy = true
       do {
-        try await client.delete(path: selectedPath, profile: activeProfile)
-        self.selectedPath = nil
-        detail = nil
+        try await client.delete(path: path, profile: activeProfile)
+        if selectedPath == path {
+          selectedPath = nil
+          detail = nil
+        }
         isBusy = false
         await refresh()
         return true
@@ -259,7 +260,7 @@
       pasteboard.clearContents()
       pasteboard.setString(value, forType: .string)
       let expectedChangeCount = pasteboard.changeCount
-      clipboardNotice = "\(label) kopiert · wird in 30 s geleert"
+      clipboardNotice = "\(label) copied. The clipboard clears in 30 seconds."
 
       clipboardClearTask?.cancel()
       clipboardClearTask = Task { [weak self] in

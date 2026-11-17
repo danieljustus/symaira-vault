@@ -78,7 +78,7 @@ targets:
         # is IntakeAppDelegate.addSelectionToVault.
         NSServices:
           - NSMenuItem:
-              default: Zu Symaira Vault hinzufügen
+              default: Add to Symaira Vault
             NSMessage: addSelectionToVault
             NSPortName: Symaira Vault
             NSSendTypes:

@@ -79,7 +79,7 @@
         drafts = response.results.filter { $0.isOK }.map { IntakeReviewDraft(result: $0) }
         phase = drafts.isEmpty ? .done : .reviewing
         if drafts.isEmpty {
-          notice = "Keine Dateien konnten aufgenommen werden."
+          notice = "None of the files could be imported."
         }
       } catch {
         phase = .failed(error.localizedDescription)
@@ -100,7 +100,7 @@
         // the quarantine entries as-is.
         try await client.intakePromote(importID: importID)
         phase = .done
-        notice = "Batch \(importID) wurde übernommen."
+        notice = "Batch \(importID) was added to the vault."
       } catch {
         phase = .failed(error.localizedDescription)
         errorMessage = error.localizedDescription

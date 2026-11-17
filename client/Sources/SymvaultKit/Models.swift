@@ -72,7 +72,7 @@ public struct VaultEntrySummary: Codable, Identifiable, Equatable, Sendable {
 
   public var group: String {
     let parts = path.split(separator: "/")
-    return parts.count > 1 ? String(parts[0]) : "Allgemein"
+    return parts.count > 1 ? String(parts[0]) : "General"
   }
 
   public init(

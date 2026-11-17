@@ -4,7 +4,7 @@
   import SymairaTheme
   import SymvaultKit
 
-  /// Text handed over by the macOS service "Zu Symaira Vault hinzufügen" until
+  /// Text handed over by the macOS service "Add to Symaira Vault" until
   /// the unlocked workspace presents it. In-process only, cleared on pickup.
   @MainActor
   @Observable
@@ -37,45 +37,44 @@
 
     var body: some View {
       SymairaSheetScaffold(
-        title: "Auswahl sichern",
-        dismissTitle: "Abbrechen",
+        title: "Save Selection",
         dismiss: { dismiss() },
-        primaryTitle: "Eintrag sichern",
+        primaryTitle: isSaving ? "Saving…" : "Save Entry",
         primaryDisabled: !canSave,
         primary: save
       ) {
-        SymairaFormSection("Eintrag", footer: pathHint) {
-          SymairaFormRow("Name", description: "Pfad im Vault, z. B. hosting/cloud86") {
+        SymairaFormSection("Entry", footer: pathHint) {
+          SymairaFormRow("Path", description: "Group and name, for example hosting/cloud86.") {
             TextField("hosting/cloud86", text: $entryPath)
               .textFieldStyle(.symaira(isFocused: pathFocused))
               .focused($pathFocused)
               .frame(width: 250)
-              .accessibilityLabel("Name des Eintrags")
+              .accessibilityLabel("Entry path")
               .onSubmit(save)
           }
         }
 
         SymairaFormSection(
-          "Erkannte Felder",
-          footer: "Werte werden hier nicht angezeigt. Nicht erkannte Zeilen bleiben als Notiz im Eintrag."
+          "Recognized Fields",
+          footer: "Values are never shown here. Lines that are not recognized stay in the entry as a note."
         ) {
           if let fields {
             if fields.isEmpty {
               SymairaFormRow(
-                "Keine beschrifteten Felder",
+                "No Labeled Fields",
                 description:
-                  "Zeilen wie „Benutzername: …“ oder „Passwort: …“ fehlen. Der Text wird als verschlüsselter Anhang gesichert."
+                  "Lines such as “Username: …” or “Password: …” are missing. The text is saved as an encrypted attachment."
               )
             } else {
               ForEach(Array(fields.enumerated()), id: \.element) { index, field in
                 if index > 0 { SymairaFormDivider() }
                 SymairaFormRow(SelectionIntake.fieldTitle(field)) {
-                  SymairaStatusLabel("Erkannt", tone: .positive)
+                  SymairaStatusLabel("Recognized", tone: .positive)
                 }
               }
             }
           } else if errorMessage == nil {
-            SymairaLoadingState("Auswahl wird geprüft …")
+            SymairaLoadingState("Checking the selection…")
               .frame(maxWidth: .infinity)
           }
         }
@@ -85,7 +84,6 @@
         }
       }
       .frame(width: 540, height: 600)
-      .preferredColorScheme(.dark)
       .task {
         do {
           fields = try await store.selectionFields(text)
@@ -105,7 +103,7 @@
     }
 
     private var pathHint: String? {
-      pathExists ? "Diesen Eintrag gibt es schon. Wähle einen anderen Namen." : nil
+      pathExists ? "An entry with this path already exists. Choose another path." : nil
     }
 
     private var canSave: Bool {
