@@ -21,16 +21,18 @@
             }
           }
           SymairaFormDivider()
-          Text("FIELDS").symairaText(.sectionLabel)
+          Text(L("FIELDS")).symairaText(.sectionLabel)
           ForEach(sortedFields, id: \.0) { field, value in
             SecretFieldRow(field: field, value: value)
           }
           SymairaFormDivider()
           HStack(spacing: SymairaSpacing.medium) {
-            Button(action: onEdit) { Label("Edit…", symairaIcon: .edit) }
+            Button(action: onEdit) { Label(L("Edit…"), symairaIcon: .edit) }
               .symairaButtonStyle(.secondary)
-            Button(role: .destructive, action: onDelete) { Label("Delete…", symairaIcon: .delete) }
-              .symairaButtonStyle(.secondary)
+            Button(role: .destructive, action: onDelete) {
+              Label(L("Delete…"), symairaIcon: .delete)
+            }
+            .symairaButtonStyle(.secondary)
           }
           .padding(.top, SymairaSpacing.xSmall)
         }
@@ -38,9 +40,9 @@
       }
       .symairaCard()
       .contextMenu {
-        Button("Edit Entry…", action: onEdit)
+        Button(L("Edit Entry…"), action: onEdit)
         Divider()
-        Button("Delete Entry…", role: .destructive, action: onDelete)
+        Button(L("Delete Entry…"), role: .destructive, action: onDelete)
       }
     }
 
@@ -54,17 +56,17 @@
           .foregroundStyle(SymairaTokens.ink3)
           .textSelection(.enabled)
         if !detail.modified.isEmpty {
-          Text("Modified \(detail.modified)").symairaText(.caption)
+          Text(L("Modified %@", detail.modified)).symairaText(.caption)
         }
         if let primary = detail.primarySecret {
           Button {
             store.copy(primary.value, label: fieldLabel(primary.field))
           } label: {
-            Label("Copy \(fieldLabel(primary.field))", symairaIcon: .copy)
+            Label(L("Copy %@", fieldLabel(primary.field)), symairaIcon: .copy)
           }
           .symairaButtonStyle(.secondary)
           .keyboardShortcut("c", modifiers: [.command, .shift])
-          .help("Copy \(fieldLabel(primary.field)) (⇧⌘C)")
+          .help(L("Copy %@ (⇧⌘C)", fieldLabel(primary.field)))
           .padding(.top, SymairaSpacing.small)
         }
       }
@@ -89,7 +91,11 @@
     case "url": return "URL"
     case "api_key": return "API Key"
     case "totp": return "TOTP"
-    case "database_url": return "Database URL"
+    case "database_url": return L("Database URL")
+    case "username": return L("Username")
+    case "password": return L("Password")
+    case "notes": return L("Notes")
+    case "secret": return L("Secret")
     default: return field.replacingOccurrences(of: "_", with: " ").capitalized
     }
   }
@@ -110,7 +116,7 @@
             // Masked values are not selectable, so nothing can be dragged out
             // of a row that looks hidden.
             Text(verbatim: String(repeating: "•", count: 12))
-              .accessibilityLabel("Hidden value")
+              .accessibilityLabel(L("Hidden value"))
           } else {
             Text(verbatim: value.displayString)
               .textSelection(.enabled)
@@ -122,23 +128,23 @@
         .frame(maxWidth: .infinity, alignment: .leading)
         if sensitive {
           SymairaIconButton(
-            isRevealed ? "Hide \(fieldLabel(field))" : "Show \(fieldLabel(field))",
+            isRevealed ? L("Hide %@", fieldLabel(field)) : L("Show %@", fieldLabel(field)),
             icon: isRevealed ? .hidden : .visible, size: 16
           ) {
             isRevealed.toggle()
           }
         }
-        SymairaIconButton("Copy \(fieldLabel(field))", icon: .copy, size: 16) {
+        SymairaIconButton(L("Copy %@", fieldLabel(field)), icon: .copy, size: 16) {
           store.copy(value.displayString, label: fieldLabel(field))
         }
       }
       .padding(.vertical, SymairaSpacing.xSmall)
       .contextMenu {
-        Button("Copy \(fieldLabel(field))") {
+        Button(L("Copy %@", fieldLabel(field))) {
           store.copy(value.displayString, label: fieldLabel(field))
         }
         if sensitive {
-          Button(isRevealed ? "Hide Value" : "Show Value") { isRevealed.toggle() }
+          Button(isRevealed ? L("Hide Value") : L("Show Value")) { isRevealed.toggle() }
         }
       }
     }
@@ -156,25 +162,25 @@
       TimelineView(.periodic(from: .now, by: 1)) { context in
         let remaining = remaining(at: context.date)
         VStack(alignment: .leading, spacing: SymairaSpacing.small) {
-          Text("ONE-TIME CODE").symairaText(.sectionLabel)
+          Text(L("ONE-TIME CODE")).symairaText(.sectionLabel)
           HStack(alignment: .firstTextBaseline, spacing: SymairaSpacing.medium) {
             Text(verbatim: groupedCode)
               .font(SymairaTypography.readout)
               .foregroundStyle(SymairaTokens.ink)
               .monospacedDigit()
               .textSelection(.enabled)
-            Text("\(remaining) s left")
+            Text(L("%d s left", remaining))
               .symairaText(.caption)
               .monospacedDigit()
             Spacer()
-            SymairaIconButton("Copy One-Time Code", icon: .copy, size: 16) {
-              store.copy(totp.code, label: "One-time code")
+            SymairaIconButton(L("Copy One-Time Code"), icon: .copy, size: 16) {
+              store.copy(totp.code, label: L("One-time code"))
             }
           }
           ProgressView(value: Double(remaining), total: Double(max(totp.period, 1)))
             .progressViewStyle(SymairaProgressStyle(height: 4))
-            .accessibilityLabel("Time left for this code")
-            .accessibilityValue("\(remaining) seconds")
+            .accessibilityLabel(L("Time left for this code"))
+            .accessibilityValue(L("%d seconds", remaining))
         }
       }
       .task(id: totp.code) {

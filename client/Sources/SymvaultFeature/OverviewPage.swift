@@ -15,21 +15,22 @@
     @Environment(VaultStore.self) private var store
 
     var body: some View {
-      SymairaPage(title: "Overview", subtitle: "The state of your local vault") {
+      SymairaPage(title: L("Overview"), subtitle: L("The state of your local vault")) {
         Spacer()
-        Button(action: model.lock) { Label("Lock Vault", symairaIcon: .lock) }
+        Button(action: model.lock) { Label(L("Lock Vault"), symairaIcon: .lock) }
           .symairaButtonStyle(.secondary)
-        SymairaIconButton("Refresh", icon: .refresh, action: model.refresh)
+        SymairaIconButton(L("Refresh"), icon: .refresh, action: model.refresh)
           .disabled(store.isBusy)
-        Button(action: model.newEntry) { Label("New Entry", symairaIcon: .add) }
+        Button(action: model.newEntry) { Label(L("New Entry"), symairaIcon: .add) }
           .symairaButtonStyle(.primary)
       } content: {
         VaultNotices()
         if store.entries.isEmpty {
           SymairaPageEmpty(
             icon: .key,
-            title: "No Entries",
-            message: "The vault is empty. Create an entry, or import credential files from Import."
+            title: L("No Entries"),
+            message: L(
+              "The vault is empty. Create an entry, or import credential files from Import.")
           )
         } else {
           tiles
@@ -42,19 +43,19 @@
     private var tiles: some View {
       HStack(spacing: SymairaSpacing.medium) {
         SymairaStatTile(
-          value: "\(store.entries.count)", label: "Entries", detail: "In this profile")
+          value: "\(store.entries.count)", label: L("Entries"), detail: L("In this profile"))
         SymairaStatTile(
-          value: "\(groupCounts.count)", label: "Groups", detail: "First part of the path")
-        SymairaStatTile(value: "\(typeCount)", label: "Types", detail: "Distinct entry types")
+          value: "\(groupCounts.count)", label: L("Groups"), detail: L("First part of the path"))
+        SymairaStatTile(value: "\(typeCount)", label: L("Types"), detail: L("Distinct entry types"))
         SymairaStatTile(
-          value: "\(rotatingCount)", label: "Auto-Rotate", detail: "Entries with rotation on")
+          value: "\(rotatingCount)", label: L("Auto-Rotate"), detail: L("Entries with rotation on"))
       }
       .topoProtected()
     }
 
     private var groups: some View {
       VStack(alignment: .leading, spacing: SymairaSpacing.small) {
-        Text("LARGEST GROUPS").symairaText(.sectionLabel)
+        Text(L("LARGEST GROUPS")).symairaText(.sectionLabel)
         ForEach(Array(largestGroups.enumerated()), id: \.element.name) { index, group in
           if index > 0 { SymairaFormDivider() }
           GroupRow(name: group.name, count: group.count) { show(group: group.name) }
@@ -62,9 +63,9 @@
         if groupCounts.count > Self.groupLimit {
           SymairaFormDivider()
           HStack {
-            Text("\(groupCounts.count - Self.groupLimit) more groups").symairaText(.caption)
+            Text(L("%d more groups", groupCounts.count - Self.groupLimit)).symairaText(.caption)
             Spacer()
-            Button("Show All Entries") { show(group: nil) }
+            Button(L("Show All Entries")) { show(group: nil) }
               .symairaButtonStyle(.secondary)
           }
           .padding(.top, SymairaSpacing.xSmall)
@@ -81,15 +82,15 @@
 
     private var runtimeCard: some View {
       VStack(alignment: .leading, spacing: SymairaSpacing.small) {
-        Text("RUNTIME").symairaText(.sectionLabel)
+        Text(L("RUNTIME")).symairaText(.sectionLabel)
         if let runtime = store.runtime {
-          detailRow("Version", runtime.version ?? "Unknown")
+          detailRow(L("Version"), runtime.version ?? L("Unknown"))
           SymairaFormDivider()
-          detailRow("Source", runtime.source)
+          detailRow(L("Source"), runtime.source)
           SymairaFormDivider()
-          detailRow("Path", runtime.path)
+          detailRow(L("Path"), runtime.path)
         } else {
-          Text("No runtime information loaded.").symairaText(.caption)
+          Text(L("No runtime information loaded.")).symairaText(.caption)
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -147,7 +148,7 @@
     var body: some View {
       Button(action: action) {
         HStack {
-          Text(verbatim: name).symairaText(.body)
+          Text(verbatim: name == "General" ? L("General") : name).symairaText(.body)
           Spacer()
           Text(countLabel).symairaText(.secondary).monospacedDigit()
           SymairaIconView(.forward, size: 14)
@@ -164,10 +165,10 @@
       }
       .buttonStyle(.plain)
       .onHover { isHovered = $0 }
-      .accessibilityLabel("Show \(name), \(countLabel)")
-      .contextMenu { Button("Show in Entries", action: action) }
+      .accessibilityLabel(L("Show %@, %@", name, countLabel))
+      .contextMenu { Button(L("Show in Entries"), action: action) }
     }
 
-    private var countLabel: String { count == 1 ? "1 entry" : "\(count) entries" }
+    private var countLabel: String { count == 1 ? L("1 entry") : L("%d entries", count) }
   }
 #endif

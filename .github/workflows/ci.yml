@@ -474,6 +474,9 @@ jobs:
           scripts/verify-vault-icon.sh --bundle \
             "$IOS_DERIVED_DATA/Build/Products/Release-iphonesimulator/Symaira Vault.app"
 
+      - name: macOS app texts (English and German)
+        run: python3 -I scripts/check-client-strings.py
+
       - name: Swift build
         working-directory: client
         run: swift build

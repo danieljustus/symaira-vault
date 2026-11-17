@@ -17,36 +17,36 @@
     public var body: some View {
       ScrollView {
         VStack(alignment: .leading, spacing: SymairaSpacing.large) {
-          SymairaFormSection("Appearance") {
-            SymairaFormRow("Color Scheme") {
+          SymairaFormSection(L("Appearance")) {
+            SymairaFormRow(L("Color Scheme")) {
               SymairaAppearancePicker(selection: $appearance)
                 .frame(width: 300)
             }
           }
 
           SymairaFormSection(
-            "Runtime",
+            L("Runtime"),
             footer:
-              "The app uses the symvault bundled with it, then PATH and the Homebrew prefixes."
+              L("The app uses the symvault bundled with it, then PATH and the Homebrew prefixes.")
           ) {
-            SymairaFormRow("Status") {
+            SymairaFormRow(L("Status")) {
               SymairaStatusLabel(statusLabel.text, tone: statusLabel.tone)
             }
             if let runtime = store.runtime {
               SymairaFormDivider()
-              SymairaFormRow("Version") { value(runtime.version ?? "Unknown") }
+              SymairaFormRow(L("Version")) { value(runtime.version ?? L("Unknown")) }
               SymairaFormDivider()
-              SymairaFormRow("Source") { value(runtime.source) }
+              SymairaFormRow(L("Source")) { value(runtime.source) }
               SymairaFormDivider()
-              SymairaFormRow("Path") { value(runtime.path) }
+              SymairaFormRow(L("Path")) { value(runtime.path) }
               SymairaFormDivider()
-              SymairaFormRow("JSON Schema") {
-                value(runtime.schemaVersion.map(String.init) ?? "Unknown")
+              SymairaFormRow(L("JSON Schema")) {
+                value(runtime.schemaVersion.map(String.init) ?? L("Unknown"))
               }
             }
             HStack {
               Spacer()
-              Button("Check Runtime", action: model.refresh)
+              Button(L("Check Runtime"), action: model.refresh)
                 .symairaButtonStyle(.secondary)
                 .disabled(store.isBusy)
             }
@@ -54,11 +54,13 @@
           }
 
           SymairaFormSection(
-            "About",
+            L("About"),
             footer:
-              "Symaira Vault is the native client for the self-hosted symvault runtime. Copied secrets leave the clipboard after 30 seconds."
+              L(
+                "Symaira Vault is the native client for the self-hosted symvault runtime. Copied secrets leave the clipboard after 30 seconds."
+              )
           ) {
-            SymairaFormRow("App") { value(appVersion) }
+            SymairaFormRow(L("App")) { value(appVersion) }
           }
         }
         .padding(SymairaSpacing.xLarge)
@@ -81,11 +83,11 @@
 
     private var statusLabel: (text: String, tone: SymairaTone) {
       switch store.availability {
-      case .checking: ("Connecting…", .neutral)
-      case .missing: ("Not Found", .critical)
-      case .locked: ("Locked", .warning)
-      case .ready: ("Unlocked", .positive)
-      case .failed: ("Unavailable", .critical)
+      case .checking: (L("Connecting…"), .neutral)
+      case .missing: (L("Not Found"), .critical)
+      case .locked: (L("Locked"), .warning)
+      case .ready: (L("Unlocked"), .positive)
+      case .failed: (L("Unavailable"), .critical)
       }
     }
 

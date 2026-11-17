@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "SymvaultClient",
+    defaultLocalization: "en",
     platforms: [
         .macOS(.v14),
         .iOS(.v17),
@@ -50,7 +51,9 @@ let package = Package(
             dependencies: [
                 "SymvaultKit",
                 .product(name: "SymairaTheme", package: "symaira-corekit"),
-            ]
+            ],
+            // English source, German translations (Localizable.xcstrings).
+            resources: [.process("Resources")]
         ),
         .testTarget(
             name: "SymvaultKitTests",

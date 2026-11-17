@@ -18,9 +18,11 @@
     var body: some View {
       switch store.availability {
       case .checking, .ready:
-        SymairaPage(title: "Symaira Vault", subtitle: "Connecting to the local symvault runtime") {
+        SymairaPage(
+          title: L("Symaira Vault"), subtitle: L("Connecting to the local symvault runtime")
+        ) {
           SymairaPageState(
-            state: SymairaPageLoadState<Void>.loading, loading: "Connecting to the vault…",
+            state: SymairaPageLoadState<Void>.loading, loading: L("Connecting to the vault…"),
             retry: model.refresh
           ) { _ in EmptyView() }
         }
@@ -28,7 +30,7 @@
         MissingRuntimePage(model: model)
       case .failed(let message):
         SymairaPage(
-          title: "Vault Unavailable", subtitle: "symvault answered, but the app cannot use it"
+          title: L("Vault Unavailable"), subtitle: L("symvault answered, but the app cannot use it")
         ) {
           SymairaPageState(
             state: SymairaPageLoadState<Void>.failed(message), loading: "", retry: model.refresh
@@ -47,14 +49,16 @@
 
     var body: some View {
       SymairaPage(
-        title: "Install symvault",
-        subtitle: "The app manages the vault through the symvault runtime"
+        title: L("Install symvault"),
+        subtitle: L("The app manages the vault through the symvault runtime")
       ) {
         SymairaPageEmpty(
           icon: .productVault,
-          title: "symvault Not Found",
+          title: L("symvault Not Found"),
           message:
-            "The app found no symvault in its bundle, on PATH or in Homebrew. Install it, then check again."
+            L(
+              "The app found no symvault in its bundle, on PATH or in Homebrew. Install it, then check again."
+            )
         ) {
           VStack(spacing: SymairaSpacing.medium) {
             HStack(spacing: SymairaSpacing.small) {
@@ -62,12 +66,12 @@
                 .symairaText(.mono)
                 .foregroundStyle(SymairaTokens.ink)
                 .textSelection(.enabled)
-              SymairaIconButton("Copy Install Command", icon: .copy, size: 16) {
-                store.copy(command, label: "Install command")
+              SymairaIconButton(L("Copy Install Command"), icon: .copy, size: 16) {
+                store.copy(command, label: L("Install command"))
               }
             }
             .symairaCard(padding: SymairaSpacing.medium)
-            Button(action: model.refresh) { Label("Check Again", symairaIcon: .refresh) }
+            Button(action: model.refresh) { Label(L("Check Again"), symairaIcon: .refresh) }
               .symairaButtonStyle(.primary)
           }
         }
@@ -86,55 +90,59 @@
       @Bindable var store = store
 
       SymairaPage(
-        title: "Unlock Vault", subtitle: "Your entries stay encrypted until you unlock the vault"
+        title: L("Unlock Vault"),
+        subtitle: L("Your entries stay encrypted until you unlock the vault")
       ) {
         VStack(alignment: .leading, spacing: SymairaSpacing.medium) {
           SymairaFormSection(
-            "Session",
-            footer: "The passphrase goes to symvault over standard input. The app never stores it."
+            L("Session"),
+            footer: L(
+              "The passphrase goes to symvault over standard input. The app never stores it.")
           ) {
-            SymairaFormRow("Passphrase") {
-              SecureField("Vault passphrase", text: $passphrase)
+            SymairaFormRow(L("Passphrase")) {
+              SecureField(L("Vault passphrase"), text: $passphrase)
                 .textFieldStyle(.symaira(isFocused: passphraseFocused))
                 .focused($passphraseFocused)
                 .frame(width: 260)
-                .accessibilityLabel("Vault passphrase")
+                .accessibilityLabel(L("Vault passphrase"))
                 .onSubmit(unlock)
             }
             SymairaFormDivider()
-            SymairaFormRow("Stay Unlocked For") {
+            SymairaFormRow(L("Stay Unlocked For")) {
               SymairaSegmentedControl(
-                "Session length", selection: $ttl,
+                L("Session length"), selection: $ttl,
                 options: [
-                  (value: "15m", label: "15 min"), (value: "1h", label: "1 hour"),
-                  (value: "8h", label: "8 hours"),
+                  (value: "15m", label: L("15 min")), (value: "1h", label: L("1 hour")),
+                  (value: "8h", label: L("8 hours")),
                 ]
               )
             }
             SymairaFormDivider()
-            SymairaFormRow("Profile", description: "Leave empty for the default vault profile.") {
-              TextField("Default", text: $store.profile)
+            SymairaFormRow(
+              L("Profile"), description: L("Leave empty for the default vault profile.")
+            ) {
+              TextField(L("Default"), text: $store.profile)
                 .textFieldStyle(.symaira)
                 .frame(width: 260)
-                .accessibilityLabel("Vault profile")
+                .accessibilityLabel(L("Vault profile"))
             }
           }
 
           HStack(spacing: SymairaSpacing.medium) {
             Button(action: unlock) {
-              Label(store.isBusy ? "Unlocking…" : "Unlock Vault", symairaIcon: .unlock)
+              Label(store.isBusy ? L("Unlocking…") : L("Unlock Vault"), symairaIcon: .unlock)
                 .frame(minWidth: 140)
             }
             .symairaButtonStyle(.primary)
             .keyboardShortcut(.defaultAction)
             .disabled(passphrase.isEmpty || store.isBusy)
             if passphrase.isEmpty {
-              Text("Enter the passphrase to unlock.").symairaText(.caption)
+              Text(L("Enter the passphrase to unlock.")).symairaText(.caption)
             }
           }
 
           if let message = store.errorMessage {
-            SymairaNotice(title: "Vault Still Locked", message: message, tone: .critical) {
+            SymairaNotice(title: L("Vault Still Locked"), message: message, tone: .critical) {
               store.clearError()
             }
           }

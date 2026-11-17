@@ -20,11 +20,12 @@
     private var intake: IntakeStore { model.intake }
 
     var body: some View {
-      SymairaPage(title: "Import", subtitle: "Review credential files before they enter the vault")
-      {
+      SymairaPage(
+        title: L("Import"), subtitle: L("Review credential files before they enter the vault")
+      ) {
         Spacer()
         if !intake.files.isEmpty {
-          Button(action: intake.clear) { Label("Start Over", symairaIcon: .restart) }
+          Button(action: intake.clear) { Label(L("Start Over"), symairaIcon: .restart) }
             .symairaButtonStyle(.secondary)
             .disabled(intake.isBusy)
         }
@@ -47,26 +48,27 @@
         dropZone
       case .previewing:
         SymairaPageState(
-          state: SymairaPageLoadState<Void>.loading, loading: "Checking files…", retry: rerunPreview
+          state: SymairaPageLoadState<Void>.loading, loading: L("Checking files…"),
+          retry: rerunPreview
         ) { _ in EmptyView() }
       case .reviewing:
         if intake.importID == nil { previewList } else { reviewEditor }
       case .promoting:
         SymairaPageState(
-          state: SymairaPageLoadState<Void>.loading, loading: "Adding the batch to the vault…",
+          state: SymairaPageLoadState<Void>.loading, loading: L("Adding the batch to the vault…"),
           retry: {}
         ) { _ in EmptyView() }
       case .done:
         SymairaPageEmpty(
-          icon: .success, title: "Import Finished",
-          message: intake.notice ?? "The batch was added to the vault."
+          icon: .success, title: L("Import Finished"),
+          message: intake.notice ?? L("The batch was added to the vault.")
         ) {
-          Button("Import More Files") { intake.clear() }
+          Button(L("Import More Files")) { intake.clear() }
             .symairaButtonStyle(.primary)
         }
       case .failed(let message):
-        SymairaNotice(title: "Import Failed", message: message, tone: .critical)
-        Button("Start Over") { intake.clear() }
+        SymairaNotice(title: L("Import Failed"), message: message, tone: .critical)
+        Button(L("Start Over")) { intake.clear() }
           .symairaButtonStyle(.secondary)
       }
     }
@@ -80,11 +82,13 @@
     private var dropZone: some View {
       SymairaEmptyState(
         icon: .inbox,
-        title: "Drop Credential Files Here",
+        title: L("Drop Credential Files Here"),
         message:
-          "Text, .env, JSON, certificates and keys, screenshots and backup codes. Nothing is written until you review and add the batch."
+          L(
+            "Text, .env, JSON, certificates and keys, screenshots and backup codes. Nothing is written until you review and add the batch."
+          )
       ) {
-        Button("Choose Files…") { showFileImporter = true }
+        Button(L("Choose Files…")) { showFileImporter = true }
           .symairaButtonStyle(.primary)
       }
       .frame(maxWidth: .infinity, minHeight: SymairaPageLayout.stateHeight)
@@ -95,7 +99,7 @@
           .opacity(isDropTargeted ? 1 : 0)
       }
       .onDrop(of: [.fileURL], isTargeted: $isDropTargeted, perform: handleDrop)
-      .accessibilityHint("Drop files, or choose them with the button.")
+      .accessibilityHint(L("Drop files, or choose them with the button."))
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
@@ -126,7 +130,7 @@
     private var previewList: some View {
       VStack(alignment: .leading, spacing: SymairaSpacing.medium) {
         VStack(alignment: .leading, spacing: SymairaSpacing.small) {
-          Text("FILES").symairaText(.sectionLabel)
+          Text(L("FILES")).symairaText(.sectionLabel)
           ForEach(Array((intake.preview?.results ?? []).enumerated()), id: \.element.id) {
             index, result in
             if index > 0 { SymairaFormDivider() }
@@ -136,26 +140,28 @@
         .frame(maxWidth: .infinity, alignment: .leading)
         .symairaCard()
 
-        SymairaFormSection("After Import") {
+        SymairaFormSection(L("After Import")) {
           SymairaFormRow(
-            "Move Sources to Trash",
-            description: "Only after the batch was verified in the vault."
+            L("Move Sources to Trash"),
+            description: L("Only after the batch was verified in the vault.")
           ) {
             Toggle(isOn: Binding(get: { intake.moveToTrash }, set: { intake.moveToTrash = $0 })) {
               EmptyView()
             }
             .toggleStyle(.symairaSwitch)
             .centeredOnFormLabel()
-            .accessibilityLabel("Move sources to Trash after import")
+            .accessibilityLabel(L("Move sources to Trash after import"))
           }
         }
 
         HStack(spacing: SymairaSpacing.medium) {
-          Button(intake.isBusy ? "Staging…" : "Stage for Review") { Task { await intake.stage() } }
-            .symairaButtonStyle(.primary)
-            .disabled(intake.isBusy || !hasImportableFile)
+          Button(intake.isBusy ? L("Staging…") : L("Stage for Review")) {
+            Task { await intake.stage() }
+          }
+          .symairaButtonStyle(.primary)
+          .disabled(intake.isBusy || !hasImportableFile)
           if !hasImportableFile {
-            Text("None of these files can be imported.").symairaText(.caption)
+            Text(L("None of these files can be imported.")).symairaText(.caption)
           }
         }
       }
@@ -179,13 +185,13 @@
             .symairaText(.caption)
           }
           if !result.duplicates.isEmpty {
-            Text("Already in the vault as \(result.duplicates.joined(separator: ", "))")
+            Text(L("Already in the vault as %@", result.duplicates.joined(separator: ", ")))
               .symairaText(.caption)
           }
           if !result.suggestions.isEmpty {
             Text(
               verbatim: result.suggestions.map {
-                $0.attachment ? "attachment: \($0.field)" : $0.field
+                $0.attachment ? L("attachment: %@", $0.field) : $0.field
               }
               .joined(separator: " · ")
             )
@@ -201,9 +207,9 @@
 
     private func status(for result: IntakeFileResult) -> some View {
       switch result.status {
-      case "ok": SymairaStatusLabel("Ready", tone: .positive)
-      case "skipped": SymairaStatusLabel("Skipped", tone: .warning)
-      default: SymairaStatusLabel("Rejected", tone: .critical)
+      case "ok": SymairaStatusLabel(L("Ready"), tone: .positive)
+      case "skipped": SymairaStatusLabel(L("Skipped"), tone: .warning)
+      default: SymairaStatusLabel(L("Rejected"), tone: .critical)
       }
     }
 
@@ -212,18 +218,20 @@
     private var reviewEditor: some View {
       VStack(alignment: .leading, spacing: SymairaSpacing.medium) {
         SymairaNotice(
-          title: intake.importID.map { "Batch \($0)" },
+          title: intake.importID.map { L("Batch %@", $0) },
           message:
-            "The files are staged in quarantine, encrypted. Check where each one goes, then add the batch. Rename or edit the entries afterwards on Entries.",
+            L(
+              "The files are staged in quarantine, encrypted. Check where each one goes, then add the batch. Rename or edit the entries afterwards on Entries."
+            ),
           tone: .informative
         )
         ForEach(intake.drafts) { draft in
           draftCard(draft)
         }
         HStack(spacing: SymairaSpacing.medium) {
-          Button("Discard Batch") { intake.clear() }
+          Button(L("Discard Batch")) { intake.clear() }
             .symairaButtonStyle(.secondary)
-          Button("Add Batch to Vault") {
+          Button(L("Add Batch to Vault")) {
             Task {
               await intake.promote()
               model.refresh()
@@ -241,7 +249,7 @@
     private func draftCard(_ draft: IntakeReviewDraft) -> some View {
       SymairaFormSection(draft.sourceName) {
         SymairaFormRow(
-          "Target Path",
+          L("Target Path"),
           description:
             "\(draft.sourceType) · \(ByteCountFormatter.string(fromByteCount: draft.size, countStyle: .file))"
         ) {
@@ -251,18 +259,18 @@
             .textSelection(.enabled)
         }
         SymairaFormDivider()
-        SymairaFormRow("Fields") {
+        SymairaFormRow(L("Fields")) {
           Text(
             verbatim: draft.fields.isEmpty
-              ? "None" : draft.fields.keys.sorted().joined(separator: ", ")
+              ? L("None") : draft.fields.keys.sorted().joined(separator: ", ")
           )
           .symairaText(.monoSmall)
           .foregroundStyle(SymairaTokens.ink)
         }
         SymairaFormDivider()
-        SymairaFormRow("Original File") {
+        SymairaFormRow(L("Original File")) {
           SymairaStatusLabel(
-            draft.keepAttachment ? "Kept as Encrypted Attachment" : "Not Kept",
+            draft.keepAttachment ? L("Kept as Encrypted Attachment") : L("Not Kept"),
             tone: draft.keepAttachment ? .positive : .neutral)
         }
         if !draft.warnings.isEmpty {

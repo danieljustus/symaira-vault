@@ -1,6 +1,7 @@
 name: Symvault
 options:
   bundleIdPrefix: com.symaira
+  developmentLanguage: en
   deploymentTarget:
     macOS: "14.0"
     iOS: "17.0"
@@ -58,6 +59,8 @@ targets:
     info:
       path: Symvault-Info.plist
       properties:
+        # English and German; the app follows the system language.
+        CFBundleLocalizations: [en, de]
         CFBundleDocumentTypes:
           - CFBundleTypeName: Credential Intake
             CFBundleTypeRole: Viewer

@@ -10,7 +10,7 @@
     public var errorDescription: String? {
       switch self {
       case .rejected(let reason):
-        return "The selection was not added: \(reason ?? "unknown reason")."
+        return L("The selection was not added: %@.", reason ?? L("unknown reason"))
       }
     }
   }
@@ -85,7 +85,7 @@
         schema != VaultClient.expectedSchemaVersion
       {
         availability = .failed(
-          "The installed symvault uses schema \(schema), but this app expects schema \(VaultClient.expectedSchemaVersion). Update symvault or the app."
+          L("The installed symvault uses schema %d, but this app expects schema %d. Update symvault or the app.", schema, VaultClient.expectedSchemaVersion)
         )
         return
       }
@@ -132,7 +132,7 @@
 
     public func unlock(passphrase: String, ttl: String) async -> Bool {
       guard !passphrase.isEmpty else {
-        errorMessage = "Enter the vault passphrase."
+        errorMessage = L("Enter the vault passphrase.")
         return false
       }
       isBusy = true
@@ -147,8 +147,7 @@
           // screen without a reason — that reads as "the button does
           // nothing".
           errorMessage =
-            "symvault reported a successful unlock, but no session is active afterwards. "
-            + "Update symvault (brew upgrade symvault) and check 'symvault unlock' in Terminal."
+            L("symvault reported a successful unlock, but no session is active afterwards. Update symvault (brew upgrade symvault) and check 'symvault unlock' in Terminal.")
         }
         return availability == .ready
       } catch {
@@ -260,7 +259,7 @@
       pasteboard.clearContents()
       pasteboard.setString(value, forType: .string)
       let expectedChangeCount = pasteboard.changeCount
-      clipboardNotice = "\(label) copied. The clipboard clears in 30 seconds."
+      clipboardNotice = L("%@ copied. The clipboard clears in 30 seconds.", label)
 
       clipboardClearTask?.cancel()
       clipboardClearTask = Task { [weak self] in
@@ -284,8 +283,17 @@
       return trimmed.isEmpty ? nil : trimmed
     }
 
+    /// The client's own errors in the interface language; messages from the
+    /// symvault process itself stay as the CLI wrote them.
+    private static func message(for error: VaultClientError) -> String {
+      switch error {
+      case .binaryNotFound: L("symvault was not found in the app bundle or on this Mac.")
+      case .invalidGeneratedPassword: L("symvault did not return a valid password.")
+      }
+    }
+
     private func handle(_ error: Error) {
-      let message = error.localizedDescription
+      let message = (error as? VaultClientError).map(Self.message(for:)) ?? error.localizedDescription
       errorMessage = message
       if message.localizedCaseInsensitiveContains("locked")
         || message.localizedCaseInsensitiveContains("active session")

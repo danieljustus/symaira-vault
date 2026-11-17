@@ -20,10 +20,11 @@
     @FocusState private var focus: Field?
 
     private static let types: [(value: String, label: String)] = [
-      (value: "password", label: "Password"), (value: "api_key", label: "API Key"),
-      (value: "bearer_token", label: "Bearer Token"), (value: "basic_auth", label: "Basic Auth"),
-      (value: "ssh_key", label: "SSH Key"), (value: "certificate", label: "Certificate"),
-      (value: "database_url", label: "Database URL"), (value: "custom", label: "Custom"),
+      (value: "password", label: L("Password")), (value: "api_key", label: L("API Key")),
+      (value: "bearer_token", label: L("Bearer Token")),
+      (value: "basic_auth", label: L("Basic Auth")),
+      (value: "ssh_key", label: L("SSH Key")), (value: "certificate", label: L("Certificate")),
+      (value: "database_url", label: L("Database URL")), (value: "custom", label: L("Custom")),
     ]
 
     init(context: EntryEditorContext) {
@@ -39,18 +40,19 @@
 
     var body: some View {
       SymairaSheetScaffold(
-        title: isEditing ? "Edit Entry" : "New Entry",
+        title: isEditing ? L("Edit Entry") : L("New Entry"),
         dismiss: { dismiss() },
-        primaryTitle: isSaving ? "Saving…" : "Save Entry",
+        primaryTitle: isSaving ? L("Saving…") : L("Save Entry"),
         primaryDisabled: isSaving || store.isBusy,
         primary: save
       ) {
         SymairaFormSection(
-          "Entry",
-          footer: isEditing ? "The path of an existing entry cannot change here." : nil
+          L("Entry"),
+          footer: isEditing ? L("The path of an existing entry cannot change here.") : nil
         ) {
           SymairaFormRow(
-            "Path", description: pathError == nil ? "Group and name, separated by a slash." : nil
+            L("Path"),
+            description: pathError == nil ? L("Group and name, separated by a slash.") : nil
           ) {
             VStack(alignment: .trailing, spacing: SymairaSpacing.xSmall) {
               field("work/github", text: $draft.path, focus: .path)
@@ -59,44 +61,45 @@
             }
           }
           SymairaFormDivider()
-          SymairaFormRow("Username") {
+          SymairaFormRow(L("Username")) {
             field("name@example.com", text: $draft.username, focus: .username)
           }
           SymairaFormDivider()
-          SymairaFormRow("URL") { field("https://example.com", text: $draft.url, focus: .url) }
+          SymairaFormRow(L("URL")) { field("https://example.com", text: $draft.url, focus: .url) }
         }
 
-        SymairaFormSection("Secret", footer: "Generated passwords come from symvault on this Mac.")
-        {
-          SymairaFormRow("Password or Secret") {
+        SymairaFormSection(
+          L("Secret"), footer: L("Generated passwords come from symvault on this Mac.")
+        ) {
+          SymairaFormRow(L("Password or Secret")) {
             VStack(alignment: .trailing, spacing: SymairaSpacing.xSmall) {
-              SecureField("Required", text: $draft.secret)
+              SecureField(L("Required"), text: $draft.secret)
                 .textFieldStyle(.symaira(isFocused: focus == .secret))
                 .focused($focus, equals: .secret)
                 .frame(width: 260)
-                .accessibilityLabel("Password or secret")
+                .accessibilityLabel(L("Password or secret"))
               errorText(secretError)
             }
           }
           SymairaFormDivider()
-          SymairaFormRow("Length") {
+          SymairaFormRow(L("Length")) {
             Stepper(value: $passwordLength, in: 12...128, step: 4) {
-              Text("\(passwordLength) characters").symairaText(.body).monospacedDigit()
+              Text(L("%d characters", passwordLength)).symairaText(.body).monospacedDigit()
             }
-            .accessibilityLabel("Password length")
-            .accessibilityValue("\(passwordLength) characters")
+            .accessibilityLabel(L("Password length"))
+            .accessibilityValue(L("%d characters", passwordLength))
           }
           SymairaFormDivider()
-          SymairaFormRow("Include Symbols") {
+          SymairaFormRow(L("Include Symbols")) {
             Toggle(isOn: $useSymbols) { EmptyView() }
               .toggleStyle(.symairaSwitch)
               .centeredOnFormLabel()
-              .accessibilityLabel("Include symbols")
+              .accessibilityLabel(L("Include symbols"))
           }
           HStack {
             Spacer()
             Button(action: generatePassword) {
-              Label(isGenerating ? "Generating…" : "Generate Password", symairaIcon: .magic)
+              Label(isGenerating ? L("Generating…") : L("Generate Password"), symairaIcon: .magic)
                 .frame(minWidth: 170)
             }
             .symairaButtonStyle(.secondary)
@@ -105,44 +108,46 @@
           .padding(.bottom, SymairaSpacing.small)
         }
 
-        SymairaFormSection("Notes") {
-          TextField("Optional", text: $draft.notes, axis: .vertical)
+        SymairaFormSection(L("Notes")) {
+          TextField(L("Optional"), text: $draft.notes, axis: .vertical)
             .lineLimit(3...8)
             .textFieldStyle(.symaira(isFocused: focus == .notes))
             .focused($focus, equals: .notes)
-            .accessibilityLabel("Notes")
+            .accessibilityLabel(L("Notes"))
             .padding(.vertical, SymairaSpacing.small)
         }
 
         if !isEditing {
           SymairaFormSection(
-            "Classification", footer: "The hint tells local AI agents what the entry is for."
+            L("Classification"), footer: L("The hint tells local AI agents what the entry is for.")
           ) {
-            SymairaFormRow("Type") {
-              SymairaFilterMenu("Type", selection: $draft.type, options: Self.types)
+            SymairaFormRow(L("Type")) {
+              SymairaFilterMenu(L("Type"), selection: $draft.type, options: Self.types)
             }
             SymairaFormDivider()
-            SymairaFormRow("Usage Hint") { field("Optional", text: $draft.usageHint, focus: .hint) }
+            SymairaFormRow(L("Usage Hint")) {
+              field("Optional", text: $draft.usageHint, focus: .hint)
+            }
           }
 
           SymairaFormSection(
-            "One-Time Code",
-            footer: "Optional. Paste the Base32 secret from the service's setup page."
+            L("One-Time Code"),
+            footer: L("Optional. Paste the Base32 secret from the service's setup page.")
           ) {
-            SymairaFormRow("Base32 Secret") {
-              SecureField("Optional", text: $draft.totpSecret)
+            SymairaFormRow(L("Base32 Secret")) {
+              SecureField(L("Optional"), text: $draft.totpSecret)
                 .textFieldStyle(.symaira)
                 .frame(width: 260)
-                .accessibilityLabel("TOTP Base32 secret")
+                .accessibilityLabel(L("TOTP Base32 secret"))
             }
             SymairaFormDivider()
-            SymairaFormRow("Issuer") {
-              TextField("Example Inc.", text: $draft.totpIssuer).textFieldStyle(.symaira).frame(
+            SymairaFormRow(L("Issuer")) {
+              TextField(L("Example Inc."), text: $draft.totpIssuer).textFieldStyle(.symaira).frame(
                 width: 260)
             }
             SymairaFormDivider()
-            SymairaFormRow("Account") {
-              TextField("name@example.com", text: $draft.totpAccount).textFieldStyle(.symaira)
+            SymairaFormRow(L("Account")) {
+              TextField(L("name@example.com"), text: $draft.totpAccount).textFieldStyle(.symaira)
                 .frame(width: 260)
             }
           }
@@ -192,8 +197,8 @@
 
     private func save() {
       draft.path = draft.path.trimmingCharacters(in: .whitespacesAndNewlines)
-      pathError = draft.path.isEmpty ? "Enter a path, for example work/github." : nil
-      secretError = draft.secret.isEmpty ? "Enter a secret or generate one." : nil
+      pathError = draft.path.isEmpty ? L("Enter a path, for example work/github.") : nil
+      secretError = draft.secret.isEmpty ? L("Enter a secret or generate one.") : nil
       if pathError != nil {
         focus = .path
         return

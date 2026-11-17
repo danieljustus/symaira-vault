@@ -22,33 +22,34 @@
       @Bindable var store = store
 
       SymairaPage(
-        title: "Entries", subtitle: "Secrets stay masked until you reveal them",
+        title: L("Entries"), subtitle: L("Secrets stay masked until you reveal them"),
         scrolls: false, maxWidth: 1180
       ) {
-        TextField("Search by path, type or hint", text: $store.searchText)
+        TextField(L("Search by path, type or hint"), text: $store.searchText)
           .textFieldStyle(.symaira(isFocused: searchFocused))
           .focused($searchFocused)
           .frame(maxWidth: 320)
-          .accessibilityLabel("Search entries")
+          .accessibilityLabel(L("Search entries"))
         Spacer()
-        SymairaIconButton("Refresh", icon: .refresh, action: model.refresh)
+        SymairaIconButton(L("Refresh"), icon: .refresh, action: model.refresh)
           .disabled(store.isBusy)
-        Button(action: model.newEntry) { Label("New Entry", symairaIcon: .add) }
+        Button(action: model.newEntry) { Label(L("New Entry"), symairaIcon: .add) }
           .symairaButtonStyle(.primary)
       } content: {
         VaultNotices()
         if store.filteredEntries.isEmpty {
           if store.searchText.isEmpty {
             SymairaPageEmpty(
-              icon: .key, title: "No Entries",
-              message: "The vault is empty. Use New Entry, or import credential files from Import."
+              icon: .key, title: L("No Entries"),
+              message: L(
+                "The vault is empty. Use New Entry, or import credential files from Import.")
             )
           } else {
             SymairaPageEmpty(
-              icon: .search, title: "No Matching Entries",
-              message: "Nothing matches “\(store.searchText)”. Try part of the path instead."
+              icon: .search, title: L("No Matching Entries"),
+              message: L("Nothing matches “%@”. Try part of the path instead.", store.searchText)
             ) {
-              Button("Clear Search") { store.searchText = "" }
+              Button(L("Clear Search")) { store.searchText = "" }
                 .symairaButtonStyle(.secondary)
             }
           }
@@ -63,7 +64,7 @@
       }
       .background {
         // ⌘F focuses the search field (KEY-1).
-        Button("Find") { searchFocused = true }
+        Button(L("Find")) { searchFocused = true }
           .keyboardShortcut("f", modifiers: .command)
           .hidden()
       }
@@ -76,7 +77,7 @@
         store.filteredEntries.sorted(using: sortOrder), selection: $store.selectedPath,
         sortOrder: $sortOrder
       ) {
-        TableColumn("Entry", value: \.path) { entry in
+        TableColumn(L("Entry"), value: \.path) { entry in
           VStack(alignment: .leading, spacing: 2) {
             Text(verbatim: entry.title).symairaText(.bodyEmphasized)
             Text(verbatim: entry.path).symairaText(.monoSmall).foregroundStyle(SymairaTokens.ink3)
@@ -84,11 +85,11 @@
           .padding(.vertical, 2)
         }
         .width(min: 200, ideal: 340)
-        TableColumn("Type", value: \.typeLabel) { entry in
+        TableColumn(L("Type"), value: \.typeLabel) { entry in
           Text(verbatim: entry.typeLabel).symairaText(.secondary)
         }
         .width(min: 70, ideal: 100, max: 160)
-        TableColumn("Fields", value: \.fieldCountSortKey) { entry in
+        TableColumn(L("Fields"), value: \.fieldCountSortKey) { entry in
           Text(verbatim: entry.fieldCount.map(String.init) ?? "—")
             .symairaText(.secondary)
             .monospacedDigit()
@@ -98,15 +99,15 @@
       }
       .contextMenu(forSelectionType: String.self) { paths in
         if let path = paths.first {
-          Button("Copy Path") { copyPath(path) }
-          Button("Edit Entry…") { edit(path: path) }
+          Button(L("Copy Path")) { copyPath(path) }
+          Button(L("Edit Entry…")) { edit(path: path) }
           Divider()
-          Button("Delete Entry…", role: .destructive) { model.deleteCandidate = path }
+          Button(L("Delete Entry…"), role: .destructive) { model.deleteCandidate = path }
         }
       }
       .onDeleteCommand(perform: model.requestDeleteSelected)
       .clipShape(RoundedRectangle(cornerRadius: SymairaRadius.card, style: .continuous))
-      .accessibilityLabel("Entries")
+      .accessibilityLabel(L("Entries"))
     }
 
     @ViewBuilder
@@ -118,13 +119,14 @@
           onDelete: { model.deleteCandidate = detail.path }
         )
       } else if store.selectedPath != nil {
-        SymairaLoadingState("Decrypting entry…")
+        SymairaLoadingState(L("Decrypting entry…"))
           .frame(maxWidth: .infinity, minHeight: SymairaPageLayout.stateHeight)
           .symairaCard()
       } else {
         SymairaEmptyState(
-          icon: .sidebar, title: "No Entry Selected",
-          message: "Select an entry to see its fields. Secrets stay masked until you reveal them."
+          icon: .sidebar, title: L("No Entry Selected"),
+          message: L(
+            "Select an entry to see its fields. Secrets stay masked until you reveal them.")
         )
         .frame(maxWidth: .infinity)
         .symairaCard()

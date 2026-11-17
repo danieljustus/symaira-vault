@@ -59,7 +59,7 @@
           .environment(store)
       }
       .confirmationDialog(
-        "Delete \(model.deleteCandidate ?? "Entry")?",
+        L("Delete %@?", model.deleteCandidate ?? L("Entry")),
         isPresented: Binding(
           get: { model.deleteCandidate != nil },
           set: { if !$0 { model.deleteCandidate = nil } }
@@ -67,12 +67,12 @@
         titleVisibility: .visible,
         presenting: model.deleteCandidate
       ) { path in
-        Button("Delete Entry", role: .destructive) {
+        Button(L("Delete Entry"), role: .destructive) {
           Task { _ = await store.delete(path: path) }
         }
-        Button("Cancel", role: .cancel) {}
+        Button(L("Cancel"), role: .cancel) {}
       } message: { _ in
-        Text("The encrypted entry is removed from the vault and cannot be restored here.")
+        Text(L("The encrypted entry is removed from the vault and cannot be restored here."))
       }
     }
 
@@ -105,7 +105,7 @@
             .frame(width: 32, height: 36)
             .accessibilityHidden(true)
           if showsLabels {
-            Text("Symaira Vault")
+            Text(L("Symaira Vault"))
               .symairaText(.heading)
               .lineLimit(1)
           }
@@ -143,14 +143,14 @@
 
     private var status: (label: String, tone: SymairaTone) {
       switch store.availability {
-      case .checking: ("Connecting…", .neutral)
-      case .missing: ("symvault Not Found", .critical)
-      case .locked: ("Locked", .warning)
-      case .failed: ("Vault Unavailable", .critical)
+      case .checking: (L("Connecting…"), .neutral)
+      case .missing: (L("symvault Not Found"), .critical)
+      case .locked: (L("Locked"), .warning)
+      case .failed: (L("Vault Unavailable"), .critical)
       case .ready:
         (
           store.entries.count == 1
-            ? "Unlocked · 1 entry" : "Unlocked · \(store.entries.count) entries", .positive
+            ? L("Unlocked · 1 entry") : L("Unlocked · %d entries", store.entries.count), .positive
         )
       }
     }

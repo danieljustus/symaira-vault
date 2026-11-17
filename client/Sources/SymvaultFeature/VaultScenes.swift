@@ -13,7 +13,7 @@
     }
 
     public var body: some Scene {
-      WindowGroup("Symaira Vault") {
+      WindowGroup(L("Symaira Vault")) {
         VaultWorkspace(model: model)
           // Sidebar 272 pt plus the table and detail column (SHELL-4).
           .frame(minWidth: 960, minHeight: 620)
@@ -28,20 +28,20 @@
           destinations: VaultDestination.commandEntries, selection: $model.destination)
         // WindowGroup owns ⌘N for a new window; New Entry replaces it.
         CommandGroup(replacing: .newItem) {
-          Button("New Entry", action: model.newEntry)
+          Button(L("New Entry"), action: model.newEntry)
             .keyboardShortcut("n", modifiers: .command)
             .disabled(!model.canUseVault)
-          Button("Import Files…") { model.openImport() }
+          Button(L("Import Files…")) { model.openImport() }
             .keyboardShortcut("i", modifiers: [.command, .shift])
         }
-        CommandMenu("Vault") {
-          Button("Refresh", action: model.refresh)
+        CommandMenu(L("Vault")) {
+          Button(L("Refresh"), action: model.refresh)
             .keyboardShortcut("r", modifiers: .command)
           Divider()
-          Button("Delete Entry…", action: model.requestDeleteSelected)
+          Button(L("Delete Entry…"), action: model.requestDeleteSelected)
             .disabled(!model.canUseVault || model.store.selectedPath == nil)
           Divider()
-          Button("Lock Vault", action: model.lock)
+          Button(L("Lock Vault"), action: model.lock)
             .keyboardShortcut("l", modifiers: [.command, .shift])
             .disabled(!model.canUseVault)
         }

@@ -62,6 +62,14 @@ the selected entry after confirmation. Settings (⌘,) hold the appearance
 (System, Light, Dark; key `symvault.appearance`) and the runtime details.
 Copied values leave the clipboard after 30 seconds.
 
+The app is in English and German and follows the system language (System
+Settings, General, Language & Region; per app under Applications). Every
+interface text goes through `L("...")` (`Sources/SymvaultFeature/Strings.swift`)
+and needs a German entry in `Sources/SymvaultFeature/Resources/Localizable.xcstrings`;
+`python3 -I scripts/check-client-strings.py` (repository root, also in CI)
+fails on a missing or unused entry. Messages written by the `symvault` process
+itself stay in English.
+
 ## Service for selected text
 
 The app registers the macOS service "Add to Symaira Vault" (`NSServices`

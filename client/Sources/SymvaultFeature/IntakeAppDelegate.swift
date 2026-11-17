@@ -33,7 +33,7 @@
       guard let text = pasteboard.string(forType: .string),
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       else {
-        error.pointee = "The selection contains no text."
+        error.pointee = L("The selection contains no text.") as NSString
         return
       }
       SelectionInbox.shared.pending = text

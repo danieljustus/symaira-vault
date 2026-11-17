@@ -1,0 +1,2156 @@
+{
+  "sourceLanguage": "en",
+  "version": "1.0",
+  "strings": {
+    "%@ copied. The clipboard clears in 30 seconds.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ kopiert. Die Zwischenablage wird nach 30 Sekunden geleert."
+          }
+        }
+      }
+    },
+    "%d characters": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d Zeichen"
+          }
+        }
+      }
+    },
+    "%d entries": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d Einträge"
+          }
+        }
+      }
+    },
+    "%d more groups": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d weitere Gruppen"
+          }
+        }
+      }
+    },
+    "%d s left": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "noch %d s"
+          }
+        }
+      }
+    },
+    "%d seconds": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d Sekunden"
+          }
+        }
+      }
+    },
+    "1 entry": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Eintrag"
+          }
+        }
+      }
+    },
+    "1 hour": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Stunde"
+          }
+        }
+      }
+    },
+    "15 min": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "15 Min."
+          }
+        }
+      }
+    },
+    "8 hours": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "8 Stunden"
+          }
+        }
+      }
+    },
+    "API Key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API-Schlüssel"
+          }
+        }
+      }
+    },
+    "About": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Über"
+          }
+        }
+      }
+    },
+    "Account": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto"
+          }
+        }
+      }
+    },
+    "Add Batch to Vault": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stapel in den Vault übernehmen"
+          }
+        }
+      }
+    },
+    "Adding the batch to the vault…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stapel wird in den Vault übernommen …"
+          }
+        }
+      }
+    },
+    "After Import": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach dem Import"
+          }
+        }
+      }
+    },
+    "Already in the vault as %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereits im Vault als %@"
+          }
+        }
+      }
+    },
+    "An entry with this path already exists. Choose another path.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Eintrag mit diesem Pfad existiert bereits. Wähle einen anderen Pfad."
+          }
+        }
+      }
+    },
+    "App": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App"
+          }
+        }
+      }
+    },
+    "Appearance": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Darstellung"
+          }
+        }
+      }
+    },
+    "Auto-Rotate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-Rotation"
+          }
+        }
+      }
+    },
+    "Base32 Secret": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Base32-Secret"
+          }
+        }
+      }
+    },
+    "Basic Auth": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Basic Auth"
+          }
+        }
+      }
+    },
+    "Batch %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stapel %@"
+          }
+        }
+      }
+    },
+    "Batch %@ was added to the vault.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stapel %@ wurde in den Vault übernommen."
+          }
+        }
+      }
+    },
+    "Bearer Token": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bearer-Token"
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbrechen"
+          }
+        }
+      }
+    },
+    "Certificate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zertifikat"
+          }
+        }
+      }
+    },
+    "Check Again": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut prüfen"
+          }
+        }
+      }
+    },
+    "Check Runtime": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runtime prüfen"
+          }
+        }
+      }
+    },
+    "Checking files…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dateien werden geprüft …"
+          }
+        }
+      }
+    },
+    "Checking the selection…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auswahl wird geprüft …"
+          }
+        }
+      }
+    },
+    "Choose Files…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dateien auswählen …"
+          }
+        }
+      }
+    },
+    "Classification": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klassifizierung"
+          }
+        }
+      }
+    },
+    "Clear Search": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suche zurücksetzen"
+          }
+        }
+      }
+    },
+    "Color Scheme": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Farbschema"
+          }
+        }
+      }
+    },
+    "Connecting to the local symvault runtime": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindung zur lokalen symvault-Runtime"
+          }
+        }
+      }
+    },
+    "Connecting to the vault…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindung zum Vault …"
+          }
+        }
+      }
+    },
+    "Connecting…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinden …"
+          }
+        }
+      }
+    },
+    "Copy %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ kopieren"
+          }
+        }
+      }
+    },
+    "Copy %@ (⇧⌘C)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ kopieren (⇧⌘C)"
+          }
+        }
+      }
+    },
+    "Copy Install Command": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installationsbefehl kopieren"
+          }
+        }
+      }
+    },
+    "Copy One-Time Code": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einmalcode kopieren"
+          }
+        }
+      }
+    },
+    "Copy Path": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pfad kopieren"
+          }
+        }
+      }
+    },
+    "Custom": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eigener Typ"
+          }
+        }
+      }
+    },
+    "Database URL": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Datenbank-URL"
+          }
+        }
+      }
+    },
+    "Decrypting entry…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eintrag wird entschlüsselt …"
+          }
+        }
+      }
+    },
+    "Default": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard"
+          }
+        }
+      }
+    },
+    "Delete %@?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ löschen?"
+          }
+        }
+      }
+    },
+    "Delete Entry": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eintrag löschen"
+          }
+        }
+      }
+    },
+    "Delete Entry…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eintrag löschen …"
+          }
+        }
+      }
+    },
+    "Delete…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Löschen …"
+          }
+        }
+      }
+    },
+    "Discard Batch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stapel verwerfen"
+          }
+        }
+      }
+    },
+    "Distinct entry types": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verschiedene Typen"
+          }
+        }
+      }
+    },
+    "Drop Credential Files Here": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zugangsdateien hierher ziehen"
+          }
+        }
+      }
+    },
+    "Drop files, or choose them with the button.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ziehe Dateien hierher oder wähle sie mit der Taste aus."
+          }
+        }
+      }
+    },
+    "Edit Entry": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eintrag bearbeiten"
+          }
+        }
+      }
+    },
+    "Edit Entry…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eintrag bearbeiten …"
+          }
+        }
+      }
+    },
+    "Edit…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bearbeiten …"
+          }
+        }
+      }
+    },
+    "Enter a path, for example work/github.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gib einen Pfad ein, zum Beispiel work/github."
+          }
+        }
+      }
+    },
+    "Enter a secret or generate one.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gib ein Secret ein oder erzeuge eines."
+          }
+        }
+      }
+    },
+    "Enter the passphrase to unlock.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gib die Passphrase zum Entsperren ein."
+          }
+        }
+      }
+    },
+    "Enter the vault passphrase.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gib die Vault-Passphrase ein."
+          }
+        }
+      }
+    },
+    "Entries": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einträge"
+          }
+        }
+      }
+    },
+    "Entries with rotation on": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit aktiver Rotation"
+          }
+        }
+      }
+    },
+    "Entry": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eintrag"
+          }
+        }
+      }
+    },
+    "Entry path": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pfad des Eintrags"
+          }
+        }
+      }
+    },
+    "Example Inc.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beispiel GmbH"
+          }
+        }
+      }
+    },
+    "FIELDS": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FELDER"
+          }
+        }
+      }
+    },
+    "FILES": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DATEIEN"
+          }
+        }
+      }
+    },
+    "Fields": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Felder"
+          }
+        }
+      }
+    },
+    "Find": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suchen"
+          }
+        }
+      }
+    },
+    "First part of the path": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erster Teil des Pfads"
+          }
+        }
+      }
+    },
+    "General": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allgemein"
+          }
+        }
+      }
+    },
+    "Generate Password": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passwort erzeugen"
+          }
+        }
+      }
+    },
+    "Generated passwords come from symvault on this Mac.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erzeugte Passwörter stammen von symvault auf diesem Mac."
+          }
+        }
+      }
+    },
+    "Generating…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird erzeugt …"
+          }
+        }
+      }
+    },
+    "Group and name, for example hosting/cloud86.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gruppe und Name, zum Beispiel hosting/cloud86."
+          }
+        }
+      }
+    },
+    "Group and name, separated by a slash.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gruppe und Name, getrennt durch einen Schrägstrich."
+          }
+        }
+      }
+    },
+    "Groups": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gruppen"
+          }
+        }
+      }
+    },
+    "Hidden value": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verborgener Wert"
+          }
+        }
+      }
+    },
+    "Hide %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ verbergen"
+          }
+        }
+      }
+    },
+    "Hide Value": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wert verbergen"
+          }
+        }
+      }
+    },
+    "Import": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import"
+          }
+        }
+      }
+    },
+    "Import Failed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Import Files…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dateien importieren …"
+          }
+        }
+      }
+    },
+    "Import Finished": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import abgeschlossen"
+          }
+        }
+      }
+    },
+    "Import More Files": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weitere Dateien importieren"
+          }
+        }
+      }
+    },
+    "In this profile": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In diesem Profil"
+          }
+        }
+      }
+    },
+    "Include Symbols": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sonderzeichen verwenden"
+          }
+        }
+      }
+    },
+    "Include symbols": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sonderzeichen verwenden"
+          }
+        }
+      }
+    },
+    "Install command": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installationsbefehl"
+          }
+        }
+      }
+    },
+    "Install symvault": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "symvault installieren"
+          }
+        }
+      }
+    },
+    "Issuer": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aussteller"
+          }
+        }
+      }
+    },
+    "JSON Schema": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JSON-Schema"
+          }
+        }
+      }
+    },
+    "Kept as Encrypted Attachment": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Als verschlüsselter Anhang behalten"
+          }
+        }
+      }
+    },
+    "LARGEST GROUPS": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GRÖSSTE GRUPPEN"
+          }
+        }
+      }
+    },
+    "Leave empty for the default vault profile.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leer lassen für das Standardprofil des Vaults."
+          }
+        }
+      }
+    },
+    "Length": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Länge"
+          }
+        }
+      }
+    },
+    "Lines such as “Username: …” or “Password: …” are missing. The text is saved as an encrypted attachment.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeilen wie „Benutzername: …“ oder „Passwort: …“ fehlen. Der Text wird als verschlüsselter Anhang gesichert."
+          }
+        }
+      }
+    },
+    "Lock Vault": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault sperren"
+          }
+        }
+      }
+    },
+    "Locked": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesperrt"
+          }
+        }
+      }
+    },
+    "Modified %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geändert %@"
+          }
+        }
+      }
+    },
+    "Move Sources to Trash": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quellen in den Papierkorb legen"
+          }
+        }
+      }
+    },
+    "Move sources to Trash after import": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quellen nach dem Import in den Papierkorb legen"
+          }
+        }
+      }
+    },
+    "New Entry": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuer Eintrag"
+          }
+        }
+      }
+    },
+    "No Entries": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Einträge"
+          }
+        }
+      }
+    },
+    "No Entry Selected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Eintrag ausgewählt"
+          }
+        }
+      }
+    },
+    "No Labeled Fields": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine beschrifteten Felder"
+          }
+        }
+      }
+    },
+    "No Matching Entries": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine passenden Einträge"
+          }
+        }
+      }
+    },
+    "No runtime information loaded.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Runtime-Informationen geladen."
+          }
+        }
+      }
+    },
+    "None": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine"
+          }
+        }
+      }
+    },
+    "None of the files could be imported.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine der Dateien konnte importiert werden."
+          }
+        }
+      }
+    },
+    "None of these files can be imported.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine dieser Dateien kann importiert werden."
+          }
+        }
+      }
+    },
+    "Not Found": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "Not Kept": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht behalten"
+          }
+        }
+      }
+    },
+    "Notes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notizen"
+          }
+        }
+      }
+    },
+    "Nothing matches “%@”. Try part of the path instead.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nichts passt zu „%@“. Versuche es mit einem Teil des Pfads."
+          }
+        }
+      }
+    },
+    "ONE-TIME CODE": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "EINMALCODE"
+          }
+        }
+      }
+    },
+    "One-Time Code": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einmalcode"
+          }
+        }
+      }
+    },
+    "One-time code": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einmalcode"
+          }
+        }
+      }
+    },
+    "Only after the batch was verified in the vault.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erst nachdem der Stapel im Vault geprüft wurde."
+          }
+        }
+      }
+    },
+    "Optional": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optional"
+          }
+        }
+      }
+    },
+    "Optional. Paste the Base32 secret from the service's setup page.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optional. Füge das Base32-Secret von der Einrichtungsseite des Dienstes ein."
+          }
+        }
+      }
+    },
+    "Original File": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Originaldatei"
+          }
+        }
+      }
+    },
+    "Overview": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Übersicht"
+          }
+        }
+      }
+    },
+    "Passphrase": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passphrase"
+          }
+        }
+      }
+    },
+    "Password": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passwort"
+          }
+        }
+      }
+    },
+    "Password length": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passwortlänge"
+          }
+        }
+      }
+    },
+    "Password or Secret": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passwort oder Secret"
+          }
+        }
+      }
+    },
+    "Password or secret": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passwort oder Secret"
+          }
+        }
+      }
+    },
+    "Path": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pfad"
+          }
+        }
+      }
+    },
+    "Profile": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profil"
+          }
+        }
+      }
+    },
+    "RUNTIME": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RUNTIME"
+          }
+        }
+      }
+    },
+    "Ready": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereit"
+          }
+        }
+      }
+    },
+    "Recognized": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erkannt"
+          }
+        }
+      }
+    },
+    "Recognized Fields": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erkannte Felder"
+          }
+        }
+      }
+    },
+    "Refresh": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisieren"
+          }
+        }
+      }
+    },
+    "Rejected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abgelehnt"
+          }
+        }
+      }
+    },
+    "Required": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pflichtfeld"
+          }
+        }
+      }
+    },
+    "Review credential files before they enter the vault": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zugangsdateien prüfen, bevor sie in den Vault gelangen"
+          }
+        }
+      }
+    },
+    "Runtime": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runtime"
+          }
+        }
+      }
+    },
+    "SSH Key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SSH-Schlüssel"
+          }
+        }
+      }
+    },
+    "Save Entry": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eintrag sichern"
+          }
+        }
+      }
+    },
+    "Save Selection": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auswahl sichern"
+          }
+        }
+      }
+    },
+    "Saving…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird gesichert …"
+          }
+        }
+      }
+    },
+    "Search by path, type or hint": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach Pfad, Typ oder Hinweis suchen"
+          }
+        }
+      }
+    },
+    "Search entries": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einträge durchsuchen"
+          }
+        }
+      }
+    },
+    "Secret": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Secret"
+          }
+        }
+      }
+    },
+    "Secrets stay masked until you reveal them": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Secrets bleiben verborgen, bis du sie aufdeckst"
+          }
+        }
+      }
+    },
+    "Select an entry to see its fields. Secrets stay masked until you reveal them.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle einen Eintrag, um seine Felder zu sehen. Secrets bleiben verborgen, bis du sie aufdeckst."
+          }
+        }
+      }
+    },
+    "Session": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sitzung"
+          }
+        }
+      }
+    },
+    "Session length": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sitzungsdauer"
+          }
+        }
+      }
+    },
+    "Show %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ anzeigen"
+          }
+        }
+      }
+    },
+    "Show %@, %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ anzeigen, %@"
+          }
+        }
+      }
+    },
+    "Show All Entries": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Einträge anzeigen"
+          }
+        }
+      }
+    },
+    "Show Value": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wert anzeigen"
+          }
+        }
+      }
+    },
+    "Show in Entries": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Einträgen anzeigen"
+          }
+        }
+      }
+    },
+    "Skipped": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Übersprungen"
+          }
+        }
+      }
+    },
+    "Source": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle"
+          }
+        }
+      }
+    },
+    "Stage for Review": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zur Prüfung bereitstellen"
+          }
+        }
+      }
+    },
+    "Staging…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird bereitgestellt …"
+          }
+        }
+      }
+    },
+    "Start Over": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu beginnen"
+          }
+        }
+      }
+    },
+    "Status": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status"
+          }
+        }
+      }
+    },
+    "Stay Unlocked For": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entsperrt bleiben für"
+          }
+        }
+      }
+    },
+    "Symaira Vault": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Symaira Vault"
+          }
+        }
+      }
+    },
+    "Symaira Vault is the native client for the self-hosted symvault runtime. Copied secrets leave the clipboard after 30 seconds.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Symaira Vault ist der native Client für die selbst gehostete symvault-Runtime. Kopierte Secrets verlassen die Zwischenablage nach 30 Sekunden."
+          }
+        }
+      }
+    },
+    "TOTP Base32 secret": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TOTP-Base32-Secret"
+          }
+        }
+      }
+    },
+    "Target Path": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zielpfad"
+          }
+        }
+      }
+    },
+    "Text, .env, JSON, certificates and keys, screenshots and backup codes. Nothing is written until you review and add the batch.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text, .env, JSON, Zertifikate und Schlüssel, Bildschirmfotos und Backup-Codes. Es wird nichts geschrieben, bis du den Stapel prüfst und übernimmst."
+          }
+        }
+      }
+    },
+    "The app found no symvault in its bundle, on PATH or in Homebrew. Install it, then check again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die App hat symvault weder im eigenen Bundle noch im PATH oder in Homebrew gefunden. Installiere es und prüfe dann erneut."
+          }
+        }
+      }
+    },
+    "The app manages the vault through the symvault runtime": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die App verwaltet den Vault über die symvault-Runtime"
+          }
+        }
+      }
+    },
+    "The app uses the symvault bundled with it, then PATH and the Homebrew prefixes.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die App nutzt das mitgelieferte symvault, danach PATH und die Homebrew-Pfade."
+          }
+        }
+      }
+    },
+    "The batch was added to the vault.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Stapel wurde in den Vault übernommen."
+          }
+        }
+      }
+    },
+    "The encrypted entry is removed from the vault and cannot be restored here.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der verschlüsselte Eintrag wird aus dem Vault entfernt und kann hier nicht wiederhergestellt werden."
+          }
+        }
+      }
+    },
+    "The files are staged in quarantine, encrypted. Check where each one goes, then add the batch. Rename or edit the entries afterwards on Entries.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Dateien liegen verschlüsselt in Quarantäne. Prüfe, wohin jede Datei geht, und übernimm dann den Stapel. Umbenennen oder Bearbeiten danach unter Einträge."
+          }
+        }
+      }
+    },
+    "The hint tells local AI agents what the entry is for.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Hinweis sagt lokalen KI-Agenten, wofür der Eintrag gedacht ist."
+          }
+        }
+      }
+    },
+    "The installed symvault uses schema %d, but this app expects schema %d. Update symvault or the app.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das installierte symvault nutzt Schema %d, diese App erwartet Schema %d. Aktualisiere symvault oder die App."
+          }
+        }
+      }
+    },
+    "The passphrase goes to symvault over standard input. The app never stores it.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Passphrase geht über die Standardeingabe an symvault. Die App speichert sie nie."
+          }
+        }
+      }
+    },
+    "The path of an existing entry cannot change here.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Pfad eines bestehenden Eintrags kann hier nicht geändert werden."
+          }
+        }
+      }
+    },
+    "The selection contains no text.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Auswahl enthält keinen Text."
+          }
+        }
+      }
+    },
+    "The selection was not added: %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Auswahl wurde nicht aufgenommen: %@."
+          }
+        }
+      }
+    },
+    "The state of your local vault": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Zustand deines lokalen Vaults"
+          }
+        }
+      }
+    },
+    "The vault is empty. Create an entry, or import credential files from Import.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Vault ist leer. Lege einen Eintrag an oder importiere Zugangsdateien unter Import."
+          }
+        }
+      }
+    },
+    "The vault is empty. Use New Entry, or import credential files from Import.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Vault ist leer. Nutze Neuer Eintrag oder importiere Zugangsdateien unter Import."
+          }
+        }
+      }
+    },
+    "Time left for this code": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restzeit für diesen Code"
+          }
+        }
+      }
+    },
+    "Type": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Typ"
+          }
+        }
+      }
+    },
+    "Types": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Typen"
+          }
+        }
+      }
+    },
+    "URL": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "URL"
+          }
+        }
+      }
+    },
+    "Unavailable": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht verfügbar"
+          }
+        }
+      }
+    },
+    "Unknown": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unbekannt"
+          }
+        }
+      }
+    },
+    "Unlock Vault": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault entsperren"
+          }
+        }
+      }
+    },
+    "Unlocked": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entsperrt"
+          }
+        }
+      }
+    },
+    "Unlocked · %d entries": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entsperrt · %d Einträge"
+          }
+        }
+      }
+    },
+    "Unlocked · 1 entry": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entsperrt · 1 Eintrag"
+          }
+        }
+      }
+    },
+    "Unlocking…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird entsperrt …"
+          }
+        }
+      }
+    },
+    "Usage Hint": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwendungshinweis"
+          }
+        }
+      }
+    },
+    "Username": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benutzername"
+          }
+        }
+      }
+    },
+    "Values are never shown here. Lines that are not recognized stay in the entry as a note.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Werte werden hier nie angezeigt. Nicht erkannte Zeilen bleiben als Notiz im Eintrag."
+          }
+        }
+      }
+    },
+    "Vault": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault"
+          }
+        }
+      }
+    },
+    "Vault Still Locked": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault noch gesperrt"
+          }
+        }
+      }
+    },
+    "Vault Unavailable": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault nicht verfügbar"
+          }
+        }
+      }
+    },
+    "Vault passphrase": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault-Passphrase"
+          }
+        }
+      }
+    },
+    "Vault profile": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault-Profil"
+          }
+        }
+      }
+    },
+    "Version": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version"
+          }
+        }
+      }
+    },
+    "Your entries stay encrypted until you unlock the vault": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Einträge bleiben verschlüsselt, bis du den Vault entsperrst"
+          }
+        }
+      }
+    },
+    "attachment: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anhang: %@"
+          }
+        }
+      }
+    },
+    "hosting/cloud86": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hosting/cloud86"
+          }
+        }
+      }
+    },
+    "name@example.com": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "name@example.com"
+          }
+        }
+      }
+    },
+    "symvault Not Found": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "symvault nicht gefunden"
+          }
+        }
+      }
+    },
+    "symvault answered, but the app cannot use it": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "symvault antwortet, aber die App kann es nicht nutzen"
+          }
+        }
+      }
+    },
+    "symvault did not return a valid password.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "symvault hat kein gültiges Passwort geliefert."
+          }
+        }
+      }
+    },
+    "symvault reported a successful unlock, but no session is active afterwards. Update symvault (brew upgrade symvault) and check 'symvault unlock' in Terminal.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "symvault meldet ein erfolgreiches Entsperren, danach ist aber keine Sitzung aktiv. Aktualisiere symvault (brew upgrade symvault) und prüfe 'symvault unlock' im Terminal."
+          }
+        }
+      }
+    },
+    "symvault was not found in the app bundle or on this Mac.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "symvault wurde weder im App-Bundle noch auf diesem Mac gefunden."
+          }
+        }
+      }
+    },
+    "unknown reason": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "unbekannter Grund"
+          }
+        }
+      }
+    }
+  }
+}

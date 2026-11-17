@@ -37,44 +37,44 @@
 
     var body: some View {
       SymairaSheetScaffold(
-        title: "Save Selection",
+        title: L("Save Selection"),
         dismiss: { dismiss() },
-        primaryTitle: isSaving ? "Saving…" : "Save Entry",
+        primaryTitle: isSaving ? L("Saving…") : L("Save Entry"),
         primaryDisabled: !canSave,
         primary: save
       ) {
-        SymairaFormSection("Entry", footer: pathHint) {
-          SymairaFormRow("Path", description: "Group and name, for example hosting/cloud86.") {
-            TextField("hosting/cloud86", text: $entryPath)
+        SymairaFormSection(L("Entry"), footer: pathHint) {
+          SymairaFormRow(L("Path"), description: L("Group and name, for example hosting/cloud86.")) {
+            TextField(L("hosting/cloud86"), text: $entryPath)
               .textFieldStyle(.symaira(isFocused: pathFocused))
               .focused($pathFocused)
               .frame(width: 250)
-              .accessibilityLabel("Entry path")
+              .accessibilityLabel(L("Entry path"))
               .onSubmit(save)
           }
         }
 
         SymairaFormSection(
-          "Recognized Fields",
-          footer: "Values are never shown here. Lines that are not recognized stay in the entry as a note."
+          L("Recognized Fields"),
+          footer: L("Values are never shown here. Lines that are not recognized stay in the entry as a note.")
         ) {
           if let fields {
             if fields.isEmpty {
               SymairaFormRow(
-                "No Labeled Fields",
+                L("No Labeled Fields"),
                 description:
-                  "Lines such as “Username: …” or “Password: …” are missing. The text is saved as an encrypted attachment."
+                  L("Lines such as “Username: …” or “Password: …” are missing. The text is saved as an encrypted attachment.")
               )
             } else {
               ForEach(Array(fields.enumerated()), id: \.element) { index, field in
                 if index > 0 { SymairaFormDivider() }
-                SymairaFormRow(SelectionIntake.fieldTitle(field)) {
-                  SymairaStatusLabel("Recognized", tone: .positive)
+                SymairaFormRow(L(SelectionIntake.fieldTitle(field))) {
+                  SymairaStatusLabel(L("Recognized"), tone: .positive)
                 }
               }
             }
           } else if errorMessage == nil {
-            SymairaLoadingState("Checking the selection…")
+            SymairaLoadingState(L("Checking the selection…"))
               .frame(maxWidth: .infinity)
           }
         }
@@ -103,7 +103,7 @@
     }
 
     private var pathHint: String? {
-      pathExists ? "An entry with this path already exists. Choose another path." : nil
+      pathExists ? L("An entry with this path already exists. Choose another path.") : nil
     }
 
     private var canSave: Bool {

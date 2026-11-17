@@ -25,8 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hold the appearance (System, Light, Dark; new key `symvault.appearance`,
   the app was dark-only) and the runtime details. New Entry is ⌘N, Refresh
   ⌘R, Lock Vault ⇧⌘L.
-- macOS app: the interface language is English, following the CoreKit
-  guidelines (COPY-1); the service is now "Add to Symaira Vault".
+- macOS app: English and German interface that follows the system language,
+  including the menus and the service ("Add to Symaira Vault" / "Zu Symaira
+  Vault hinzufügen"). `scripts/check-client-strings.py` checks in CI that every
+  text has a German entry.
 - macOS app: the intake review is read-only, because promotion never applied
   the edits it offered (#1612).
 

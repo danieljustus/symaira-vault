@@ -15,9 +15,9 @@
 
     public var title: String {
       switch self {
-      case .overview: "Overview"
-      case .entries: "Entries"
-      case .importing: "Import"
+      case .overview: L("Overview")
+      case .entries: L("Entries")
+      case .importing: L("Import")
       }
     }
 
