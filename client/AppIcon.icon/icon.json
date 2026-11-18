@@ -1,9 +1,21 @@
 {
-  "features": [
-    "refractivity",
-    "specular-location"
+  "fill-specializations": [
+    {
+      "value": {
+        "solid": "srgb:0.92549,0.92549,0.91765,1"
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "solid": "srgb:0.10980,0.10980,0.10588,1"
+      }
+    },
+    {
+      "appearance": "tinted",
+      "value": "automatic"
+    }
   ],
-  "fill": "automatic",
   "groups": [
     {
       "name": "Vault \u2014 Vordergrund",
@@ -11,17 +23,17 @@
         {
           "name": "Vault \u2014 Vordergrund",
           "image-name": "signet.png",
-          "glass": false,
+          "glass": true,
           "fill-specializations": [
             {
               "value": {
-                "solid": "extended-srgb:0.08627,0.47059,0.42353,1.0"
+                "solid": "srgb:0.55686,0.47843,0.34118,1"
               }
             },
             {
               "appearance": "dark",
               "value": {
-                "solid": "extended-srgb:0.26275,0.72549,0.63922,1.0"
+                "solid": "srgb:0.78039,0.72157,0.61961,1"
               }
             },
             {
@@ -34,49 +46,141 @@
         }
       ],
       "lighting": "individual",
-      "specular": false,
-      "specular-highlight-placement": "inside",
-      "refractivity": {
-        "enabled": false,
-        "strength": 0,
-        "depth": 0
-      },
+      "specular": true,
       "shadow": {
         "kind": "neutral",
-        "opacity": 0.16
+        "opacity": 0.05
       },
       "translucency": {
         "enabled": false,
-        "value": 0
+        "value": 0.0
       }
     },
     {
-      "name": "Original Symaira S \u2014 hinter Signet freigestellt",
+      "name": "H\u00f6henlinien",
       "layers": [
         {
-          "name": "Original Symaira S",
-          "image-name": "S.png",
+          "name": "Z\u00e4hllinie",
+          "image-name": "index.png",
+          "glass": false,
+          "fill-specializations": [
+            {
+              "value": {
+                "solid": "srgb:0.70980,0.63529,0.49804,1"
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "srgb:0.78039,0.72157,0.61961,1"
+              }
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "gray:0.62,1"
+              }
+            }
+          ]
+        },
+        {
+          "name": "H\u00f6henlinien",
+          "image-name": "lines.png",
+          "glass": false,
+          "fill-specializations": [
+            {
+              "value": {
+                "solid": "srgb:0.54902,0.54118,0.51765,1"
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "srgb:0.36863,0.36078,0.34118,1"
+              }
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "gray:0.45,1"
+              }
+            }
+          ],
+          "opacity": 0.9
+        }
+      ],
+      "lighting": "individual",
+      "specular": false,
+      "shadow": {
+        "kind": "none",
+        "opacity": 0.0
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.0
+      }
+    },
+    {
+      "name": "Symaira S (AI + Human)",
+      "layers": [
+        {
+          "name": "Symaira S \u2014 Teil oben",
+          "image-name": "top.png",
           "glass": true,
-          "fill": {
-            "automatic-gradient": "extended-srgb:0.80392,0.74902,0.66275,1.0"
-          }
+          "fill-specializations": [
+            {
+              "value": {
+                "solid": "srgb:0.20392,0.20000,0.18431,1"
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "srgb:0.82745,0.81961,0.79608,1"
+              }
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "gray:0.86,1"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Symaira S \u2014 Teil unten",
+          "image-name": "bot.png",
+          "glass": true,
+          "fill-specializations": [
+            {
+              "value": {
+                "solid": "srgb:0.20392,0.20000,0.18431,1"
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "srgb:0.82745,0.81961,0.79608,1"
+              }
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "gray:0.86,1"
+              }
+            }
+          ]
         }
       ],
       "lighting": "individual",
       "specular": true,
-      "specular-highlight-placement": "inside",
-      "refractivity": {
-        "enabled": true,
-        "strength": 0.15,
-        "depth": 0.24
-      },
       "shadow": {
         "kind": "neutral",
         "opacity": 0.25
       },
       "translucency": {
         "enabled": false,
-        "value": 0
+        "value": 0.0
       }
     }
   ],
