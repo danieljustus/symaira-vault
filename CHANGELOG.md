@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   0.23.0): Vault and Approvals tabs, unlock and enrol pages, entry detail with
   hidden values, pairing as a sheet; errors appear inline instead of as
   alerts. English and German follow the system language.
+- iOS app: the Approvals tab shows which Mac the device is paired with and
+  offers Pair Again and Remove Pairing, and a fresh enrolment drops a pairing
+  left in the Keychain by an earlier install. Before, a stale pairing showed
+  only "could not connect" with no way to pair again (TestFlight feedback).
 - `scripts/ios-testflight.sh` sets the build number from a UTC timestamp
   (override with `BUILD_NUMBER`), and the iOS app declares only exempt
   encryption (`ITSAppUsesNonExemptEncryption = NO`).

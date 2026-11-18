@@ -71,6 +71,22 @@ private func testSession() -> ApprovalSession {
 }
 
 @MainActor
+@Test func unpairForgetsTheSessionAndClearsTheKeychain() {
+    var cleared = 0
+    let store = ApprovalsStore()
+    store.sessionReader = { testSession() }
+    store.sessionClearer = { cleared += 1 }
+
+    #expect(store.isPaired)
+    #expect(store.pairedServer == "127.0.0.1:1")
+    store.unpair()
+
+    #expect(cleared == 1)
+    #expect(!store.isPaired)
+    #expect(store.pairedServer == nil)
+}
+
+@MainActor
 @Test func approveAndDenyReuseTheCachedSessionAfterAFreshRead() async {
     var readCount = 0
     let session = testSession()

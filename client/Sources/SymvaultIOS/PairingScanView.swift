@@ -33,7 +33,7 @@ struct PairingScanView: View {
                 }
             }
 
-            SymairaFormSection(L("Scan"), footer: L("Run 'symvault device approval-pair' on your Mac and scan the QR code it shows.")) {
+            SymairaFormSection(L("Scan"), footer: L("On your Mac, start 'symvault serve --bind <Mac IP address>', then run 'symvault device approval-pair' and scan the QR code it shows. iPhone and Mac must be on the same network.")) {
                 if DataScannerViewController.isSupported && DataScannerViewController.isAvailable {
                     Button {
                         showScanner = true

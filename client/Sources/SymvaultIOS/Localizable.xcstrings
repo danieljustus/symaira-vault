@@ -242,6 +242,16 @@
         }
       }
     },
+    "If your Mac's address changed or the connection keeps failing, pair again with a new code from your Mac.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hat sich die Adresse deines Mac geändert oder schlägt die Verbindung weiter fehl, kopple neu mit einem frischen Code von deinem Mac."
+          }
+        }
+      }
+    },
     "Loading entries…": {
       "localizations": {
         "de": {
@@ -292,12 +302,32 @@
         }
       }
     },
+    "On your Mac, start 'symvault serve --bind <Mac IP address>', then run 'symvault device approval-pair' and scan the QR code it shows. iPhone and Mac must be on the same network.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starte auf deinem Mac 'symvault serve --bind <IP-Adresse des Mac>', führe dann 'symvault device approval-pair' aus und scanne den angezeigten QR-Code. iPhone und Mac müssen im selben Netzwerk sein."
+          }
+        }
+      }
+    },
     "Or Enter Manually": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Oder manuell eingeben"
+          }
+        }
+      }
+    },
+    "Pair Again": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu koppeln"
           }
         }
       }
@@ -328,6 +358,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kopple dieses iPhone als Freigabegerät, um Zugriffsanfragen von Agenten freizugeben oder abzulehnen."
+          }
+        }
+      }
+    },
+    "Paired Mac": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gekoppelter Mac"
+          }
+        }
+      }
+    },
+    "Pairing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kopplung"
           }
         }
       }
@@ -382,6 +432,16 @@
         }
       }
     },
+    "Remove Pairing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kopplung entfernen"
+          }
+        }
+      }
+    },
     "Request failed with status %d.": {
       "localizations": {
         "de": {
@@ -398,16 +458,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Anfragen deiner Agenten erscheinen hier, solange sie auf dich warten."
-          }
-        }
-      }
-    },
-    "Run 'symvault device approval-pair' on your Mac and scan the QR code it shows.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Starte 'symvault device approval-pair' auf deinem Mac und scanne den angezeigten QR-Code."
           }
         }
       }
@@ -487,7 +537,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Die Geräteidentität bleibt auf diesem iPhone, geschützt durch Face ID. Nur ihr öffentlicher Schlüssel wird mit deinem Mac geteilt."
+            "value": "Die Geräteidentität bleibt auf diesem iPhone, geschützt durch Face ID. Nur ihr öffentlicher Schlüssel wird mit deinem Mac geteilt."
           }
         }
       }

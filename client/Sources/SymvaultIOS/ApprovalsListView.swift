@@ -46,17 +46,47 @@ struct ApprovalsListView: View {
                     .symairaButtonStyle(.primary)
             }
             .frame(maxWidth: .infinity)
-        } else if approvalsStore.pending.isEmpty {
-            SymairaEmptyState(
-                icon: .shieldCheck,
-                title: L("No Pending Requests"),
-                message: L("Requests from your agents appear here while they wait for you.")
-            )
-            .frame(maxWidth: .infinity)
         } else {
-            ForEach(approvalsStore.pending) { request in
-                ApprovalRow(request: request)
+            if approvalsStore.pending.isEmpty {
+                SymairaEmptyState(
+                    icon: .shieldCheck,
+                    title: L("No Pending Requests"),
+                    message: L("Requests from your agents appear here while they wait for you.")
+                )
+                .frame(maxWidth: .infinity)
+            } else {
+                ForEach(approvalsStore.pending) { request in
+                    ApprovalRow(request: request)
+                }
             }
+            pairingSection
+        }
+    }
+
+    /// Where this device is paired, with a way out when that Mac is no
+    /// longer reachable (TestFlight feedback: no way to pair again).
+    private var pairingSection: some View {
+        SymairaFormSection(
+            L("Pairing"),
+            footer: L("If your Mac's address changed or the connection keeps failing, pair again with a new code from your Mac.")
+        ) {
+            SymairaFormRow(L("Paired Mac")) {
+                Text(verbatim: approvalsStore.pairedServer ?? "")
+                    .symairaText(.monoSmall)
+                    .foregroundStyle(SymairaTokens.ink2)
+            }
+            SymairaFormDivider()
+            HStack(spacing: SymairaSpacing.medium) {
+                Button(role: .destructive) { approvalsStore.unpair() } label: {
+                    Text(L("Remove Pairing")).frame(maxWidth: .infinity)
+                }
+                .symairaButtonStyle(.secondary)
+                Button { showPairing = true } label: {
+                    Text(L("Pair Again")).frame(maxWidth: .infinity)
+                }
+                .symairaButtonStyle(.primary)
+            }
+            .padding(.vertical, SymairaSpacing.small)
         }
     }
 }

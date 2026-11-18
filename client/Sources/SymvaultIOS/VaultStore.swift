@@ -41,6 +41,10 @@ final class VaultStore: ObservableObject {
         do {
             let identity = try MobileVaultCore(vaultDirectory: vaultDirectory).generateIdentity()
             try DeviceIdentityStore.save(identity)
+            // Keychain items outlive a reinstall, UserDefaults do not: a
+            // pairing left from an earlier install would point at an old Mac
+            // and hide the pairing screen, so a fresh enrolment drops it.
+            ApprovalSessionStore.clear()
             UserDefaults.standard.set(true, forKey: "deviceEnrolled")
         } catch {
             self.error = error.localizedDescription

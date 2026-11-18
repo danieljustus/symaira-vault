@@ -29,14 +29,16 @@ final class ApprovalsStore: ObservableObject {
     /// The enrolled session. Read from the Keychain once — on the first
     /// need after `startPolling()` or a fresh `pair()` — rather than on
     /// every poll tick or decision, since SecItemCopyMatching is not free
-    /// and this runs every few seconds. Reset only by a new `pair()`; there
-    /// is currently no in-app "unpair" flow to also reset it.
+    /// and this runs every few seconds. Reset by a new `pair()` or `unpair()`.
     private var cachedSession: ApprovalSession?
     private var hasLoadedSession = false
 
     /// Injected so tests can count/stub Keychain reads instead of hitting
     /// the real Keychain on every call. Mirrors `biometricAuthenticator`.
     var sessionReader: () -> ApprovalSession? = { try? ApprovalSessionStore.read() }
+
+    /// Injected so tests can check `unpair()` without touching the Keychain.
+    var sessionClearer: () -> Void = { ApprovalSessionStore.clear() }
 
     /// Injected so tests can bypass the real LAContext biometric prompt.
     /// Production default performs a real Face ID/Touch ID/passcode check.
@@ -61,6 +63,23 @@ final class ApprovalsStore: ObservableObject {
 
     var isPaired: Bool {
         currentSession() != nil
+    }
+
+    /// "host:port" of the paired Mac, shown so a failing connection can be
+    /// traced to a stale pairing.
+    var pairedServer: String? {
+        currentSession().map { "\($0.host):\($0.port)" }
+    }
+
+    /// Forgets the pairing so the device can be paired again, for example
+    /// after the Mac's address or certificate changed.
+    func unpair() {
+        stopPolling()
+        sessionClearer()
+        cachedSession = nil
+        hasLoadedSession = true
+        pending = []
+        error = nil
     }
 
     func pair(with payload: ApprovalPairingPayload, deviceName: String) async {
