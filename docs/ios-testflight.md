@@ -112,12 +112,11 @@ liegt die IPA unter `client/.build/testflight/export/`.
 
 ## Wichtige Grenzen
 
-- Der erste TestFlight-Build ist `1.0 (1)` aus `client/project.yml` und passt
-  zur bereits angelegten App-Store-Connect-Version.
-- Jeder weitere Upload derselben Version braucht eine höhere Build-Nummer:
-  `CURRENT_PROJECT_VERSION` in `client/project.yml` muss erhöht werden, sobald
-  ein Build mit der aktuellen Nummer bereits hochgeladen wurde (Apple lehnt
-  doppelte Build-Nummern ab).
+- Die Version kommt aus `client/project.yml`. Die Build-Nummer setzt
+  `scripts/ios-testflight.sh archive` als UTC-Zeitstempel (`YYYYMMDDHHMM`),
+  damit Apple keine doppelte Nummer ablehnt; `BUILD_NUMBER=<n>` überschreibt
+  sie. `CURRENT_PROJECT_VERSION` in `client/project.yml` gilt nur für lokale
+  Builds.
 - `SymvaultFFI.xcframework` liegt absichtlich unter `client/.build/mobilecore`
   und wird nicht ins Repository eingecheckt.
 - Ein Beta-Xcode ist für diesen Upload nicht zulässig; Release-Xcode
