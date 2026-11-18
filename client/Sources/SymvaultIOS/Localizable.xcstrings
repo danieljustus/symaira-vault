@@ -1,0 +1,646 @@
+{
+  "sourceLanguage": "en",
+  "version": "1.0",
+  "strings": {
+    "%@ copied.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ kopiert."
+          }
+        }
+      }
+    },
+    "Approval Device": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freigabegerät"
+          }
+        }
+      }
+    },
+    "Approvals": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freigaben"
+          }
+        }
+      }
+    },
+    "Approve": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freigeben"
+          }
+        }
+      }
+    },
+    "Approve %@ to read %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ das Lesen von %@ erlauben"
+          }
+        }
+      }
+    },
+    "Approve %@ to write %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ das Schreiben von %@ erlauben"
+          }
+        }
+      }
+    },
+    "Approve or deny agent requests with Face ID.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anfragen von Agenten mit Face ID freigeben oder ablehnen."
+          }
+        }
+      }
+    },
+    "Browse entries and copy values. Changes stay on your Mac.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einträge ansehen und Werte kopieren. Änderungen bleiben auf deinem Mac."
+          }
+        }
+      }
+    },
+    "Camera scanning is not available on this device.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scannen mit der Kamera ist auf diesem Gerät nicht verfügbar."
+          }
+        }
+      }
+    },
+    "Copy %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ kopieren"
+          }
+        }
+      }
+    },
+    "Could not read the pairing code. Copy the exact text shown by 'symvault device approval-pair'.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Kopplungscode ließ sich nicht lesen. Kopiere genau den Text, den 'symvault device approval-pair' anzeigt."
+          }
+        }
+      }
+    },
+    "Could not store the device identity (%d).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Geräteidentität konnte nicht gespeichert werden (%d)."
+          }
+        }
+      }
+    },
+    "Deny": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ablehnen"
+          }
+        }
+      }
+    },
+    "Device Name": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gerätename"
+          }
+        }
+      }
+    },
+    "Enrol This iPhone": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses iPhone einrichten"
+          }
+        }
+      }
+    },
+    "Enrolling…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird eingerichtet …"
+          }
+        }
+      }
+    },
+    "Entries Not Loaded": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einträge nicht geladen"
+          }
+        }
+      }
+    },
+    "Entries shared with this iPhone appear here. Add this device as a recipient on your Mac.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hier erscheinen Einträge, die mit diesem iPhone geteilt sind. Füge dieses Gerät auf deinem Mac als Empfänger hinzu."
+          }
+        }
+      }
+    },
+    "Entry": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eintrag"
+          }
+        }
+      }
+    },
+    "Face ID protection could not be set up. Set a device passcode and enrol Face ID or Touch ID. (%@)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Face-ID-Schutz konnte nicht eingerichtet werden. Lege einen Gerätecode fest und richte Face ID oder Touch ID ein. (%@)"
+          }
+        }
+      }
+    },
+    "Face ID reads your device identity": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Face ID liest deine Geräteidentität"
+          }
+        }
+      }
+    },
+    "Fields": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Felder"
+          }
+        }
+      }
+    },
+    "Hidden value": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verborgener Wert"
+          }
+        }
+      }
+    },
+    "Hide %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ verbergen"
+          }
+        }
+      }
+    },
+    "Loading entries…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einträge werden geladen …"
+          }
+        }
+      }
+    },
+    "No Entries": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Einträge"
+          }
+        }
+      }
+    },
+    "No Matching Entries": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine passenden Einträge"
+          }
+        }
+      }
+    },
+    "No Pending Requests": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine offenen Anfragen"
+          }
+        }
+      }
+    },
+    "Not Paired": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht gekoppelt"
+          }
+        }
+      }
+    },
+    "Or Enter Manually": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oder manuell eingeben"
+          }
+        }
+      }
+    },
+    "Pair Approval Device": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freigabegerät koppeln"
+          }
+        }
+      }
+    },
+    "Pair Device": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gerät koppeln"
+          }
+        }
+      }
+    },
+    "Pair this iPhone as an approval device to approve or deny agent credential requests.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kopple dieses iPhone als Freigabegerät, um Zugriffsanfragen von Agenten freizugeben oder abzulehnen."
+          }
+        }
+      }
+    },
+    "Pairing code": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kopplungscode"
+          }
+        }
+      }
+    },
+    "Pairing…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird gekoppelt …"
+          }
+        }
+      }
+    },
+    "Paste the text shown below the QR code on your Mac.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Füge den Text ein, der auf deinem Mac unter dem QR-Code steht."
+          }
+        }
+      }
+    },
+    "Read": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lesen"
+          }
+        }
+      }
+    },
+    "Read-Only": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur lesen"
+          }
+        }
+      }
+    },
+    "Request failed with status %d.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anfrage fehlgeschlagen mit Status %d."
+          }
+        }
+      }
+    },
+    "Requests from your agents appear here while they wait for you.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anfragen deiner Agenten erscheinen hier, solange sie auf dich warten."
+          }
+        }
+      }
+    },
+    "Run 'symvault device approval-pair' on your Mac and scan the QR code it shows.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starte 'symvault device approval-pair' auf deinem Mac und scanne den angezeigten QR-Code."
+          }
+        }
+      }
+    },
+    "Scan": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scannen"
+          }
+        }
+      }
+    },
+    "Scan QR Code": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR-Code scannen"
+          }
+        }
+      }
+    },
+    "Search entries": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einträge durchsuchen"
+          }
+        }
+      }
+    },
+    "Show %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ anzeigen"
+          }
+        }
+      }
+    },
+    "Symaira Vault": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Symaira Vault"
+          }
+        }
+      }
+    },
+    "The device identity cannot be read.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Geräteidentität kann nicht gelesen werden."
+          }
+        }
+      }
+    },
+    "The device identity is not available (%d).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Geräteidentität ist nicht verfügbar (%d)."
+          }
+        }
+      }
+    },
+    "The device identity stays on this iPhone, protected by Face ID. Only its public key is shared with your Mac.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Geräteidentität bleibt auf diesem iPhone, geschützt durch Face ID. Nur ihr öffentlicher Schlüssel wird mit deinem Mac geteilt."
+          }
+        }
+      }
+    },
+    "The server returned an unexpected response.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Server hat unerwartet geantwortet."
+          }
+        }
+      }
+    },
+    "The vault core returned an invalid response.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Vault-Kern hat eine ungültige Antwort geliefert."
+          }
+        }
+      }
+    },
+    "This Device": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Gerät"
+          }
+        }
+      }
+    },
+    "Try Again": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut versuchen"
+          }
+        }
+      }
+    },
+    "Try part of the path instead.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Versuche es mit einem Teil des Pfads."
+          }
+        }
+      }
+    },
+    "Unlock Vault": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault entsperren"
+          }
+        }
+      }
+    },
+    "Unlock with Face ID": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit Face ID entsperren"
+          }
+        }
+      }
+    },
+    "Unlock with Face ID to see your entries.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entsperre mit Face ID, um deine Einträge zu sehen."
+          }
+        }
+      }
+    },
+    "Unlocking…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird entsperrt …"
+          }
+        }
+      }
+    },
+    "Vault": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault"
+          }
+        }
+      }
+    },
+    "Vault Locked": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault gesperrt"
+          }
+        }
+      }
+    },
+    "Vault Still Locked": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault noch gesperrt"
+          }
+        }
+      }
+    },
+    "Write": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schreiben"
+          }
+        }
+      }
+    },
+    "Your vault, read-only on this iPhone": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dein Vault, nur lesend auf diesem iPhone"
+          }
+        }
+      }
+    },
+    "iPhone": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone"
+          }
+        }
+      }
+    }
+  }
+}

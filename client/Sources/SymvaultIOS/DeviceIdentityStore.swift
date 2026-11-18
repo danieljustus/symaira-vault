@@ -22,7 +22,7 @@ enum DeviceIdentityStore {
         let status = SecItemAdd(query as CFDictionary, nil)
         guard status == errSecSuccess else {
             throw NSError(domain: "DeviceIdentityStore", code: Int(status),
-                          userInfo: [NSLocalizedDescriptionKey: "Could not store device identity (\(status))"])
+                          userInfo: [NSLocalizedDescriptionKey: L("Could not store the device identity (%d).", Int(status))])
         }
     }
 
@@ -38,11 +38,11 @@ enum DeviceIdentityStore {
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         guard status == errSecSuccess, let data = item as? Data else {
             throw NSError(domain: "DeviceIdentityStore", code: Int(status),
-                          userInfo: [NSLocalizedDescriptionKey: "Device identity not available (\(status))"])
+                          userInfo: [NSLocalizedDescriptionKey: L("The device identity is not available (%d).", Int(status))])
         }
         guard let s = String(data: data, encoding: .utf8) else {
             throw NSError(domain: "DeviceIdentityStore", code: -1,
-                          userInfo: [NSLocalizedDescriptionKey: "Device identity not readable"])
+                          userInfo: [NSLocalizedDescriptionKey: L("The device identity cannot be read.")])
         }
         return s
     }
@@ -70,7 +70,7 @@ enum DeviceIdentityStore {
             let underlying = error?.takeRetainedValue() as Error? ?? NSError(domain: "DeviceIdentityStore", code: Int(errSecParam), userInfo: nil)
             throw NSError(domain: "DeviceIdentityStore",
                           code: Int(errSecParam),
-                          userInfo: [NSLocalizedDescriptionKey: "Biometric access control could not be created. Please set a device passcode and enrol Face ID or Touch ID. (\(underlying.localizedDescription))",
+                          userInfo: [NSLocalizedDescriptionKey: L("Face ID protection could not be set up. Set a device passcode and enrol Face ID or Touch ID. (%@)", underlying.localizedDescription),
                                      NSUnderlyingErrorKey: underlying])
         }
         return ac

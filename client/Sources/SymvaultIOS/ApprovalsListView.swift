@@ -1,38 +1,26 @@
 import SwiftUI
+import SymairaTheme
 
-/// The pending-approvals screen: either a pairing prompt (no approval
-/// device enrolled yet) or the live list of pending agent requests, with
-/// Face-ID-gated approve and plain deny actions.
+/// The approvals tab: a pairing prompt while no approval device is enrolled,
+/// otherwise the live list of pending agent requests with Face-ID-gated
+/// approve and plain deny actions.
 struct ApprovalsListView: View {
     @EnvironmentObject private var approvalsStore: ApprovalsStore
     @State private var showPairing = false
 
     var body: some View {
         NavigationStack {
-            Group {
-                if !approvalsStore.isPaired {
-                    ContentUnavailableView {
-                        Label("Not Paired", systemImage: "iphone.and.arrow.forward")
-                    } description: {
-                        Text("Pair this phone as an approval device to approve or deny agent credential requests.")
-                    } actions: {
-                        Button("Pair Device") { showPairing = true }
-                            .buttonStyle(.borderedProminent)
+            ScrollView {
+                VStack(alignment: .leading, spacing: SymairaSpacing.medium) {
+                    if let error = approvalsStore.error {
+                        SymairaNotice(message: error, tone: .critical) { approvalsStore.error = nil }
                     }
-                } else if approvalsStore.pending.isEmpty {
-                    ContentUnavailableView("No Pending Requests", systemImage: "checkmark.shield")
-                } else {
-                    List(approvalsStore.pending) { request in
-                        ApprovalRow(request: request)
-                    }
+                    content
                 }
+                .padding(SymairaSpacing.xLarge)
             }
-            .navigationTitle("Approvals")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    if approvalsStore.isBusy { ProgressView().controlSize(.small) }
-                }
-            }
+            .background(SymairaTokens.canvas)
+            .navigationTitle(L("Approvals"))
             .refreshable { await approvalsStore.refresh() }
             .task { if approvalsStore.isPaired { approvalsStore.startPolling() } }
             .onDisappear { approvalsStore.stopPolling() }
@@ -43,13 +31,31 @@ struct ApprovalsListView: View {
                         if approvalsStore.isPaired { approvalsStore.startPolling() }
                     }
             }
-            .alert("Error", isPresented: Binding(
-                get: { approvalsStore.error != nil },
-                set: { if !$0 { approvalsStore.error = nil } }
-            )) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(approvalsStore.error ?? "")
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if !approvalsStore.isPaired {
+            SymairaEmptyState(
+                icon: .device,
+                title: L("Not Paired"),
+                message: L("Pair this iPhone as an approval device to approve or deny agent credential requests.")
+            ) {
+                Button(L("Pair Device")) { showPairing = true }
+                    .symairaButtonStyle(.primary)
+            }
+            .frame(maxWidth: .infinity)
+        } else if approvalsStore.pending.isEmpty {
+            SymairaEmptyState(
+                icon: .shieldCheck,
+                title: L("No Pending Requests"),
+                message: L("Requests from your agents appear here while they wait for you.")
+            )
+            .frame(maxWidth: .infinity)
+        } else {
+            ForEach(approvalsStore.pending) { request in
+                ApprovalRow(request: request)
             }
         }
     }
@@ -60,32 +66,35 @@ private struct ApprovalRow: View {
     let request: ApprovalRequest
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(request.agentName)
-                .font(.headline)
-            Text(request.path)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            if !request.reason.isEmpty {
-                Text(request.reason)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            HStack {
-                Label(request.write ? "Write" : "Read", systemImage: request.write ? "pencil" : "eye")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: SymairaSpacing.small) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(verbatim: request.agentName).symairaText(.heading)
                 Spacer()
-                Button("Deny", role: .destructive) {
+                SymairaBadge(
+                    request.write ? L("Write") : L("Read"),
+                    tone: request.write ? .warning : .neutral,
+                    icon: request.write ? .edit : .visible
+                )
+            }
+            Text(verbatim: request.path).symairaText(.monoSmall).foregroundStyle(SymairaTokens.ink2)
+            if !request.reason.isEmpty {
+                Text(verbatim: request.reason).symairaText(.secondary)
+            }
+            HStack(spacing: SymairaSpacing.medium) {
+                Button(L("Deny"), role: .destructive) {
                     Task { await approvalsStore.deny(request) }
                 }
-                .buttonStyle(.bordered)
-                Button("Approve") {
+                .symairaButtonStyle(.secondary)
+                Button(L("Approve")) {
                     Task { await approvalsStore.approve(request) }
                 }
-                .buttonStyle(.borderedProminent)
+                .symairaButtonStyle(.primary)
             }
+            .disabled(approvalsStore.isBusy)
+            .padding(.top, SymairaSpacing.xSmall)
         }
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .symairaCard()
+        .accessibilityElement(children: .contain)
     }
 }

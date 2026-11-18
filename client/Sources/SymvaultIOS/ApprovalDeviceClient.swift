@@ -11,7 +11,7 @@ enum ApprovalClientError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return "The server returned an unexpected response."
+            return L("The server returned an unexpected response.")
         case .server(let message):
             return message
         }
@@ -228,7 +228,7 @@ struct ApprovalDeviceClient: @unchecked Sendable {
             if let apiError = try? decoder.decode(APIErrorResponse.self, from: data) {
                 throw ApprovalClientError.server(apiError.error)
             }
-            throw ApprovalClientError.server("Request failed with status \(response.statusCode).")
+            throw ApprovalClientError.server(L("Request failed with status %d.", response.statusCode))
         }
     }
 }

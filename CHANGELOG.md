@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hold the appearance (System, Light, Dark; new key `symvault.appearance`,
   the app was dark-only) and the runtime details. New Entry is ⌘N, Refresh
   ⌘R, Lock Vault ⇧⌘L.
+- iOS app: new interface on the shared Symaira design (CoreKit `SymairaTheme`
+  0.23.0): Vault and Approvals tabs, unlock and enrol pages, entry detail with
+  hidden values, pairing as a sheet; errors appear inline instead of as
+  alerts. English and German follow the system language.
+- `scripts/ios-testflight.sh` sets the build number from a UTC timestamp
+  (override with `BUILD_NUMBER`), and the iOS app declares only exempt
+  encryption (`ITSAppUsesNonExemptEncryption = NO`).
 - macOS app: English and German interface that follows the system language,
   including the menus and the service ("Add to Symaira Vault" / "Zu Symaira
   Vault hinzufügen"). `scripts/check-client-strings.py` checks in CI that every

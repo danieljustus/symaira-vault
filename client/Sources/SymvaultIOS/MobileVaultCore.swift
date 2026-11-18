@@ -13,7 +13,7 @@ public enum MobileVaultCoreError: Error, LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .frameworkError(let msg): return msg
-        case .invalidResponse: return "Invalid response from the vault core"
+        case .invalidResponse: return L("The vault core returned an invalid response.")
         }
     }
 }

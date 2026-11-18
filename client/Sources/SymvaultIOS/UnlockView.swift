@@ -1,37 +1,45 @@
 import SwiftUI
+import SymairaTheme
 
-/// Unlock prompt. On iOS the passphrase is entered once at enrolment and
-/// thereafter replaced by Face ID: reading the Keychain identity triggers the
-/// local biometric prompt. This view is shown only as a fallback / first open
-/// before the biometric path is established.
+/// Unlock prompt. Reading the Keychain identity triggers the Face ID prompt;
+/// the view starts that on appear and keeps a button for a retry.
 struct UnlockView: View {
     @EnvironmentObject private var store: VaultStore
+    @State private var topography = SymairaTopoModel()
 
     var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "faceid")
-                .font(.system(size: 44, weight: .light))
-                .foregroundStyle(.tint)
-            Text("Unlock with Face ID")
-                .font(.title2.weight(.semibold))
-            Text("Symaira Vault uses Face ID to read your device identity.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 340)
-            Button {
-                Task { await store.unlock() }
-            } label: {
-                if store.isBusy {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Text("Unlock")
+        NavigationStack {
+            SymairaPage(title: L("Unlock Vault"), subtitle: L("Face ID reads your device identity")) {
+                VStack(alignment: .leading, spacing: SymairaSpacing.large) {
+                    if store.isBusy {
+                        SymairaLoadingState(L("Unlocking…"))
+                            .frame(maxWidth: .infinity, minHeight: SymairaPageLayout.stateHeight)
+                    } else {
+                        SymairaEmptyState(
+                            icon: .faceId,
+                            title: L("Vault Locked"),
+                            message: L("Unlock with Face ID to see your entries.")
+                        ) {
+                            Button {
+                                Task { await store.unlock() }
+                            } label: {
+                                Label(L("Unlock with Face ID"), symairaIcon: .faceId)
+                            }
+                            .symairaButtonStyle(.primary)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    if let error = store.error {
+                        SymairaNotice(title: L("Vault Still Locked"), message: error, tone: .critical) {
+                            store.error = nil
+                        }
+                    }
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(store.isBusy)
+            .symairaTopography(topography)
+            .toolbar(.hidden, for: .navigationBar)
         }
-        .padding(40)
+        .onAppear { topography.state = .input }
         .task { await store.unlock() }
     }
 }

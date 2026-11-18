@@ -22,6 +22,10 @@ settings:
 packages:
   SymvaultClient:
     path: "."
+  # Same exact pin as Package.swift; the iOS app imports SymairaTheme itself.
+  symaira-corekit:
+    url: https://github.com/danieljustus/symaira-corekit.git
+    exactVersion: 0.23.0
 
 targets:
   Symvault:
@@ -117,6 +121,8 @@ targets:
       # MobileVaultCore.swift imports the Rust core wrapper directly.
       - package: SymvaultClient
         product: SymvaultFFI
+      - package: symaira-corekit
+        product: SymairaTheme
       - sdk: LocalAuthentication.framework
       - sdk: Security.framework
       - sdk: VisionKit.framework
@@ -154,6 +160,11 @@ targets:
       path: SymvaultIOS-Info.plist
       properties:
         CFBundleDisplayName: $(PRODUCT_NAME)
+        # English and German; the app follows the system language.
+        CFBundleLocalizations: [en, de]
+        # Only standard encryption (age/X25519, AES-GCM in the Rust core) to
+        # protect the user's own data: exempt (owner decision 2026-11-17).
+        ITSAppUsesNonExemptEncryption: false
         CFBundleIconName: AppIcon
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)

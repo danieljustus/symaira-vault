@@ -24,6 +24,9 @@ BUILD_PATH="${BUILD_PATH:-$CLIENT_DIR/.build/testflight/derived-data}"
 EXPORT_PATH="${EXPORT_PATH:-$CLIENT_DIR/.build/testflight/export}"
 EXPORT_OPTIONS="$CLIENT_DIR/ExportOptions-TestFlight.plist"
 UPLOAD_OPTIONS="$CLIENT_DIR/ExportOptions-TestFlight-Upload.plist"
+# Apple rejects a repeated build number; a UTC timestamp stays monotonic
+# across machines. Override with BUILD_NUMBER=<n>.
+BUILD_NUMBER="${BUILD_NUMBER:-$(date -u +%Y%m%d%H%M)}"
 AUTH_ARGS=()
 AUTH_KEY_FILE=""
 
@@ -150,6 +153,7 @@ archive() {
     -archivePath "$ARCHIVE_PATH" \
     "${AUTH_ARGS[@]}" \
     DEVELOPMENT_TEAM="$TEAM_ID" \
+    CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
     CODE_SIGN_STYLE=Automatic \
     CODE_SIGNING_ALLOWED=YES \
     CODE_SIGNING_REQUIRED=YES \
@@ -158,7 +162,7 @@ archive() {
     printf '%s\n' "error: signed archive contains no Symaira Vault.app" >&2
     exit 1
   }
-  printf '%s\n' "Signed iPhone archive ready: $ARCHIVE_PATH"
+  printf '%s\n' "Signed iPhone archive ready (build $BUILD_NUMBER): $ARCHIVE_PATH"
 }
 
 export_archive() {

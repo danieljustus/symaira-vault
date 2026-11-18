@@ -66,6 +66,8 @@ let package = Package(
             exclude: [
                 // App-bundle resource (see project.yml); not a SwiftPM resource.
                 "PrivacyInfo.xcprivacy",
+                // App-bundle String Catalog, compiled by the app target.
+                "Localizable.xcstrings",
                 "ApprovalsListView.swift",
                 "EnrollView.swift",
                 "EntryDetailView.swift",

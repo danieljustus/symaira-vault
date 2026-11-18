@@ -117,7 +117,9 @@ final class ApprovalsStore: ObservableObject {
     /// biometrics since it grants nothing.
     func approve(_ request: ApprovalRequest) async {
         guard let session = currentSession() else { return }
-        let reason = "Approve \(request.agentName)'s request to \(request.write ? "write" : "read") \(request.path)"
+        let reason = request.write
+            ? L("Approve %@ to write %@", request.agentName, request.path)
+            : L("Approve %@ to read %@", request.agentName, request.path)
         guard await biometricAuthenticator(reason) else { return }
         await decide(session: session, request: request, approve: true)
     }

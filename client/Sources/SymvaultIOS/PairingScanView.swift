@@ -1,4 +1,5 @@
 import SwiftUI
+import SymairaTheme
 import UIKit
 import VisionKit
 
@@ -15,78 +16,68 @@ struct PairingScanView: View {
     @State private var showScanner = false
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField("Device name", text: $deviceName)
-                } header: {
-                    Text("This device")
-                }
-
-                Section {
-                    if DataScannerViewController.isSupported && DataScannerViewController.isAvailable {
-                        Button {
-                            showScanner = true
-                        } label: {
-                            Label("Scan QR Code", systemImage: "qrcode.viewfinder")
-                        }
-                    } else {
-                        Text("Camera scanning is not available on this device.")
-                            .foregroundStyle(.secondary)
-                    }
-                } header: {
-                    Text("Scan")
-                }
-
-                Section {
-                    TextEditor(text: $manualPayload)
-                        .frame(minHeight: 100)
-                        .font(.system(.body, design: .monospaced))
-                    Button("Pair") {
-                        Task { await pairManually() }
-                    }
-                    .disabled(manualPayload.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || approvalsStore.isBusy)
-                } header: {
-                    Text("Or enter manually")
-                } footer: {
-                    Text("Paste the text shown below the QR code on your Mac.")
-                }
-
-                if let error = approvalsStore.error {
-                    Section {
-                        Text(error).foregroundStyle(.red)
-                    }
+        SymairaSheetScaffold(
+            title: L("Pair Approval Device"),
+            dismiss: { dismiss() },
+            primaryTitle: approvalsStore.isBusy ? L("Pairing…") : L("Pair Device"),
+            primaryDisabled: manualPayload.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || approvalsStore.isBusy,
+            primary: { Task { await pair(manualPayload) } }
+        ) {
+            SymairaFormSection(L("This Device")) {
+                SymairaFormRow(L("Device Name")) {
+                    TextField(L("iPhone"), text: $deviceName)
+                        .textFieldStyle(.symaira)
+                        .multilineTextAlignment(.trailing)
+                        .accessibilityLabel(L("Device Name"))
                 }
             }
-            .navigationTitle("Pair Approval Device")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+
+            SymairaFormSection(L("Scan"), footer: L("Run 'symvault device approval-pair' on your Mac and scan the QR code it shows.")) {
+                if DataScannerViewController.isSupported && DataScannerViewController.isAvailable {
+                    Button {
+                        showScanner = true
+                    } label: {
+                        Label(L("Scan QR Code"), symairaIcon: .scan)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .symairaButtonStyle(.secondary)
+                    .padding(.vertical, SymairaSpacing.small)
+                } else {
+                    Text(L("Camera scanning is not available on this device."))
+                        .symairaText(.secondary)
+                        .padding(.vertical, SymairaSpacing.small)
                 }
             }
-            .overlay {
-                if approvalsStore.isBusy {
-                    ProgressView()
-                }
+
+            SymairaFormSection(L("Or Enter Manually"), footer: L("Paste the text shown below the QR code on your Mac.")) {
+                TextField(L("Pairing code"), text: $manualPayload, axis: .vertical)
+                    .lineLimit(3...6)
+                    .textFieldStyle(.symaira)
+                    .font(SymairaTypography.monoSmall)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .accessibilityLabel(L("Pairing code"))
+                    .padding(.vertical, SymairaSpacing.small)
             }
-            .sheet(isPresented: $showScanner) {
-                QRScannerRepresentable { scanned in
-                    showScanner = false
-                    Task { await pair(scanned) }
-                }
+
+            if let error = approvalsStore.error {
+                SymairaNotice(message: error, tone: .critical) { approvalsStore.error = nil }
             }
         }
-    }
-
-    private func pairManually() async {
-        await pair(manualPayload)
+        .sheet(isPresented: $showScanner) {
+            QRScannerRepresentable { scanned in
+                showScanner = false
+                Task { await pair(scanned) }
+            }
+        }
     }
 
     private func pair(_ raw: String) async {
         guard let data = raw.trimmingCharacters(in: .whitespacesAndNewlines).data(using: .utf8),
               let payload = try? JSONDecoder().decode(ApprovalPairingPayload.self, from: data)
         else {
-            approvalsStore.error = "Could not read the pairing code. Copy the exact text shown by 'symvault device approval-pair'."
+            approvalsStore.error = L("Could not read the pairing code. Copy the exact text shown by 'symvault device approval-pair'.")
             return
         }
         await approvalsStore.pair(with: payload, deviceName: deviceName)
