@@ -150,6 +150,7 @@ archive() {
     -configuration Release \
     -sdk iphoneos \
     -destination 'generic/platform=iOS' \
+    -derivedDataPath "$BUILD_PATH" \
     -archivePath "$ARCHIVE_PATH" \
     "${AUTH_ARGS[@]}" \
     DEVELOPMENT_TEAM="$TEAM_ID" \
