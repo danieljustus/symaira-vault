@@ -83,12 +83,12 @@ def main():
     home = Path.home()
     env["CARGO_HOME"] = env.get("CARGO_HOME", str(home / ".cargo"))
     env["RUSTUP_HOME"] = env.get("RUSTUP_HOME", str(home / ".rustup"))
-    env.update(RUSTUP_TOOLCHAIN="1.98.0")
+    env.update(RUSTUP_TOOLCHAIN="1.98.1")
     env["CARGO_TARGET_DIR"] = env.get("CARGO_TARGET_DIR", str(root / "target"))
     env.pop("SYMVAULT_PASSPHRASE", None)
     env.pop("SYMVAULT_ALLOW_ENV_PASSPHRASE", None)
     report["rust"] = checked(["rustc", "--version"], root, env)
-    assert report["rust"].startswith("rustc 1.98.0 ")
+    assert report["rust"].startswith("rustc 1.98.1 ")
     cargo = ["cargo", "test", "--manifest-path", str(root / "Cargo.toml"), "--locked"]
     if args.mode == "portable":
         native_fixture = replay_policy(root, report)

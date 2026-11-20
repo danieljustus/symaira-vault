@@ -37,7 +37,7 @@ jobs:
       run:
         shell: bash
     env:
-      RUSTUP_TOOLCHAIN: '1.98.0'
+      RUSTUP_TOOLCHAIN: '1.98.1'
       SYMVAULT_TEST_KEYRING: memory
       TZ: UTC
       PYTHONDONTWRITEBYTECODE: '1'
@@ -71,7 +71,7 @@ jobs:
           brew install bash fish
           printf 'CLI_ARTIFACTS_BASH=%s/bin/bash\n' "$(brew --prefix bash)" >> "$GITHUB_ENV"
       - name: Install pinned Rust
-        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
+        run: rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy
       - name: Check and exercise owning Rust implementation
         run: |
           set -euo pipefail

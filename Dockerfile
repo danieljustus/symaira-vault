@@ -8,7 +8,7 @@
 # off QEMU for the compile step.
 #
 # Tool versions are pinned; keep them in sync with .github/workflows/release.yml.
-ARG RUST_VERSION=1.98.0
+ARG RUST_VERSION=1.98.1
 ARG ZIG_VERSION=0.17.0
 ARG CARGO_ZIGBUILD_VERSION=0.23.4
 ARG CARGO_AUDITABLE_VERSION=0.7.5

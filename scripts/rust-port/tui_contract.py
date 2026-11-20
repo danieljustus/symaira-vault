@@ -970,7 +970,7 @@ def execute(args, receipt):
     receipt['rustc'] = checked(['rustc', '--version']).decode().strip()
     receipt['rustflags'] = os.environ.get('RUSTFLAGS', '')
     receipt['cargo_profile_dev_opt_level'] = os.environ.get('CARGO_PROFILE_DEV_OPT_LEVEL', '0')
-    assert receipt['rustc'].startswith('rustc 1.98.0 '), 'pinned Rust required'
+    assert receipt['rustc'].startswith('rustc 1.98.1 '), 'pinned Rust required'
     with tempfile.TemporaryDirectory(prefix='symvault-tui-native-') as raw:
         base = Path(raw)
         build_source_bound_rust(rust, base, receipt)

@@ -42,7 +42,7 @@ jobs:
       run:
         shell: bash
     env:
-      RUSTUP_TOOLCHAIN: '1.98.0'
+      RUSTUP_TOOLCHAIN: '1.98.1'
       RUST_TEST_THREADS: '1'
       TZ: UTC
       PYTHONDONTWRITEBYTECODE: '1'
@@ -57,7 +57,7 @@ jobs:
         with:
           python-version: '3.13'
       - name: Install pinned Rust
-        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
+        run: rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy
       - name: Test owning runtime and CLI assembly
         run: |
           set -euo pipefail

@@ -63,7 +63,7 @@ NEW_FILES = {
 }
 GROUP_NAMES = ["mcp", "broker", "rest"]
 ASSERT_NAME = "Assert actual native macOS arm64"
-RUST_INSTALL = ("rustup toolchain install 1.98.0 --profile minimal "
+RUST_INSTALL = ("rustup toolchain install 1.98.1 --profile minimal "
                 "--component rustfmt --component clippy")
 RESET_MARKERS = ["git worktree prune", "git checkout --quiet -- .", "git clean -fd --quiet",
                  "test -z \"$(git status --porcelain=v1 --untracked-files=normal)\""]

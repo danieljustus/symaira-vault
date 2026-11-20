@@ -68,7 +68,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RUSTUP_TOOLCHAIN: 1.98.0
+  RUSTUP_TOOLCHAIN: 1.98.1
   CARGO_BUILD_JOBS: '2'
 
 jobs:
@@ -102,13 +102,13 @@ jobs:
 
       - name: Install pinned Rust toolchain
         shell: bash
-        run: rustup toolchain install 1.98.0 --profile minimal
+        run: rustup toolchain install 1.98.1 --profile minimal
 
       - name: Verify toolchain identity
         shell: bash
         run: |
           set -euo pipefail
-          test "$(rustc --version | awk '{print $2}')" = "1.98.0"
+          test "$(rustc --version | awk '{print $2}')" = "1.98.1"
 
       # The four differentials below replay the committed Go transcripts
       # (testdata/port/cli-transcripts, recorded once from the pinned Go oracles;
