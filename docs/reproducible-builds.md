@@ -8,7 +8,7 @@ For download verification, use [the distribution guide](distribution.md#cosign-s
 
 The shipped binary is the Rust CLI (`crates/symvault-cli`, binary `symvault`).
 Use the toolchain pinned in [`rust-toolchain.toml`](../rust-toolchain.toml)
-(currently Rust 1.98.0) and the committed [`Cargo.lock`](../Cargo.lock); every
+(currently Rust 1.98.1) and the committed [`Cargo.lock`](../Cargo.lock); every
 build uses `--locked`. The only build stamp the CLI reads is the
 `SYMVAULT_VERSION` environment variable (compile-time `option_env!`); no commit
 hash or build timestamp is embedded. To compare builds, keep the source

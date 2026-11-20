@@ -20,7 +20,7 @@
       ],
       "all_run_strings": [
         "set -euo pipefail\ntest \"$RUNNER_OS\" = macOS\ntest \"$(uname -s)\" = Darwin\ntest \"$(uname -m)\" = arm64\nsw_vers\n",
-        "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy",
+        "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy",
         "set -euo pipefail\ncargo fmt --all --check\ncargo clippy -p symvault-cli -p symvault-mcp --all-targets --all-features --locked -- -D warnings\ncargo test -p symvault-mcp --all-targets --locked > target/native-head-tests.txt 2>&1 || { cat target/native-head-tests.txt; exit 1; }\ncat target/native-head-tests.txt\npython3 scripts/rust-port/gate_area_check.py log-ok target/native-head-tests.txt browser_consent_requires_the_vault_passphrase_before_issuing_a_code --sum-passed \"$(make -s print-AREA_MCP_TEST_COUNT)\"\ncargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture\ncargo build -p symvault-cli --bin symvault --locked\n",
         "set -euo pipefail\nrust_cli=target/debug/symvault\npython3 scripts/rust-port/http_head_contract.py --rust \"$rust_cli\" --receipt target/native-http-head.json\npython3 scripts/rust-port/gate_area_check.py receipt target/native-http-head.json --profile http-head\n",
         "set -euo pipefail\nrust_cli=target/debug/symvault\npython3 scripts/rust-port/http_process_contract.py --rust \"$rust_cli\" --receipt target/native-head-http-process.json\npython3 scripts/rust-port/http_oauth_contract.py --rust \"$rust_cli\" --receipt target/native-head-http-oauth.json\npython3 scripts/rust-port/gate_area_check.py receipt target/native-head-http-process.json --profile http-process\npython3 scripts/rust-port/gate_area_check.py receipt target/native-head-http-oauth.json --profile http-oauth\n"
@@ -57,7 +57,7 @@
           "if": null,
           "uses": null,
           "with": null,
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy"
         },
         {
           "name": "Test owning runtime and CLI assembly",
@@ -114,7 +114,7 @@
       ],
       "all_run_strings": [
         "set -euo pipefail\ntest \"$RUNNER_OS\" = macOS\ntest \"$(uname -s)\" = Darwin\ntest \"$(uname -m)\" = arm64\nsw_vers\n",
-        "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy",
+        "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy",
         "set -euo pipefail\ncargo fmt --all --check\ncargo clippy -p symvault-cli -p symvault-mcp --all-targets --all-features --locked -- -D warnings\ncargo test -p symvault-mcp --all-targets --locked > target/native-origin-tests.txt 2>&1 || { cat target/native-origin-tests.txt; exit 1; }\ncat target/native-origin-tests.txt\npython3 scripts/rust-port/gate_area_check.py log-ok target/native-origin-tests.txt loopback_listener_rejects_foreign_origin_before_authentication --sum-passed \"$(make -s print-AREA_MCP_TEST_COUNT)\"\ncargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture\ncargo build -p symvault-cli --bin symvault --locked\n",
         "set -euo pipefail\nrust_cli=target/debug/symvault\npython3 scripts/rust-port/http_origin_contract.py --rust \"$rust_cli\" --receipt target/native-http-origin.json\npython3 scripts/rust-port/gate_area_check.py receipt target/native-http-origin.json --profile http-origin\n"
       ],
@@ -150,7 +150,7 @@
           "if": null,
           "uses": null,
           "with": null,
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy"
         },
         {
           "name": "Test owning runtime and CLI assembly",
@@ -198,7 +198,7 @@
       ],
       "all_run_strings": [
         "set -euo pipefail\ntest \"$RUNNER_OS\" = macOS\ntest \"$(uname -s)\" = Darwin\ntest \"$(uname -m)\" = arm64\nsw_vers\n",
-        "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy",
+        "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy",
         "set -euo pipefail\ncargo fmt --all --check\ncargo clippy -p symvault-core -p symvault-cli -p symvault-mcp --all-targets --all-features --locked -- -D warnings\ncargo test -p symvault-core --all-targets --locked > target/native-oauth-config-tests.txt 2>&1 || { cat target/native-oauth-config-tests.txt; exit 1; }\ncat target/native-oauth-config-tests.txt\ncargo test -p symvault-mcp --all-targets --locked > target/native-oauth-tests.txt 2>&1 || { cat target/native-oauth-tests.txt; exit 1; }\ncat target/native-oauth-tests.txt\npython3 scripts/rust-port/gate_area_check.py log-ok target/native-oauth-config-tests.txt mcp_tls_settings_survive_config_roundtrip\npython3 scripts/rust-port/gate_area_check.py log-ok target/native-oauth-tests.txt consent_pkce_access_and_refresh_are_connected_and_single_use --sum-passed \"$(make -s print-AREA_MCP_TEST_COUNT)\"\ncargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture\ncargo build -p symvault-cli --bin symvault --locked\n",
         "set -euo pipefail\nrust_cli=target/debug/symvault\npython3 scripts/rust-port/http_oauth_contract.py --rust \"$rust_cli\" --receipt target/native-http-oauth.json\npython3 scripts/rust-port/gate_area_check.py receipt target/native-http-oauth.json --profile http-oauth\n",
         "set -euo pipefail\nrust_cli=target/debug/symvault\npython3 scripts/rust-port/http_process_contract.py --rust \"$rust_cli\" --receipt target/native-http-process.json\npython3 - <<'PY'\nimport json\nfrom pathlib import Path\nr=json.loads(Path('target/native-http-process.json').read_bytes())\nassert r['passed'] and r['candidate_worktree_clean'] and not r['differences']\nassert len(r['go'])==len(r['rust'])==65 and len(r['declared_differences'])==4\nPY\n"
@@ -235,7 +235,7 @@
           "if": null,
           "uses": null,
           "with": null,
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy"
         },
         {
           "name": "Test owning config runtime and CLI assembly",
@@ -293,7 +293,7 @@
       ],
       "all_run_strings": [
         "set -euo pipefail\ntest \"$RUNNER_OS\" = macOS\ntest \"$(uname -s)\" = Darwin\ntest \"$(uname -m)\" = arm64\nsw_vers\n",
-        "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy",
+        "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy",
         "set -euo pipefail\ncargo fmt --all --check\ncargo clippy -p symvault-cli -p symvault-mcp --all-targets --all-features --locked -- -D warnings\ncargo test -p symvault-mcp --all-targets --locked > target/native-deadline-tests.txt 2>&1 || { cat target/native-deadline-tests.txt; exit 1; }\ncat target/native-deadline-tests.txt\npython3 scripts/rust-port/gate_area_check.py log-ok target/native-deadline-tests.txt keep_alive_idle_timeout_matches_go_source_and_closes_socket --sum-passed \"$(make -s print-AREA_MCP_TEST_COUNT)\"\ncargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture\ncargo build -p symvault-cli --bin symvault --locked\n",
         "set -euo pipefail\nrust_cli=target/debug/symvault\npython3 scripts/rust-port/http_slow_peer_contract.py --rust \"$rust_cli\" --receipt target/native-http-read-deadlines.json\npython3 scripts/rust-port/gate_area_check.py receipt target/native-http-read-deadlines.json --profile http-read-deadlines\n"
       ],
@@ -329,7 +329,7 @@
           "if": null,
           "uses": null,
           "with": null,
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy"
         },
         {
           "name": "Test owning runtime and CLI assembly",
@@ -381,7 +381,7 @@
       ],
       "all_run_strings": [
         "set -euo pipefail\ntest \"$RUNNER_OS\" = macOS\ntest \"$(uname -s)\" = Darwin\ntest \"$(uname -m)\" = arm64\nsw_vers\n",
-        "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy",
+        "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy",
         "set -euo pipefail\ncargo fmt --all --check\ncargo clippy -p symvault-cli -p symvault-mcp --all-targets --all-features --locked -- -D warnings\ncargo test -p symvault-core --all-targets --locked > target/native-timeout-core-tests.txt 2>&1 || { cat target/native-timeout-core-tests.txt; exit 1; }\ncat target/native-timeout-core-tests.txt\ncargo test -p symvault-mcp --all-targets --locked > target/native-timeout-tests.txt 2>&1 || { cat target/native-timeout-tests.txt; exit 1; }\ncat target/native-timeout-tests.txt\npython3 scripts/rust-port/gate_area_check.py log-ok target/native-timeout-tests.txt keep_alive_idle_timeout_matches_go_source_and_closes_socket --sum-passed \"$(make -s print-AREA_MCP_TEST_COUNT)\"\npython3 scripts/rust-port/gate_area_check.py log-ok target/native-timeout-core-tests.txt --results-ok\ncargo test -p symvault-cli --bin symvault --locked mcp_commands::tests > target/native-timeout-cli-owner.txt 2>&1 || { cat target/native-timeout-cli-owner.txt; exit 1; }\ncat target/native-timeout-cli-owner.txt\npython3 - <<'OWNER'\nimport re\nfrom pathlib import Path\ntext=Path('target/native-timeout-cli-owner.txt').read_text()\nrows=re.findall(r'test result: ok\\. (\\d+) passed; 0 failed; (\\d+) ignored',text)\nassert rows and sum(int(n) for n,_ in rows)>0 and all(int(i)==0 for _,i in rows)\nOWNER\ncargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture\ncargo build -p symvault-cli --bin symvault --locked\n",
         "set -euo pipefail\nrust_cli=target/debug/symvault\npython3 scripts/rust-port/http_timeout_contract.py --rust \"$rust_cli\" --receipt target/native-http-timeouts.json\npython3 scripts/rust-port/gate_area_check.py receipt target/native-http-timeouts.json --profile http-timeouts\n"
       ],
@@ -417,7 +417,7 @@
           "if": null,
           "uses": null,
           "with": null,
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy"
         },
         {
           "name": "Test owning runtime and CLI assembly",
@@ -473,7 +473,7 @@
       ],
       "all_run_strings": [
         "set -euo pipefail\ntest \"$RUNNER_OS\" = macOS\ntest \"$(uname -s)\" = Darwin\ntest \"$(uname -m)\" = arm64\nsw_vers\n",
-        "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy",
+        "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy",
         "set -euo pipefail\npython3 scripts/rust-port/test_http_write_contract.py\ncargo fmt --all --check\ncargo clippy -p symvault-cli -p symvault-mcp --all-targets --all-features --locked -- -D warnings\ncargo test -p symvault-mcp --all-targets --locked > target/native-write-tests.txt 2>&1 || { cat target/native-write-tests.txt; exit 1; }\ncat target/native-write-tests.txt\npython3 scripts/rust-port/gate_area_check.py log-ok target/native-write-tests.txt keep_alive_idle_timeout_matches_go_source_and_closes_socket --sum-passed \"$(make -s print-AREA_MCP_TEST_COUNT)\"\ncargo test -p symvault-cli --bin symvault --locked mcp_commands::tests > target/native-write-cli-owner.txt 2>&1 || { cat target/native-write-cli-owner.txt; exit 1; }\ncat target/native-write-cli-owner.txt\npython3 - <<'OWNER'\nimport re\nfrom pathlib import Path\ntext=Path('target/native-write-cli-owner.txt').read_text()\nrows=re.findall(r'test result: ok\\. (\\d+) passed; 0 failed; (\\d+) ignored',text)\nassert rows and sum(int(n) for n,_ in rows)>0 and all(int(i)==0 for _,i in rows)\nOWNER\ncargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture\ncargo build -p symvault-cli --bin symvault --locked\n",
         "set -euo pipefail\nrust_cli=target/debug/symvault\npython3 -B scripts/rust-port/http_write_contract.py --rust \"$rust_cli\" --receipt target/native-tls-output.json --tls-output-probe-only\npython3 -B scripts/rust-port/http_write_mutation.py --rust \"$rust_cli\" --receipt target/native-tls-output-mutation.json\ngit diff --exit-code -- crates/symvault-mcp/src/http.rs\n",
         "set -euo pipefail\nrust_cli=target/debug/symvault\npython3 scripts/rust-port/http_write_contract.py --rust \"$rust_cli\" --receipt target/native-http-write.json\npython3 scripts/rust-port/gate_area_check.py receipt target/native-http-write.json --profile http-write\n"
@@ -510,7 +510,7 @@
           "if": null,
           "uses": null,
           "with": null,
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy"
         },
         {
           "name": "Test owning runtime and CLI assembly",
@@ -566,7 +566,7 @@
       ],
       "all_run_strings": [
         "set -euo pipefail\ntest \"$RUNNER_OS\" = macOS\ntest \"$(uname -s)\" = Darwin\ntest \"$(uname -m)\" = arm64\nsw_vers\n",
-        "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy",
+        "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy",
         "set -euo pipefail\ncargo fmt --all --check\ncargo clippy -p symvault-cli -p symvault-mcp --all-targets --all-features --locked -- -D warnings\ncargo test -p symvault-mcp --all-targets --locked > target/native-framing-tests.txt 2>&1 || { cat target/native-framing-tests.txt; exit 1; }\ncat target/native-framing-tests.txt\npython3 scripts/rust-port/gate_area_check.py log-ok target/native-framing-tests.txt loopback_listener_rejects_foreign_origin_before_authentication --sum-passed \"$(make -s print-AREA_MCP_TEST_COUNT)\"\ncargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture\ncargo build -p symvault-cli --bin symvault --locked\n",
         "set -euo pipefail\nrust_cli=target/debug/symvault\npython3 scripts/rust-port/http_framing_contract.py --rust \"$rust_cli\" --receipt target/native-http-framing.json\npython3 scripts/rust-port/gate_area_check.py receipt target/native-http-framing.json --profile http-framing\n"
       ],
@@ -602,7 +602,7 @@
           "if": null,
           "uses": null,
           "with": null,
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy"
         },
         {
           "name": "Test owning runtime and CLI assembly",
@@ -654,7 +654,7 @@
       ],
       "all_run_strings": [
         "set -euo pipefail\ntest \"$RUNNER_OS\" = macOS\ntest \"$(uname -s)\" = Darwin\ntest \"$(uname -m)\" = arm64\nsw_vers\n",
-        "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy",
+        "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy",
         "set -euo pipefail\ncargo fmt --all --check\ncargo clippy -p symvault-cli -p symvault-mcp --all-targets --all-features --locked -- -D warnings\ncargo test -p symvault-mcp --all-targets --locked > target/native-tls-tests.txt 2>&1 || { cat target/native-tls-tests.txt; exit 1; }\ncat target/native-tls-tests.txt\npython3 scripts/rust-port/gate_area_check.py log-ok target/native-tls-tests.txt mtls_listener_requires_valid_client_certificate --sum-passed \"$(make -s print-AREA_MCP_TEST_COUNT)\"\ncargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture\ncargo build -p symvault-cli --bin symvault --locked\n",
         "set -euo pipefail\nrust_cli=target/debug/symvault\npython3 scripts/rust-port/http_tls_contract.py --rust \"$rust_cli\" --receipt target/native-http-tls.json\npython3 scripts/rust-port/gate_area_check.py receipt target/native-http-tls.json --profile http-tls\n"
       ],
@@ -690,7 +690,7 @@
           "if": null,
           "uses": null,
           "with": null,
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy"
         },
         {
           "name": "Test owning runtime and CLI assembly",
@@ -739,13 +739,13 @@
         "docs/adr/0016-mcp-discovery-and-call-authorization.md"
       ],
       "job_env": {
-        "RUSTUP_TOOLCHAIN": "1.98.0",
+        "RUSTUP_TOOLCHAIN": "1.98.1",
         "RUST_TEST_THREADS": "1",
         "TZ": "UTC",
         "PYTHONDONTWRITEBYTECODE": "1"
       },
       "timeout_minutes_original": 40,
-      "file_sha256": "ea97b4a8029c8b3e1ee2b0e25acc2f1ca31f6de7e8cf6acf4fcc43fd3b3bb96f",
+      "file_sha256": "54a40bd8ed0c4328bccec0f6267ca446294ca936fa0db091ac4b94896fedf2ae",
       "group": "mcp",
       "mac_step_indexes": [
         0,
@@ -782,7 +782,7 @@
         },
         {
           "name": "Install pinned Rust",
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy"
         },
         {
           "name": "Check narrow diagnostic and receipt evidence boundaries",
@@ -834,13 +834,13 @@
         "docs/adr/0017-http-wire-contract-and-token-sessions.md"
       ],
       "job_env": {
-        "RUSTUP_TOOLCHAIN": "1.98.0",
+        "RUSTUP_TOOLCHAIN": "1.98.1",
         "RUST_TEST_THREADS": "1",
         "TZ": "UTC",
         "PYTHONDONTWRITEBYTECODE": "1"
       },
       "timeout_minutes_original": 40,
-      "file_sha256": "5ba5754a2b2087550294a09922b6927c099441ce942faaf52f6731916fe656dc",
+      "file_sha256": "a2b77779711723615c3b338bf03d00735d2fe7ea5d5a1091c071ce45140eb21a",
       "group": "mcp",
       "mac_step_indexes": [
         0,
@@ -875,7 +875,7 @@
         },
         {
           "name": "Install pinned Rust",
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy"
         },
         {
           "name": "Test owning runtime and production CLI assembly",
@@ -910,13 +910,13 @@
         "docs/adr/0014-connect-socket-and-relay-ownership.md"
       ],
       "job_env": {
-        "RUSTUP_TOOLCHAIN": "1.98.0",
+        "RUSTUP_TOOLCHAIN": "1.98.1",
         "SYMVAULT_TEST_KEYRING": "memory",
         "TZ": "UTC",
         "PYTHONDONTWRITEBYTECODE": "1"
       },
       "timeout_minutes_original": 30,
-      "file_sha256": "baa81e6450ef5b77cc9b24a14fbaf3d367de152245e5010999f4bb8b48e4f6d6",
+      "file_sha256": "bc641fc433f52dee2d7d5368b9fc054fbe40617f0739b691a6966a34e7a644be",
       "group": "broker",
       "mac_step_indexes": [
         0,
@@ -951,7 +951,7 @@
         },
         {
           "name": "Install pinned Rust",
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy"
         },
         {
           "name": "Execute four native socket regressions",
@@ -990,13 +990,13 @@
         "docs/adr/0015-egress-broker-runtime-boundaries.md"
       ],
       "job_env": {
-        "RUSTUP_TOOLCHAIN": "1.98.0",
+        "RUSTUP_TOOLCHAIN": "1.98.1",
         "SYMVAULT_TEST_KEYRING": "memory",
         "TZ": "UTC",
         "PYTHONDONTWRITEBYTECODE": "1"
       },
       "timeout_minutes_original": 40,
-      "file_sha256": "8668c96dde44bb2a6088fe197a0c512de5f76af28a5e907508824bf5890c7ef0",
+      "file_sha256": "cf2e62442b26defe1ac138a28ec61655c14d94e68ad32c8ffb589103093d0f1e",
       "group": "broker",
       "mac_step_indexes": [
         0,
@@ -1031,7 +1031,7 @@
         },
         {
           "name": "Install pinned Rust",
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy"
         },
         {
           "name": "Execute actual native TLS and lifetime regressions",
@@ -1073,10 +1073,10 @@
         "docs/rust-port/work-items.json"
       ],
       "job_env": {
-        "RUSTUP_TOOLCHAIN": "1.98.0"
+        "RUSTUP_TOOLCHAIN": "1.98.1"
       },
       "timeout_minutes_original": null,
-      "file_sha256": "6f933e89a8162197e1bb5d19a7567a5dc2e1743d4228fe584b2f24c72dcdac4e",
+      "file_sha256": "ae0130c347b36957a9a71c7fd357ea1a889bce5506c6198ab5c12ccef8209bdf",
       "group": "rest",
       "mac_step_indexes": [
         0,
@@ -1103,12 +1103,12 @@
         {
           "name": "Install pinned Rust toolchain",
           "shell": "bash",
-          "run": "rustup toolchain install 1.98.0 --profile minimal"
+          "run": "rustup toolchain install 1.98.1 --profile minimal"
         },
         {
           "name": "Verify toolchain identity",
           "shell": "bash",
-          "run": "set -euo pipefail\ntest \"$(rustc --version | awk '{print $2}')\" = \"1.98.0\"\n"
+          "run": "set -euo pipefail\ntest \"$(rustc --version | awk '{print $2}')\" = \"1.98.1\"\n"
         },
         {
           "name": "Run clean audit differential",
@@ -1135,13 +1135,13 @@
         "docs/adr/0028-owned-broker-dns-and-dial.md"
       ],
       "job_env": {
-        "RUSTUP_TOOLCHAIN": "1.98.0",
+        "RUSTUP_TOOLCHAIN": "1.98.1",
         "RUST_TEST_THREADS": "1",
         "TZ": "UTC",
         "PYTHONDONTWRITEBYTECODE": "1"
       },
       "timeout_minutes_original": 40,
-      "file_sha256": "3eb075c400a6976bc596878047acde4d85c4f807bee675e8f1ae099ac31aebd7",
+      "file_sha256": "6bf9d3cffc38dcdfb868d716162ea3cd5f6b54662ed2f19ec179ac9ecd4d401c",
       "group": "rest",
       "mac_step_indexes": [
         0,
@@ -1176,7 +1176,7 @@
         },
         {
           "name": "Install pinned Rust",
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy"
         },
         {
           "name": "Test actual DNS sockets TLS and request context",
@@ -1216,14 +1216,14 @@
         "docs/adr/0011-cli-artifacts-and-completion-protocol.md"
       ],
       "job_env": {
-        "RUSTUP_TOOLCHAIN": "1.98.0",
+        "RUSTUP_TOOLCHAIN": "1.98.1",
         "SYMVAULT_TEST_KEYRING": "memory",
         "TZ": "UTC",
         "PYTHONDONTWRITEBYTECODE": "1",
         "HOMEBREW_NO_AUTO_UPDATE": "1"
       },
       "timeout_minutes_original": 35,
-      "file_sha256": "b8bf12f353c5cfe8a5e3037f65fa0a3a5a995c3cdb0377320d57f83ecbe53c5b",
+      "file_sha256": "a4b3e88ae16b85e4078e7271a03e340e1ac8c7c471c8075c18e20e5efd83da25",
       "group": "rest",
       "mac_step_indexes": [
         0,
@@ -1269,7 +1269,7 @@
         },
         {
           "name": "Install pinned Rust",
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy"
         },
         {
           "name": "Check and exercise owning Rust implementation",
@@ -1306,13 +1306,13 @@
         "docs/adr/0010-intake-polling-and-quarantine.md"
       ],
       "job_env": {
-        "RUSTUP_TOOLCHAIN": "1.98.0",
+        "RUSTUP_TOOLCHAIN": "1.98.1",
         "SYMVAULT_TEST_KEYRING": "memory",
         "TZ": "UTC",
         "PYTHONDONTWRITEBYTECODE": "1"
       },
       "timeout_minutes_original": 25,
-      "file_sha256": "3f1b8d5929819ba907e6353be96322ce94b4bf24581c67b2a36e2ab104c6daff",
+      "file_sha256": "6de3275550074698d3ea1827c6de65060aab8dc103fd999effc898825561454c",
       "group": "rest",
       "mac_step_indexes": [
         0,
@@ -1347,7 +1347,7 @@
         },
         {
           "name": "Install pinned Rust",
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy"
         },
         {
           "name": "Check and test owning adapters",
@@ -1385,13 +1385,13 @@
         "docs/adr/0013-deprecated-serve-and-locked-stdio.md"
       ],
       "job_env": {
-        "RUSTUP_TOOLCHAIN": "1.98.0",
+        "RUSTUP_TOOLCHAIN": "1.98.1",
         "SYMVAULT_TEST_KEYRING": "memory",
         "TZ": "UTC",
         "PYTHONDONTWRITEBYTECODE": "1"
       },
       "timeout_minutes_original": 35,
-      "file_sha256": "07e07d7cdeb2a6712afeb3846af56d1a2a2bad261fc77524e6e70b063306e1b1",
+      "file_sha256": "f696684b80a18ab41c5a5f0f80d4b7f50fe55f0cbfe5989b3cbc63e5d14afa49",
       "group": "rest",
       "mac_step_indexes": [
         0,
@@ -1426,7 +1426,7 @@
         },
         {
           "name": "Install pinned Rust",
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy"
         },
         {
           "name": "Check and test shared dispatch and service adapters",
@@ -1467,10 +1467,10 @@
         "Makefile"
       ],
       "job_env": {
-        "RUSTUP_TOOLCHAIN": "1.98.0"
+        "RUSTUP_TOOLCHAIN": "1.98.1"
       },
       "timeout_minutes_original": 30,
-      "file_sha256": "88cdecea703b2d55fb7ce69818439687b234f97ec5f23915f00a8007f69b30f0",
+      "file_sha256": "1fa586504e25be82c53cefb38c45604b10269ce689adc874ace2c805646161e4",
       "group": "rest",
       "mac_step_indexes": [
         0,
@@ -1505,7 +1505,7 @@
         },
         {
           "name": "Install pinned Rust",
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component clippy,rustfmt"
         },
         {
           "name": "Check frozen historical KDF envelope fixtures and retained dependency",
@@ -1542,10 +1542,10 @@
         "crates/symvault-mcp/src/**"
       ],
       "job_env": {
-        "RUSTUP_TOOLCHAIN": "1.98.0"
+        "RUSTUP_TOOLCHAIN": "1.98.1"
       },
       "timeout_minutes_original": 25,
-      "file_sha256": "4d4343bc74069ffc3360bd05697b95d9b792538fb99b689cd817aabb4548e95b",
+      "file_sha256": "79a108a27775c5bb641643c01f7013be7ffa3fe5e98d546a6edee39610936ddc",
       "group": "rest",
       "mac_step_indexes": [
         0,
@@ -1580,7 +1580,7 @@
         },
         {
           "name": "Install pinned Rust",
-          "run": "rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt"
+          "run": "rustup toolchain install 1.98.1 --profile minimal --component clippy,rustfmt"
         },
         {
           "name": "Verify frozen Go observations",
@@ -1605,7 +1605,7 @@
     }
   },
   "job_env": {
-    "RUSTUP_TOOLCHAIN": "1.98.0",
+    "RUSTUP_TOOLCHAIN": "1.98.1",
     "RUST_TEST_THREADS": "1",
     "TZ": "UTC",
     "PYTHONDONTWRITEBYTECODE": "1"
@@ -1630,7 +1630,7 @@
         "mcp_http_process"
       ],
       "job_env": {
-        "RUSTUP_TOOLCHAIN": "1.98.0",
+        "RUSTUP_TOOLCHAIN": "1.98.1",
         "RUST_TEST_THREADS": "1",
         "TZ": "UTC",
         "PYTHONDONTWRITEBYTECODE": "1"
@@ -1645,7 +1645,7 @@
         "broker_egress"
       ],
       "job_env": {
-        "RUSTUP_TOOLCHAIN": "1.98.0",
+        "RUSTUP_TOOLCHAIN": "1.98.1",
         "SYMVAULT_TEST_KEYRING": "memory",
         "TZ": "UTC",
         "PYTHONDONTWRITEBYTECODE": "1"
@@ -1665,7 +1665,7 @@
         "cli_artifacts"
       ],
       "job_env": {
-        "RUSTUP_TOOLCHAIN": "1.98.0"
+        "RUSTUP_TOOLCHAIN": "1.98.1"
       }
     }
   },

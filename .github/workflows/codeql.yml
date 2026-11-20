@@ -48,7 +48,7 @@ jobs:
         if: matrix.language == 'swift'
         run: |
           set -euo pipefail
-          rustup toolchain install 1.98.0 --profile minimal \
+          rustup toolchain install 1.98.1 --profile minimal \
             --target aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim
           rustc --version
 

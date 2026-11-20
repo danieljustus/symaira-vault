@@ -48,7 +48,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RUSTUP_TOOLCHAIN: 1.98.0
+  RUSTUP_TOOLCHAIN: 1.98.1
 
 jobs:
   audit-native:
@@ -78,13 +78,13 @@ jobs:
 
       - name: Install pinned Rust toolchain
         shell: bash
-        run: rustup toolchain install 1.98.0 --profile minimal
+        run: rustup toolchain install 1.98.1 --profile minimal
 
       - name: Verify toolchain identity
         shell: bash
         run: |
           set -euo pipefail
-          test "$(rustc --version | awk '{print $2}')" = "1.98.0"
+          test "$(rustc --version | awk '{print $2}')" = "1.98.1"
 
       - name: Run clean audit differential
         shell: bash

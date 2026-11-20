@@ -142,7 +142,7 @@ jobs:
           persist-credentials: false
 
       - name: Install pinned Rust toolchain
-        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt
+        run: rustup toolchain install 1.98.1 --profile minimal --component rustfmt
 
       - name: Check formatting
         run: cargo fmt --all --check
@@ -204,7 +204,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install pinned Rust toolchain
-        run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt,llvm-tools-preview
+        run: rustup toolchain install 1.98.1 --profile minimal --component clippy,rustfmt,llvm-tools-preview
 
       - name: Install Rust verification tools
         uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
@@ -236,7 +236,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install pinned Rust toolchain
-        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt
+        run: rustup toolchain install 1.98.1 --profile minimal --component rustfmt
 
       - name: Install pinned nightly Miri toolchain
         run: rustup toolchain install nightly-2026-09-03 --profile minimal --component miri,rust-src
@@ -302,7 +302,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install pinned Rust toolchain
-        run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
+        run: rustup toolchain install 1.98.1 --profile minimal --component clippy,rustfmt
 
       - name: Check formatting
         run: cargo fmt --all --check
@@ -364,7 +364,7 @@ jobs:
           persist-credentials: false
 
       - name: Install pinned Rust toolchain
-        run: rustup toolchain install 1.98.0 --profile minimal
+        run: rustup toolchain install 1.98.1 --profile minimal
 
       - name: Disposable keychain parity
         run: cargo test --locked -p symvault-platform --test native_biometric_item -- --exact security_framework_items_match_go_layout_on_disposable_keychains
@@ -382,7 +382,7 @@ jobs:
           persist-credentials: false
 
       - name: Install pinned Rust toolchain
-        run: rustup toolchain install 1.98.0 --profile minimal
+        run: rustup toolchain install 1.98.1 --profile minimal
 
       - name: Build binary
         env:
@@ -428,7 +428,7 @@ jobs:
       - name: Set up Rust (pinned toolchain + Apple targets for SymvaultFFI)
         run: |
           set -euo pipefail
-          rustup toolchain install 1.98.0 --profile minimal \
+          rustup toolchain install 1.98.1 --profile minimal \
             --target aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim
           rustc --version
 
@@ -597,7 +597,7 @@ jobs:
           persist-credentials: false
 
       - name: Install pinned Rust toolchain
-        run: rustup toolchain install 1.98.0 --profile minimal
+        run: rustup toolchain install 1.98.1 --profile minimal
 
       - name: Build binary
         env:

@@ -315,7 +315,7 @@ def main():
     oracle = checked(["git", "rev-parse", ORACLE], ROOT, env).decode().strip()
     assert Path(checked(["git", "rev-parse", "--show-toplevel"], ROOT, env).decode().strip()).resolve() == ROOT
     rust_version = checked(["rustc", "--version"], ROOT, env).decode().strip()
-    assert "rustc 1.98.0" in rust_version
+    assert "rustc 1.98.1" in rust_version
     document = observations.load("device-list-differential")
     assert document["oracle_commit"] == oracle, "recorded Go observation belongs to another oracle commit"
     recorded = {row["id"]: row for row in document["observations"]["cases"]}

@@ -34,7 +34,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install pinned Rust toolchain
-        run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt,llvm-tools-preview
+        run: rustup toolchain install 1.98.1 --profile minimal --component clippy,rustfmt,llvm-tools-preview
 
       - name: Install Rust verification tools
         uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
@@ -179,9 +179,9 @@ jobs:
           # The release job builds crates/symvault-cli through GoReleaser's Rust
           # builder (cargo-zigbuild for the static musl Linux targets, plain cargo
           # for darwin-arm64). No Go toolchain is needed for the shipped binary.
-          rustup toolchain install 1.98.0 --profile minimal \
+          rustup toolchain install 1.98.1 --profile minimal \
             --target aarch64-apple-darwin,x86_64-unknown-linux-musl,aarch64-unknown-linux-musl
-          rustup default 1.98.0
+          rustup default 1.98.1
           rustc --version
 
       - name: Install Zig and cargo-zigbuild
@@ -326,7 +326,7 @@ jobs:
       - name: Set up Rust (pinned toolchain + Apple targets for SymvaultFFI)
         run: |
           set -euo pipefail
-          rustup toolchain install 1.98.0 --profile minimal \
+          rustup toolchain install 1.98.1 --profile minimal \
             --target aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim
           rustc --version
 

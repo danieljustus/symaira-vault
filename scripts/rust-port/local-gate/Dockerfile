@@ -24,7 +24,7 @@ ENV PATH=/home/dev/.cargo/bin:$PATH \
     CARGO_HOME=/home/dev/.cargo \
     RUSTUP_HOME=/home/dev/.rustup
 
-RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.98.0 \
+RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.98.1 \
       --component clippy,rustfmt,llvm-tools-preview \
  && rustup toolchain install "${NIGHTLY}" --profile minimal --component miri,rust-src \
  && curl -fsSL https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash \

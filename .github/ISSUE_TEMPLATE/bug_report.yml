@@ -28,7 +28,7 @@ body:
     attributes:
       label: Rust version
       description: Required when building from source (output of `rustc --version`).
-      placeholder: "rustc 1.98.0"
+      placeholder: "rustc 1.98.1"
   - type: textarea
     id: steps
     attributes:

@@ -53,7 +53,7 @@ jobs:
       run:
         shell: bash
     env:
-      RUSTUP_TOOLCHAIN: 1.98.0
+      RUSTUP_TOOLCHAIN: 1.98.1
     steps:
       - name: Assert actual native macOS arm64
         if: matrix.os == 'macos-latest'
@@ -74,7 +74,7 @@ jobs:
         with:
           python-version: '3.13'
       - name: Install pinned Rust
-        run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
+        run: rustup toolchain install 1.98.1 --profile minimal --component clippy,rustfmt
       - name: Check frozen historical KDF envelope fixtures and retained dependency
         run: |
           set -euo pipefail
