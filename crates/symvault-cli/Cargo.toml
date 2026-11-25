@@ -25,7 +25,7 @@ qrcode = { version = "=0.14.1", default-features = false }
 rcgen = "=0.14.10"
 tar = "=0.4.46"
 tempfile = "=3.27.0"
-zip = { version = "=9.5.1", default-features = false, features = ["deflate"] }
+zip = { version = "=9.8.1", default-features = false, features = ["deflate"] }
 serde.workspace = true
 serde_json.workspace = true
 reqwest.workspace = true
@@ -45,10 +45,10 @@ symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
 symvault-mcp = { path = "../symvault-mcp", version = "=0.0.0" }
 symvault-store = { path = "../symvault-store", version = "=0.0.0" }
 symvault-sync = { path = "../symvault-sync", version = "=0.0.0" }
-url = "=2.5.8"
-zeroize = { version = "=1.9.1", features = ["alloc"] }
+url = "=2.5.9"
+zeroize = { version = "=1.9.2", features = ["alloc"] }
 x509-parser = "=0.18.1"
-ctrlc = { version = "=3.5.2", features = ["termination"] }
+ctrlc = { version = "=3.5.3", features = ["termination"] }
 
 [dev-dependencies]
 # Fixtures mark their throw-away vaults as Rust-created (test-only helper).

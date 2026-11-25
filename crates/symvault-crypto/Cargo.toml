@@ -17,7 +17,7 @@ chacha20poly1305 = { version = "=0.11.0", default-features = false, features = [
 hkdf = "=0.13.0"
 hmac = "=0.13.0"
 sha2 = "=0.11.1"
-zeroize = { version = "=1.9.1", features = ["alloc", "derive"] }
+zeroize = { version = "=1.9.2", features = ["alloc", "derive"] }
 
 [dev-dependencies]
 hex = "=0.4.3"
