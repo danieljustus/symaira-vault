@@ -10,6 +10,9 @@ updates:
     commit-message:
       prefix: "chore(ci)"
     groups:
+      symaira-corekit:
+        patterns:
+          - "danieljustus/symaira-corekit*"
       # init, autobuild, analyze and upload-sarif must run the same version:
       # a split bump (init 4.39.1, analyze 4.39.2) failed every CodeQL job
       # with a configuration error.
@@ -20,17 +23,25 @@ updates:
   - package-ecosystem: cargo
     directory: /
     schedule:
-      interval: weekly
+      interval: daily
+    cooldown:
+      exclude: ["symaira-core-*"]
     open-pull-requests-limit: 5
     reviewers:
       - danieljustus
     commit-message:
       prefix: "chore(deps)"
     groups:
+      symaira-corekit:
+        patterns: ["symaira-core-*"]
+      # Any broader cargo group must exclude the CoreKit crates, or it wins
+      # and Dependabot drops their Git tag bump.
       cargo-minor-patch:
         update-types:
           - minor
           - patch
+        exclude-patterns:
+          - "symaira-core-*"
     ignore:
       # 0.1.22 has Unicode 15 tables, 0.1.25 already Unicode 17; the frozen Go
       # oracle normalizes with Unicode 15, so newer tables break MCP/doctor
@@ -38,8 +49,20 @@ updates:
       - dependency-name: "unicode-normalization"
         versions: [">0.1.22"]
 
-  # No `swift` entry for /client: its manifest declares the git-ignored local
-  # XCFramework built by scripts/build-vaultcore.sh as a binary target, so
-  # SwiftPM refuses to load it in Dependabot's clean checkout and every Swift
-  # update job fails before it looks at a pin. The exact CoreKit pin in
-  # client/Package.swift is reported by symaira-corekit's `make consumer-drift`.
+  - package-ecosystem: swift
+    directory: /client
+    schedule:
+      interval: daily
+    cooldown:
+      exclude: ["*symaira-corekit*"]
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      symaira-corekit:
+        patterns: ["*symaira-corekit*"]
+
+  # client/Package.swift declares the git-ignored local XCFramework only when
+  # the build output exists, so SwiftPM can load the manifest in Dependabot's
+  # clean checkout. project.yml has no tracked .xcodeproj; the composite
+  # CoreKit action syncs its exactVersion once v0.27.1 lands.
