@@ -1,0 +1,24 @@
+# Lands CoreKit-only Dependabot pull requests: syncs the pins Dependabot does
+# not edit (XcodeGen project.yml, [workspace.dependencies] tags), pushes with
+# the repository deploy key so CI runs on the synced commit, and enables
+# auto-merge behind the required checks. Any other update stays for review.
+# Setup: symaira-corekit docs/consumer-dependabot.md.
+name: CoreKit Dependabot
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  corekit:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: danieljustus/symaira-corekit/.github/actions/dependabot-corekit@12afa75c07b209ff13943ad0fb148d00f3ebf7cf # v0.27.1
+        with:
+          ssh-key: ${{ secrets.COREKIT_SYNC_DEPLOY_KEY }}
