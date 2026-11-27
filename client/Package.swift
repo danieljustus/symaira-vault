@@ -26,7 +26,7 @@ let package = Package(
         .library(name: "SymvaultFFI", targets: ["SymvaultFFI"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/danieljustus/symaira-corekit.git", exact: "0.27.0"),
+        .package(url: "https://github.com/danieljustus/symaira-corekit.git", exact: "0.27.1"),
     ],
     targets: [
         // Rust vault core (crates/symvault-ffi): the XCFramework built by
