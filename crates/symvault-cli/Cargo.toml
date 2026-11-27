@@ -21,7 +21,7 @@ flate2 = "=1.1.11"
 getifaddrs = "=0.6.2"
 getrandom = "=0.4.3"
 hmac = "=0.13.0"
-qrcode = { version = "=0.14.1", default-features = false }
+qrcode = { version = "=0.15.0", default-features = false }
 rcgen = "=0.14.10"
 tar = "=0.4.46"
 tempfile = "=3.27.0"
