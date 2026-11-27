@@ -2002,7 +2002,7 @@ dependencies = [
 name = "symvault-fuzz"
 version = "0.0.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "libfuzzer-sys",
  "serde_json",
  "symvault-crypto",
