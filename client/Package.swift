@@ -7,7 +7,9 @@ import PackageDescription
 // file exists; a local build with the framework keeps the same target graph.
 let vaultCoreFrameworkPath = ".build/mobilecore/SymvaultFFI.xcframework"
 let hasVaultCoreFramework = FileManager.default.fileExists(
-    atPath: FileManager.default.currentDirectoryPath + "/" + vaultCoreFrameworkPath
+    // Context.packageDirectory, not the cwd: xcodebuild -project evaluates the
+    // manifest from another working directory.
+    atPath: Context.packageDirectory + "/" + vaultCoreFrameworkPath
 )
 
 let package = Package(
