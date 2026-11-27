@@ -877,7 +877,10 @@ AREA_KDF_MIGRATION_TESTS := 10
 # store_adapter::tests R19 unit tests, 2 tests/http_budget_combinations.rs, 2
 # tests/http_tls_lifecycle.rs; 466 on that branch alone + 2 from r-platform;
 # confirmed by the integration gate).
-AREA_MCP_TEST_COUNT := 470
+# 472 from f2fba6b1 (+2: tests/tools_call_store.rs empty agent scope search
+# access-error tests; the area gates first ran on it with the CoreKit v0.27.0
+# lock change and measured 472 passed on every MCP/HTTP area).
+AREA_MCP_TEST_COUNT := 472
 
 # `make -s print-<VARIABLE>` prints a variable's value, for the workflows that must
 # not repeat the constants above.
