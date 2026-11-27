@@ -1953,7 +1953,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "symaira-core-version"
 version = "0.0.0"
-source = "git+https://github.com/danieljustus/symaira-corekit?tag=v0.27.0#a589c3ec5f227097fe11524508e598583373daf4"
+source = "git+https://github.com/danieljustus/symaira-corekit?tag=v0.27.1#12afa75c07b209ff13943ad0fb148d00f3ebf7cf"
 dependencies = [
  "serde",
  "serde_json",
