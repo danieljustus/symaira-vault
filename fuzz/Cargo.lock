@@ -716,9 +716,9 @@ dependencies = [
 
 [[package]]
 name = "form_urlencoded"
-version = "1.2.2"
+version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
+checksum = "afa489199eaffb1211795df1c6236ce1ad0d41a6fa45250add73e3b02420f06e"
 dependencies = [
  "percent-encoding",
 ]
@@ -1953,7 +1953,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "symaira-core-version"
 version = "0.0.0"
-source = "git+https://github.com/danieljustus/symaira-corekit?rev=27177f25f551cecefa7bd6c4524abf175b3a75c7#27177f25f551cecefa7bd6c4524abf175b3a75c7"
+source = "git+https://github.com/danieljustus/symaira-corekit?tag=v0.27.0#a589c3ec5f227097fe11524508e598583373daf4"
 dependencies = [
  "serde",
  "serde_json",
@@ -2302,9 +2302,9 @@ checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
 name = "url"
-version = "2.5.8"
+version = "2.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed"
+checksum = "f00cd2407bb42c0ef17be88d4cf020f5cceffd121665bac9b8b9493a369b3b1a"
 dependencies = [
  "form_urlencoded",
  "idna",

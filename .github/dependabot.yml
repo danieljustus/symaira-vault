@@ -20,8 +20,11 @@ updates:
         patterns:
           - "github/codeql-action*"
 
+  # fuzz/ keeps its own Cargo.lock; a CoreKit bump must move it as well.
   - package-ecosystem: cargo
-    directory: /
+    directories:
+      - /
+      - /fuzz
     schedule:
       interval: daily
     cooldown:
